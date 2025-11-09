@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Poetry
+poetry.toml
+.pypoetry/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Logs and local data
+logs/*.csv
+
+# OS / Editor junk
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,26 @@
+[project]
+name = "rysk-options"
+version = "0.1.0"
+description = "Rysk covered call analyzer"
+authors = [
+    {name = "Carlisle"}
+]
+readme = "README.md"
+requires-python = "^3.9"
+dependencies = [
+    "pandas (>=1.3,<3)",
+    "numpy (>=1.20,<3)",
+    "scipy (>=1.7,<1.12)",
+    "matplotlib (>=3.4,<3.10)",
+    "seaborn (>=0.11,<1)",
+    "plotly (>=5.0,<6)",
+    "web3 (>=7.14.0,<8.0.0)",
+    "flask (>=2.0,<4)",
+    "requests (>=2.25,<3)",
+    "hyperliquid-python-sdk"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
