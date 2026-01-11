@@ -8,6 +8,7 @@ or out-of-the-money at expiry.
 
 import os
 import time
+import json
 from typing import Optional, Tuple
 
 from web3 import Web3
@@ -48,7 +49,11 @@ SYMBOL_ADDRESS_MAP = {
     "PUMP": TOKEN_ADDRESSES.get("PUMP"),
     "UPUMP": TOKEN_ADDRESSES.get("PUMP"),
     "PURR": TOKEN_ADDRESSES.get("PURR"),
+    "USDT0": TOKEN_ADDRESSES.get("USDT0"),
+    "ZEC": TOKEN_ADDRESSES.get("ZEC"),
+    "UZEC": TOKEN_ADDRESSES.get("ZEC"),
     "HYPE": HYPE_ADDRESSES[0] if HYPE_ADDRESSES else None,
+    "WHYPE": HYPE_ADDRESSES[0] if HYPE_ADDRESSES else None,
     "KHYPE": HYPE_ADDRESSES[1] if len(HYPE_ADDRESSES) > 1 else None,
     "KHYPE-PT": HYPE_ADDRESSES[1] if len(HYPE_ADDRESSES) > 1 else None,
     "HYPE-PT": HYPE_ADDRESSES[0] if HYPE_ADDRESSES else None,
@@ -58,6 +63,46 @@ SYMBOL_ADDRESS_MAP = {
 # Simple in-memory cache so we don't hammer the RPC for historical expiries
 _expiry_cache = {}
 EXPIRY_CACHE_TTL = int(os.getenv("RYSK_EXPIRY_CACHE_TTL", str(12 * 3600)))  # 12 hours
+
+# Optional persistent cache on disk (JSON) to reuse expiry oracle lookups across runs
+EXPIRY_CACHE_FILE = os.getenv("RYSK_EXPIRY_CACHE_FILE", "data/expiry_cache.json")
+
+def _cache_key(address: str, expiry: int) -> str:
+    return f"{(address or '').lower()}::{int(expiry)}"
+
+def _load_persistent_cache():
+    if not EXPIRY_CACHE_FILE:
+        return
+    try:
+        if os.path.exists(EXPIRY_CACHE_FILE):
+            with open(EXPIRY_CACHE_FILE, "r") as f:
+                data = json.load(f)
+            now = time.time()
+            for key, entry in data.items():
+                ts = entry.get("timestamp", 0)
+                if now - ts < EXPIRY_CACHE_TTL:
+                    _expiry_cache[key] = entry
+    except Exception as exc:
+        print(f"Warning: failed to load expiry cache file {EXPIRY_CACHE_FILE}: {exc}")
+
+def _save_persistent_cache():
+    if not EXPIRY_CACHE_FILE:
+        return
+    try:
+        os.makedirs(os.path.dirname(EXPIRY_CACHE_FILE) or ".", exist_ok=True)
+        # Keep only fresh entries when writing to disk
+        now = time.time()
+        data = {
+            k: v for k, v in _expiry_cache.items()
+            if (now - v.get("timestamp", 0)) < EXPIRY_CACHE_TTL
+        }
+        with open(EXPIRY_CACHE_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as exc:
+        print(f"Warning: failed to save expiry cache file {EXPIRY_CACHE_FILE}: {exc}")
+
+# Load persistent cache on module import
+_load_persistent_cache()
 
 _oracle_contract = None
 
@@ -89,7 +134,7 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
     if not asset_address or not expiry:
         return None, False
 
-    cache_key = (asset_address.lower(), int(expiry))
+    cache_key = _cache_key(asset_address, expiry)
     cached = _expiry_cache.get(cache_key)
     if cached and (time.time() - cached["timestamp"] < EXPIRY_CACHE_TTL):
         return cached["price"], cached["finalized"]
@@ -109,6 +154,7 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
             "finalized": bool(finalized),
             "timestamp": time.time()
         }
+        _save_persistent_cache()
 
         return price, bool(finalized)
     except Exception as exc:
@@ -118,6 +164,7 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
             "finalized": False,
             "timestamp": time.time()
         }
+        _save_persistent_cache()
         return None, False
 
 

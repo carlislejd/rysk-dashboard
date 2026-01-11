@@ -18,9 +18,14 @@ poetry.toml
 
 # Logs and local data
 logs/*.csv
+data/
+data/*.json
 
 # OS / Editor junk
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
+
+# Local cert bundle for macOS network restrictions
+cacert.pem

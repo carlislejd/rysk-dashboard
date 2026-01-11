@@ -7,13 +7,27 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body data-default-account="{{ account_address }}">
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-card">
+            <div class="splash-title">RYSK IT ALL!</div>
+            <p class="splash-subtitle">Arm the dashboard with your wallet to load balances, positions, and history.</p>
+            <div class="splash-input-row">
+                <input id="splash-account-input" class="account-input splash-input" type="text" value="" placeholder="0x0000..." spellcheck="false" autocomplete="off">
+                <button id="splash-launch" class="terminal-button splash-button">Enter</button>
+            </div>
+            <div id="splash-error" class="error" style="display: none;"></div>
+            <div id="splash-typing" class="splash-typing">Ready when you are.</div>
+        </div>
+    </div>
+
+    <div id="main-content" style="display: none;">
     <div class="container">
         <header>
-            <h1>🚀 Rysk Covered Calls Dashboard</h1>
-            <div class="account-info">
-                <label for="account-input" class="label">Wallet:</label>
-                <input id="account-input" class="account-input" type="text" value="{{ account_address }}" placeholder="0x0000..." spellcheck="false" autocomplete="off">
-                <button id="account-apply" class="terminal-button">Load</button>
+            <h1>Rysk Covered Calls Dashboard</h1>
+            <div class="account-bar">
+                <div class="account-display">
+                    Wallet: <span id="current-wallet-display">Not set</span>
+                </div>
                 <span id="account-status" class="account-status"></span>
             </div>
         </header>
@@ -21,7 +35,7 @@
         <!-- Token Balances Section -->
         <section class="card">
             <h2 class="collapsible-header" data-section="balances">
-                <span class="chevron">▶</span> 💰 Token Balances
+                <span class="chevron">▶</span> Token Balances
             </h2>
             <div class="collapsible-content" data-section="balances">
                 <div id="balances-loading" class="loading">Loading balances...</div>
@@ -47,7 +61,7 @@
         <!-- Suggested Options Section -->
         <section class="card">
             <h2 class="collapsible-header" data-section="suggestions">
-                <span class="chevron">▶</span> 💡 Suggested Options (25% APR Goal)
+                <span class="chevron">▶</span> Suggested Options (25% APR Goal)
             </h2>
             <div class="collapsible-content" data-section="suggestions">
                 <p class="subtitle">Recommendations based on your balances to maintain ~25% average APR while keeping assets safe. Click an asset name to view price chart with strike prices.</p>
@@ -67,32 +81,10 @@
             </div>
         </section>
 
-        <!-- Available Inventory Section -->
-        <section class="card">
-            <h2 class="collapsible-header" data-section="inventory">
-                <span class="chevron">▶</span> 📊 Available Inventory
-            </h2>
-            <div class="collapsible-content" data-section="inventory">
-                <div id="inventory-loading" class="loading">Loading inventory...</div>
-                <div id="inventory-content" style="display: none;">
-                    <div id="inventory-tabs" class="tabs">
-                        <button class="tab-button active" data-asset="BTC">BTC</button>
-                        <button class="tab-button" data-asset="ETH">ETH</button>
-                        <button class="tab-button" data-asset="HYPE">HYPE</button>
-                        <button class="tab-button" data-asset="SOL">SOL</button>
-                        <button class="tab-button" data-asset="PUMP">PUMP</button>
-                        <button class="tab-button" data-asset="PURR">PURR</button>
-                    </div>
-                    <div id="inventory-tables"></div>
-                </div>
-                <div id="inventory-error" class="error" style="display: none;"></div>
-            </div>
-        </section>
-
         <!-- Current Positions Section -->
         <section class="card">
             <h2 class="collapsible-header" data-section="positions">
-                <span class="chevron">▶</span> 📈 Current Open Positions
+                <span class="chevron">▶</span> Current Open Positions
             </h2>
             <div class="collapsible-content" data-section="positions">
                 <div id="positions-loading" class="loading">Loading positions...</div>
@@ -107,7 +99,7 @@
         <!-- Historical Performance Section -->
         <section class="card">
             <h2 class="collapsible-header" data-section="history">
-                <span class="chevron">▶</span> 📉 Historical Performance
+                <span class="chevron">▶</span> Historical Performance
             </h2>
             <div class="collapsible-content" data-section="history">
                 <div id="history-loading" class="loading">Loading history...</div>
@@ -121,6 +113,7 @@
                 </div>
             </div>
         </section>
+    </div>
     </div>
 
     <div id="history-modal" class="modal-overlay" style="display: none;">
