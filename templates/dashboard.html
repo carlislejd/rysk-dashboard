@@ -32,55 +32,6 @@
             </div>
         </header>
 
-        <!-- Token Balances Section -->
-        <section class="card">
-            <h2 class="collapsible-header" data-section="balances">
-                <span class="chevron">▶</span> Token Balances
-            </h2>
-            <div class="collapsible-content" data-section="balances">
-                <div id="balances-loading" class="loading">Loading balances...</div>
-                <div id="balances-content" style="display: none;">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Token</th>
-                                <th>Balance</th>
-                                <th>Price</th>
-                                <th>Notional</th>
-                                <th>Address</th>
-                            </tr>
-                        </thead>
-                        <tbody id="balances-table">
-                        </tbody>
-                    </table>
-                </div>
-                <div id="balances-error" class="error" style="display: none;"></div>
-            </div>
-        </section>
-
-        <!-- Suggested Options Section -->
-        <section class="card">
-            <h2 class="collapsible-header" data-section="suggestions">
-                <span class="chevron">▶</span> Suggested Options (25% APR Goal)
-            </h2>
-            <div class="collapsible-content" data-section="suggestions">
-                <p class="subtitle">Recommendations based on your balances to maintain ~25% average APR while keeping assets safe. Click an asset name to view price chart with strike prices.</p>
-                <div id="suggestions-loading" class="loading">Loading suggestions...</div>
-                <div id="suggestions-content" style="display: none;"></div>
-                <div id="suggestions-error" class="error" style="display: none;"></div>
-                
-                <!-- Chart Display Area -->
-                <div id="chart-container" style="display: none; margin-top: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 id="chart-title" style="font-size: 1em; color: #00ff00; font-weight: normal;"></h3>
-                        <button id="chart-close" style="background: #0a0a0a; border: 1px solid #333; color: #00ff00; padding: 4px 8px; cursor: pointer; font-size: 0.85em;">Close</button>
-                    </div>
-                    <div id="chart-loading" class="loading" style="display: none;">Loading chart...</div>
-                    <div id="chart-plot" style="background: #0a0a0a; border: 1px solid #333; padding: 10px; width: 100%; height: 500px; min-height: 500px;"></div>
-                </div>
-            </div>
-        </section>
-
         <!-- Current Positions Section -->
         <section class="card">
             <h2 class="collapsible-header" data-section="positions">

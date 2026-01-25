@@ -60,6 +60,11 @@ def api_balances():
         for asset, balance in balances.items():
             price = prices.get(asset, 0)
             notional[asset] = balance * price if price > 0 else 0
+
+        # Fallback price for stable if missing
+        if 'USDT0' in balances and prices.get('USDT0', 0) == 0:
+            prices['USDT0'] = 1.0
+            notional['USDT0'] = balances['USDT0'] * 1.0
         
         # Include token addresses
         addresses = {}
