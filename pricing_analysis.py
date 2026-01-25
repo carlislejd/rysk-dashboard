@@ -3,11 +3,20 @@ Option Pricing Analysis
 Calculates realized volatility, compares to implied volatility, and determines if options are rich/cheap
 """
 
-import numpy as np
-from datetime import datetime, timedelta
-from hyperliquid_client import get_price_history
-from scipy.stats import norm
 import math
+from datetime import datetime, timedelta
+
+from hyperliquid_client import get_price_history
+
+
+def _norm_pdf(x: float) -> float:
+    """Standard normal probability density function."""
+    return (1.0 / math.sqrt(2 * math.pi)) * math.exp(-0.5 * x ** 2)
+
+
+def _norm_cdf(x: float) -> float:
+    """Standard normal cumulative distribution function."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2)))
 
 def calculate_realized_volatility(prices, days=30):
     """
@@ -34,8 +43,8 @@ def calculate_realized_volatility(prices, days=30):
         return None
     
     # Calculate standard deviation of returns
-    mean_return = np.mean(returns)
-    variance = np.var(returns, ddof=1)
+    mean_return = sum(returns) / len(returns)
+    variance = sum((ret - mean_return) ** 2 for ret in returns) / (len(returns) - 1)
     std_dev = math.sqrt(variance)
     
     # Annualize based on data frequency
@@ -94,17 +103,17 @@ def calculate_greeks(strike, current_price, time_to_expiry_days, iv, risk_free_r
     d2 = d1 - sigma * math.sqrt(T)
     
     # Delta (for call option)
-    delta = norm.cdf(d1)
+    delta = _norm_cdf(d1)
     
     # Gamma
-    gamma = norm.pdf(d1) / (S * sigma * math.sqrt(T))
+    gamma = _norm_pdf(d1) / (S * sigma * math.sqrt(T))
     
     # Vega (per 1% change in vol)
-    vega = S * norm.pdf(d1) * math.sqrt(T) / 100.0
+    vega = S * _norm_pdf(d1) * math.sqrt(T) / 100.0
     
     # Theta (per day, negative for time decay)
-    theta_part1 = -S * norm.pdf(d1) * sigma / (2 * math.sqrt(T))
-    theta_part2 = -r * K * math.exp(-r * T) * norm.cdf(d2)
+    theta_part1 = -S * _norm_pdf(d1) * sigma / (2 * math.sqrt(T))
+    theta_part2 = -r * K * math.exp(-r * T) * _norm_cdf(d2)
     theta = (theta_part1 + theta_part2) / 365.0
     
     return {

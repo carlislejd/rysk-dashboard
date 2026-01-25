@@ -13,7 +13,9 @@ Web dashboard for managing Rysk covered call positions.
 
 1. Install dependencies:
 ```bash
-poetry install
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
 2. (Optional) Configure environment variables:
@@ -28,7 +30,7 @@ export HISTORY_API_URL="https://..."
 
 3. Run the Flask web server:
 ```bash
-poetry run python app.py
+python app.py
 ```
 
 4. Open the dashboard and enter a wallet address when prompted:
