@@ -647,10 +647,6 @@ header h1 {
     margin-bottom: 15px;
 }
 
-.chart-card {
-    width: 100%;
-}
-
 .positions-detail-table {
     overflow-x: auto;
 }
@@ -769,36 +765,6 @@ header h1 {
 
 .data-table tbody tr:last-child td {
     border-bottom: none;
-}
-
-.pager {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 6px 0;
-    font-size: 0.9em;
-    color: #9ef5c1;
-}
-
-.pager.bottom {
-    margin-top: 8px;
-}
-
-.pager-btn {
-    background: #0b0b0b;
-    border: 1px solid #2c2c2c;
-    color: #00ff00;
-    padding: 4px 10px;
-    cursor: pointer;
-}
-
-.pager-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.pager-info {
-    color: #888;
 }
 
 .token-badge {

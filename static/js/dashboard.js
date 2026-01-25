@@ -602,18 +602,11 @@ async function loadHistory() {
             html += `</div>`;
         }
 
-        html += `
-            <div id="history-apr-chart" class="chart-card" style="display:none; margin-top: 0; margin-bottom: 10px; width:100%;">
-                <h3 class="subsection-title" id="history-apr-chart-title">APR Scatter</h3>
-                <div id="history-apr-chart-plot" style="height:320px; width:100%;"></div>
-            </div>
-            <div id="expired-section"></div>
-        `;
+        html += `<div id="expired-section"></div>`;
 
         content.innerHTML = html;
         content.style.display = 'block';
         renderExpiredSection(expiredPositions, summary);
-        renderAprChart(expiredPositions, null);
         setupOutcomeFilters(expiredPositions, summary);
     } catch (err) {
         loading.style.display = 'none';
@@ -628,7 +621,7 @@ async function loadHistory() {
     }
 }
 
-function buildExpiredSection(expiredPositions, summary, filterSymbol = null, page = 1, pageSize = 50) {
+function buildExpiredSection(expiredPositions, summary, filterSymbol = null) {
     const totalCount = summary.expired_count || expiredPositions.length;
     const symbolUpper = filterSymbol ? String(filterSymbol).toUpperCase() : null;
     const filtered = symbolUpper
@@ -640,26 +633,11 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
         ? filteredCount
         : `${filteredCount} of ${totalCount}${symbolUpper ? ` · ${symbolUpper}` : ''}`;
 
-    if (filteredCount === 0) {
-        return `<h3 class="subsection-title">Expired Covered Calls (${titleCount})</h3><p class="empty-state">No expired positions yet.</p>`;
-    }
-
-    const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
-    const currentPage = Math.min(Math.max(page, 1), totalPages);
-    const startIdx = (currentPage - 1) * pageSize;
-    const endIdx = Math.min(startIdx + pageSize, filteredCount);
-    const pageData = filtered.slice(startIdx, endIdx);
-
     let html = `<h3 class="subsection-title">Expired Covered Calls (${titleCount})</h3>`;
 
-    if (totalPages > 1) {
-        html += `
-            <div class="pager">
-                <button class="pager-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
-                <span class="pager-info">Page ${currentPage} / ${totalPages}</span>
-                <button class="pager-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
-            </div>
-        `;
+    if (filteredCount === 0) {
+        html += '<p class="empty-state">No expired positions yet.</p>';
+        return html;
     }
 
     html += `
@@ -681,7 +659,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
             <tbody>
     `;
 
-    for (const position of pageData) {
+    for (const position of filtered) {
         let outcomeHtml = position.outcome || '—';
         if (position.expiry_price !== null && position.expiry_price !== undefined) {
             const expiryDecimals = position.expiry_price >= 1000 ? 0 : position.expiry_price >= 1 ? 2 : 6;
@@ -705,33 +683,13 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
     }
 
     html += '</tbody></table>';
-
-    if (totalPages > 1) {
-        html += `
-            <div class="pager bottom">
-                <button class="pager-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
-                <span class="pager-info">Page ${currentPage} / ${totalPages}</span>
-                <button class="pager-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
-            </div>
-        `;
-    }
-
     return html;
 }
 
-function renderExpiredSection(expiredPositions, summary, filterSymbol = null, page = 1) {
+function renderExpiredSection(expiredPositions, summary, filterSymbol = null) {
     const container = document.getElementById('expired-section');
     if (!container) return;
-    container.innerHTML = buildExpiredSection(expiredPositions, summary, filterSymbol, page);
-
-    // Attach pager handlers
-    container.querySelectorAll('.pager-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const targetPage = Number(btn.getAttribute('data-page'));
-            if (!Number.isFinite(targetPage)) return;
-            renderExpiredSection(expiredPositions, summary, filterSymbol, targetPage);
-        });
-    });
+    container.innerHTML = buildExpiredSection(expiredPositions, summary, filterSymbol);
 }
 
 function setupOutcomeFilters(expiredPositions, summary) {
@@ -740,131 +698,9 @@ function setupOutcomeFilters(expiredPositions, summary) {
         card.style.cursor = 'pointer';
         card.addEventListener('click', () => {
             const symbol = card.querySelector('.asset-summary-symbol')?.textContent || '';
-            renderExpiredSection(expiredPositions, summary, symbol, 1);
-            renderAprChart(expiredPositions, symbol);
+            renderExpiredSection(expiredPositions, summary, symbol);
         });
     });
-}
-
-function renderAprChart(expiredPositions, filterSymbol = null) {
-    const container = document.getElementById('history-apr-chart');
-    const plot = document.getElementById('history-apr-chart-plot');
-    const titleEl = document.getElementById('history-apr-chart-title');
-    if (!container || !plot || !titleEl || typeof Plotly === 'undefined') return;
-
-    const symbolUpper = filterSymbol ? String(filterSymbol).toUpperCase() : null;
-    const filtered = symbolUpper
-        ? expiredPositions.filter(pos => (pos.symbol || '').toUpperCase() === symbolUpper)
-        : expiredPositions;
-
-    if (!filtered.length) {
-        container.style.display = 'none';
-        return;
-    }
-
-    container.style.display = 'block';
-    titleEl.textContent = `APR Scatter${symbolUpper ? ` — ${symbolUpper}` : ''}`;
-
-    const points = [];
-    let maxNotional = 0;
-    filtered.forEach(pos => {
-        if (pos.apr === null || pos.apr === undefined) return;
-        const apr = Number(pos.apr);
-        const date = pos.created_at || pos.created_at_iso || '';
-        const notional = Number(pos.notional || ((pos.quantity || 0) * (pos.strike || 0)));
-        maxNotional = Math.max(maxNotional, notional);
-        points.push({
-            x: date,
-            y: apr,
-            notional,
-            symbol: pos.symbol || '—',
-            strike: pos.strike,
-            qty: pos.quantity,
-            premium: pos.premium,
-            outcome: pos.outcome || '—',
-            expiry: pos.expiry_date || '',
-        });
-    });
-
-    if (!points.length) {
-        container.style.display = 'none';
-        return;
-    }
-
-    const sizes = points.map(p => {
-        if (maxNotional <= 0) return 8;
-        const ratio = p.notional / maxNotional;
-        return Math.max(8, Math.min(28, 6 + ratio * 22));
-    });
-    const opacities = points.map(p => {
-        if (maxNotional <= 0) return 0.6;
-        const ratio = p.notional / maxNotional;
-        return Math.max(0.5, Math.min(0.9, 0.5 + ratio * 0.4));
-    });
-
-    const hover = points.map(p => {
-        return [
-            `Symbol: ${p.symbol}`,
-            `Date: ${p.x}`,
-            `APR: ${formatPercentage(p.y)}`,
-            `Notional: ${formatCurrency(p.notional || 0)}`,
-            `Strike: ${formatCurrency(p.strike || 0, (p.strike || 0) > 1000 ? 0 : 2)}`,
-            `Qty: ${formatNumber(p.qty, 4)}`,
-            `Premium: ${formatCurrency(p.premium || 0)}`,
-            `Outcome: ${p.outcome}`,
-            `Expiry: ${p.expiry}`
-        ].join('<br>');
-    });
-
-    const trace = {
-        type: 'scatter',
-        mode: 'markers',
-        x: points.map(p => p.x),
-        y: points.map(p => p.y),
-        marker: {
-            color: '#00ff00',
-            size: sizes,
-            opacity: opacities
-        },
-        text: hover,
-        hovertemplate: '%{text}<extra></extra>',
-        name: 'APR'
-    };
-
-    const avgApr = points.reduce((sum, p) => sum + p.y, 0) / points.length;
-
-    const layout = {
-        plot_bgcolor: '#0a0a0a',
-        paper_bgcolor: '#0a0a0a',
-        font: { color: '#00ff00' },
-        margin: { l: 60, r: 20, t: 30, b: 60 },
-        xaxis: {
-            title: 'Date',
-            color: '#888',
-            gridcolor: '#333',
-            type: 'date'
-        },
-        yaxis: {
-            title: 'APR (%)',
-            color: '#888',
-            gridcolor: '#333'
-        },
-        showlegend: true,
-        legend: {
-            bgcolor: '#0a0a0a',
-            bordercolor: '#333',
-            borderwidth: 1
-        }
-    };
-
-    Plotly.newPlot(plot, [trace, {
-        type: 'scatter',
-        mode: 'lines',
-        x: [points[0].x, points[points.length - 1].x],
-        y: [avgApr, avgApr],
-        line: { color: '#ffaa00', dash: 'dash' },
-        name: `Avg APR ${formatPercentage(avgApr)}`
-    }], layout, { displayModeBar: false, responsive: true });
 }
 
 function initHistoryModal() {
