@@ -167,18 +167,7 @@ async function loadBalances() {
                 const row = document.createElement('tr');
 
                 // Format price and notional based on token
-                let priceStr = 'N/A';
-                if (price > 0) {
-                    if (token === 'BTC') {
-                        priceStr = formatNumber(price, 0);
-                    } else if (price < 1) {
-                        priceStr = formatNumber(price, 6);
-                    } else if (token === 'PUMP' || token === 'PURR') {
-                        priceStr = formatNumber(price, 4);
-                    } else {
-                        priceStr = formatNumber(price, 2);
-                    }
-                }
+                let priceStr = price > 0 ? formatNumber(price, 2) : 'N/A';
                 let notionalStr = notional > 0 ? '$' + formatNumber(notional, 2) : 'N/A';
 
                 // For BTC, use more decimals for price
@@ -1182,6 +1171,8 @@ async function loadAllData() {
 
     setAccountStatus('Loading...');
     tasks.push(
+        loadBalances(),
+        loadSuggestions(),
         loadPositions(),
         loadHistory()
     );
