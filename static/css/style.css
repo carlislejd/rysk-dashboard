@@ -6,82 +6,12 @@
 
 body {
     font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
-    background: radial-gradient(circle at 20% 20%, rgba(0, 255, 0, 0.08), transparent 38%), #0a0a0a;
+    background: #1a1a1a;
     color: #00ff00;
     min-height: 100vh;
     padding: 20px;
     font-size: 13px;
     line-height: 1.5;
-}
-
-.splash-screen {
-    position: fixed;
-    inset: 0;
-    background: radial-gradient(circle at 20% 20%, rgba(0, 255, 0, 0.08), transparent 40%), #0a0a0a;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 999;
-    padding: 20px;
-}
-
-.splash-card {
-    background: #0d0d0d;
-    border: 1px solid #333;
-    padding: 30px;
-    max-width: 620px;
-    width: 100%;
-    text-align: center;
-    box-shadow: 0 0 20px rgba(0, 255, 0, 0.05);
-}
-
-.splash-title {
-    font-size: 2em;
-    letter-spacing: 2px;
-    margin-bottom: 8px;
-}
-
-.splash-subtitle {
-    color: #9ef5c1;
-    margin-bottom: 16px;
-    font-size: 0.95em;
-}
-
-.splash-input-row {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
-}
-
-.splash-input {
-    min-width: 320px;
-    width: 100%;
-    max-width: 420px;
-}
-
-.splash-button {
-    padding: 6px 14px;
-}
-
-.splash-typing {
-    margin-top: 8px;
-    color: #7be495;
-    font-size: 0.95em;
-    min-height: 18px;
-    white-space: pre-wrap;
-}
-
-.splash-typing::after {
-    content: '▌';
-    margin-left: 4px;
-    animation: splash-cursor 1s steps(2, start) infinite;
-}
-
-@keyframes splash-cursor {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
 }
 
 .container {
@@ -100,24 +30,6 @@ header h1 {
     margin-bottom: 8px;
     color: #00ff00;
     font-weight: normal;
-}
-
-.account-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    font-size: 0.95em;
-}
-
-.account-display {
-    color: #9ef5c1;
-}
-
-.account-display code {
-    background: #0a0a0a;
-    border: 1px solid #333;
-    padding: 2px 4px;
 }
 
 .account-info {
@@ -153,18 +65,17 @@ header h1 {
 }
 
 .card {
-    background: #0b0b0b;
-    border: 1px solid #242424;
+    background: #0d0d0d;
+    border: 1px solid #333;
     padding: 15px;
     margin-bottom: 15px;
-    box-shadow: 0 0 12px rgba(0, 255, 0, 0.05);
 }
 
 .card h2 {
     font-size: 1.1em;
     margin-bottom: 8px;
     color: #00ff00;
-    border-bottom: 1px solid #1f1f1f;
+    border-bottom: 1px solid #333;
     padding-bottom: 5px;
     font-weight: normal;
 }
@@ -189,7 +100,7 @@ header h1 {
 .chevron {
     display: inline-block;
     font-size: 0.7em;
-    color: #5ad18b;
+    color: #888;
     transition: transform 0.2s;
     width: 12px;
     text-align: center;
@@ -642,8 +553,7 @@ header h1 {
 
 .positions-heatmap {
     width: 100%;
-    min-height: 200px;
-    max-height: 400px;
+    min-height: 120px;
     margin-bottom: 15px;
 }
 

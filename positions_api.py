@@ -80,25 +80,7 @@ def _annotate_expired_position(position: dict):
         position.setdefault("outcome", "Unknown")
         return
 
-    expiry_ts = int(expiry)
-
-    # Try primary expiry timestamp
-    price, finalized = get_expiry_price(asset_address, expiry_ts)
-
-    # Fallback: normalize to midnight UTC for the expiry date if not finalized/available
-    if (price is None or not finalized) and expiry_ts:
-        try:
-            dt = datetime.fromtimestamp(expiry_ts, tz=timezone.utc)
-            midnight_ts = int(dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
-            if midnight_ts != expiry_ts:
-                price_fallback, finalized_fallback = get_expiry_price(asset_address, midnight_ts)
-                if price_fallback is not None:
-                    price, finalized = price_fallback, finalized_fallback
-                    position["expiry_fallback_ts"] = midnight_ts
-        except Exception:
-            # If normalization fails, continue with whatever we have
-            pass
-
+    price, finalized = get_expiry_price(asset_address, int(expiry))
     position["expiry_price"] = price
     position["expiry_price_finalized"] = finalized
 
@@ -141,7 +123,6 @@ def fetch_positions(account_address: str):
     open_notional_total = 0.0
     weighted_days_sum = 0.0
     annualized_premium_sum = 0.0
-    notional_weighted_apr_sum = 0.0
 
     for item in taker_raw or []:
         expiry_dt, expiry_date, days_to_expiry, status = _parse_expiry(item.get("expiry"))
@@ -182,8 +163,6 @@ def fetch_positions(account_address: str):
                 open_notional_total += notional
                 weighted_days_sum += notional * days_for_calc
                 annualized_premium_sum += premium_signed * (365.0 / days_for_calc)
-                if position["apr"] is not None:
-                    notional_weighted_apr_sum += position["apr"] * notional
 
             # Aggregate by asset symbol
             asset_symbol = (position["symbol"] or "UNKNOWN").upper()
@@ -270,8 +249,7 @@ def fetch_positions(account_address: str):
             "open_notional_total": open_notional_total,
             "open_weighted_days": (weighted_days_sum / open_notional_total) if open_notional_total > 0 else None,
             "open_annualized_premium_total": annualized_premium_sum,
-            # Notional-weighted APR using provided APR values, not inferred from premium timing
-            "open_weighted_apr": (notional_weighted_apr_sum / open_notional_total) if open_notional_total > 0 else None,
+            "open_weighted_apr": (annualized_premium_sum / open_notional_total * 100.0) if open_notional_total > 0 else None,
         }
     }
 
@@ -289,7 +267,7 @@ def fetch_positions(account_address: str):
     return results
 
 
-def fetch_history(account_address: str, limit: int = 0):
+def fetch_history(account_address: str, limit: int = 50):
     """Fetch trade history for an address"""
     if not account_address:
         return {"trades": [], "summary": {}}
@@ -356,25 +334,19 @@ def fetch_history(account_address: str, limit: int = 0):
         expired_positions = expired_cached.get("positions", [])
 
     for expired_position in expired_positions:
-        if (
-            "expiry_price" not in expired_position
-            or not expired_position.get("expiry_price_finalized", False)
-            or (expired_position.get("outcome") or "").lower() == "unknown"
-        ):
+        if "expiry_price" not in expired_position:
             _annotate_expired_position(expired_position)
 
-    expired_limit_env = int(os.getenv("RYSK_HISTORY_LIMIT", str(limit))) if limit is not None else 0
+    expired_limit = int(os.getenv("RYSK_HISTORY_LIMIT", str(limit)))
     expired_sorted = sorted(
         expired_positions,
         key=lambda x: (x.get("expiry") or 0, x.get("created_at_iso") or ""),
         reverse=True
     )
-    expired_limit = expired_limit_env if expired_limit_env > 0 else None
 
     asset_outcomes = {}
     total_assigned_positions = 0
     total_returned_positions = 0
-    total_unknown_positions = 0
     total_assigned_notional = 0.0
     total_returned_quantity = 0.0
 
@@ -395,12 +367,10 @@ def fetch_history(account_address: str, limit: int = 0):
             "total_positions": 0,
             "assigned_count": 0,
             "returned_count": 0,
-            "unknown_count": 0,
             "assigned_quantity": 0.0,
             "returned_quantity": 0.0,
             "assigned_notional": 0.0,
             "premium_total": 0.0,
-            "total_notional": 0.0,
             "expiry_price_assigned_sum": 0.0,
             "expiry_price_returned_sum": 0.0,
             "expiry_price_assigned_count": 0,
@@ -409,7 +379,6 @@ def fetch_history(account_address: str, limit: int = 0):
 
         entry["total_positions"] += 1
         entry["premium_total"] += premium
-        entry["total_notional"] += notional
 
         if outcome == "Assigned":
             entry["assigned_count"] += 1
@@ -428,9 +397,6 @@ def fetch_history(account_address: str, limit: int = 0):
             if expiry_price is not None:
                 entry["expiry_price_returned_sum"] += expiry_price
                 entry["expiry_price_returned_count"] += 1
-        else:
-            entry["unknown_count"] += 1
-            total_unknown_positions += 1
 
     asset_outcome_list = []
     for symbol, entry in asset_outcomes.items():
@@ -451,11 +417,9 @@ def fetch_history(account_address: str, limit: int = 0):
             "total_positions": entry["total_positions"],
             "assigned_count": entry["assigned_count"],
             "returned_count": entry["returned_count"],
-            "unknown_count": entry["unknown_count"],
             "assigned_quantity": entry["assigned_quantity"],
             "returned_quantity": entry["returned_quantity"],
             "assigned_notional": entry["assigned_notional"],
-            "total_notional": entry["total_notional"],
             "avg_assignment_price": assigned_avg_price,
             "avg_assigned_expiry": avg_assigned_expiry,
             "avg_returned_expiry": avg_returned_expiry,
@@ -466,13 +430,12 @@ def fetch_history(account_address: str, limit: int = 0):
 
     results = {
         "trades": [],
-        "expired_positions": expired_sorted if expired_limit is None else expired_sorted[:expired_limit],
+        "expired_positions": expired_sorted[:expired_limit],
         "summary": {
             "expired_count": len(expired_positions),
             "net_premium": expired_premium_total,
             "total_notional": expired_notional_total,
             "assigned_count": total_assigned_positions,
-            "unknown_count": total_unknown_positions,
             "assigned_notional_total": total_assigned_notional,
             "returned_count": total_returned_positions,
             "returned_quantity_total": total_returned_quantity,

@@ -18,8 +18,6 @@ TOKEN_ADDRESSES = {
     "SOL": os.getenv("SOL_ADDRESS", "0x068f321Fa8Fb9f0D135f290Ef6a3e2813e1c8A29"),
     "PUMP": os.getenv("PUMP_ADDRESS", "0x27eC642013bcB3D80CA3706599D3cdA04F6f4452"),
     "PURR": os.getenv("PURR_ADDRESS", "0x9b498C3c8A0b8CD8BA1D9851d40D186F1872b44E"),
-    "USDT0": os.getenv("USDT0_ADDRESS", "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb"),
-    "ZEC": os.getenv("ZEC_ADDRESS", "0xbe068Bb3c7ef5B56360655638f75bf5A6C5f8C10"),
 }
 
 # HYPE variants (whype and khype - treated as same asset)
@@ -36,8 +34,6 @@ TOKEN_DECIMALS = {
     "SOL": 18,
     "PUMP": 18,
     "PURR": 18,
-    "USDT0": 6,
-    "ZEC": 18,
 }
 
 def get_rpc_connection():

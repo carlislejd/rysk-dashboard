@@ -58,14 +58,6 @@ let defaultAccount = '';
 let currentAccount = '';
 let accountInputEl = null;
 let accountStatusEl = null;
-let accountDisplayEl = null;
-let splashScreenEl = null;
-let mainContentEl = null;
-let splashAccountInputEl = null;
-let splashLaunchEl = null;
-let splashTypingEl = null;
-let splashErrorEl = null;
-let splashTypingTimer = null;
 
 function buildUrl(path, params = {}) {
     const searchParams = new URLSearchParams();
@@ -87,10 +79,6 @@ function fetchWithAccount(path, params = {}) {
 }
 
 function updateAccountUI(address) {
-    const display = address ? address : 'Not set';
-    if (accountDisplayEl) {
-        accountDisplayEl.textContent = display;
-    }
     if (accountInputEl && document.activeElement !== accountInputEl) {
         accountInputEl.value = address || '';
     }
@@ -354,11 +342,14 @@ async function loadPositions() {
 
         if (Object.keys(summary).length > 0) {
             const weightedApr = summary.open_weighted_apr;
+            const weightedDays = summary.open_weighted_days;
             const hasWeightedApr = weightedApr !== null && weightedApr !== undefined;
+            const hasWeightedDays = weightedDays !== null && weightedDays !== undefined && Number.isFinite(weightedDays);
             const aprCard = hasWeightedApr ? `
                 <div class="summary-card">
                     <span class="summary-label">Portfolio APR</span>
                     <span class="summary-value">${formatPercentage(weightedApr)}</span>
+                    ${hasWeightedDays ? `<span class="summary-subtext">Avg Days ${formatNumber(weightedDays, 1)}</span>` : ''}
                 </div>
             ` : '';
 
@@ -553,6 +544,7 @@ async function loadHistory() {
 
         if (Object.keys(summary).length > 0) {
             const assignedSubtext = summary.assigned_notional_total ? `<span class="summary-subtext">${formatCurrency(summary.assigned_notional_total || 0)} Notional Assigned</span>` : '';
+            const returnedSubtext = summary.returned_quantity_total ? `<span class="summary-subtext">${formatNumber(summary.returned_quantity_total || 0, 2)} Units Returned</span>` : '';
 
             html += `
                 <div class="summary-grid">
@@ -576,6 +568,7 @@ async function loadHistory() {
                     <div class="summary-card">
                         <span class="summary-label">Returned Positions</span>
                         <span class="summary-value">${formatNumber(summary.returned_count || 0, 0)}</span>
+                        ${returnedSubtext}
                     </div>
                 </div>
             `;
@@ -602,12 +595,65 @@ async function loadHistory() {
             html += `</div>`;
         }
 
-        html += `<div id="expired-section"></div>`;
+        const expiredTotal = summary.expired_count || expiredPositions.length;
+        const expiredTitleCount = expiredPositions.length === expiredTotal
+            ? expiredPositions.length
+            : `${expiredPositions.length} of ${expiredTotal}`;
+
+        html += `<h3 class="subsection-title">Expired Covered Calls (${expiredTitleCount})</h3>`;
+
+        if (expiredPositions.length > 0) {
+            html += `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th>Side</th>
+                            <th>Quantity</th>
+                            <th>Strike</th>
+                            <th>Premium</th>
+                            <th>Price Paid</th>
+                            <th>Outcome</th>
+                            <th>APR</th>
+                            <th>Expiry</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            for (const position of expiredPositions) {
+                let outcomeHtml = position.outcome || '—';
+                if (position.expiry_price !== null && position.expiry_price !== undefined) {
+                    const expiryDecimals = position.expiry_price >= 1000 ? 0 : position.expiry_price >= 1 ? 2 : 6;
+                    outcomeHtml += `<div class="table-subtext">Expiry ${formatCurrency(position.expiry_price, expiryDecimals)}</div>`;
+                }
+
+                html += `
+                    <tr>
+                        <td>${formatDateLabel(position.created_at)}</td>
+                        <td>${position.symbol || '—'}</td>
+                        <td>${position.type || '—'}</td>
+                        <td>${sideBadge(position.side)}</td>
+                        <td>${formatNumber(position.quantity, 4)}</td>
+                        <td>${formatCurrency(position.strike, position.strike > 1000 ? 0 : 2)}</td>
+                        <td>${formatCurrency(position.premium || 0)}</td>
+                        <td>${formatCurrency(position.price || 0)}</td>
+                        <td>${outcomeHtml}</td>
+                        <td>${formatPercentage(position.apr)}</td>
+                        <td>${formatDateLabel(position.expiry_date)} ${statusBadge(position.status)}</td>
+                    </tr>
+                `;
+            }
+
+            html += '</tbody></table>';
+        } else {
+            html += '<p class="empty-state">No expired positions yet.</p>';
+        }
 
         content.innerHTML = html;
         content.style.display = 'block';
-        renderExpiredSection(expiredPositions, summary);
-        setupOutcomeFilters(expiredPositions, summary);
     } catch (err) {
         loading.style.display = 'none';
         error.textContent = 'Error loading history: ' + err.message;
@@ -619,88 +665,6 @@ async function loadHistory() {
             detailButton.textContent = '🔍 Deep Dive (Error)';
         }
     }
-}
-
-function buildExpiredSection(expiredPositions, summary, filterSymbol = null) {
-    const totalCount = summary.expired_count || expiredPositions.length;
-    const symbolUpper = filterSymbol ? String(filterSymbol).toUpperCase() : null;
-    const filtered = symbolUpper
-        ? expiredPositions.filter(pos => (pos.symbol || '').toUpperCase() === symbolUpper)
-        : expiredPositions;
-
-    const filteredCount = filtered.length;
-    const titleCount = filteredCount === totalCount
-        ? filteredCount
-        : `${filteredCount} of ${totalCount}${symbolUpper ? ` · ${symbolUpper}` : ''}`;
-
-    let html = `<h3 class="subsection-title">Expired Covered Calls (${titleCount})</h3>`;
-
-    if (filteredCount === 0) {
-        html += '<p class="empty-state">No expired positions yet.</p>';
-        return html;
-    }
-
-    html += `
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Symbol</th>
-                    <th>Type</th>
-                    <th>Side</th>
-                    <th>Quantity</th>
-                    <th>Strike</th>
-                    <th>Premium</th>
-                    <th>Outcome</th>
-                    <th>APR</th>
-                    <th>Expiry</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    for (const position of filtered) {
-        let outcomeHtml = position.outcome || '—';
-        if (position.expiry_price !== null && position.expiry_price !== undefined) {
-            const expiryDecimals = position.expiry_price >= 1000 ? 0 : position.expiry_price >= 1 ? 2 : 6;
-            outcomeHtml += `<div class="table-subtext">Expiry ${formatCurrency(position.expiry_price, expiryDecimals)}</div>`;
-        }
-
-        html += `
-            <tr>
-                <td>${formatDateLabel(position.created_at)}</td>
-                <td>${position.symbol || '—'}</td>
-                <td>${position.type || '—'}</td>
-                <td>${sideBadge(position.side)}</td>
-                <td>${formatNumber(position.quantity, 4)}</td>
-                <td>${formatCurrency(position.strike, position.strike > 1000 ? 0 : 2)}</td>
-                <td>${formatCurrency(position.premium || 0)}</td>
-                <td>${outcomeHtml}</td>
-                <td>${formatPercentage(position.apr)}</td>
-                <td>${formatDateLabel(position.expiry_date)} ${statusBadge(position.status)}</td>
-            </tr>
-        `;
-    }
-
-    html += '</tbody></table>';
-    return html;
-}
-
-function renderExpiredSection(expiredPositions, summary, filterSymbol = null) {
-    const container = document.getElementById('expired-section');
-    if (!container) return;
-    container.innerHTML = buildExpiredSection(expiredPositions, summary, filterSymbol);
-}
-
-function setupOutcomeFilters(expiredPositions, summary) {
-    const cards = document.querySelectorAll('.outcome-card');
-    cards.forEach(card => {
-        card.style.cursor = 'pointer';
-        card.addEventListener('click', () => {
-            const symbol = card.querySelector('.asset-summary-symbol')?.textContent || '';
-            renderExpiredSection(expiredPositions, summary, symbol);
-        });
-    });
 }
 
 function initHistoryModal() {
@@ -754,9 +718,6 @@ function renderHistoryModalContent(history) {
     const totalPositions = summary.expired_count || expiredPositions.length || 0;
     const assignedCount = summary.assigned_count || 0;
     const returnedCount = summary.returned_count || 0;
-    const unknownCount = summary.unknown_count != null
-        ? Number(summary.unknown_count)
-        : Math.max(totalPositions - (assignedCount + returnedCount), 0);
     const assignmentRate = totalPositions ? (assignedCount / totalPositions) * 100 : 0;
     const returnRate = totalPositions ? (returnedCount / totalPositions) * 100 : 0;
     const avgPremiumPerPosition = totalPositions ? (summary.net_premium || 0) / totalPositions : 0;
@@ -770,9 +731,7 @@ function renderHistoryModalContent(history) {
 
     const premiumValues = expiredPositions.map(p => Number(p.premium || 0));
     const maxPremium = premiumValues.length ? Math.max(...premiumValues) : 0;
-    const totalPremium = summary.net_premium != null
-        ? Number(summary.net_premium)
-        : premiumValues.reduce((acc, val) => acc + val, 0);
+    const totalPremium = premiumValues.reduce((acc, val) => acc + val, 0);
 
     const assignedNotional = summary.assigned_notional_total || 0;
     const avgAssignmentNotional = assignedCount ? assignedNotional / assignedCount : 0;
@@ -865,7 +824,7 @@ function renderHistoryModalContent(history) {
         html += '<h3>By Asset</h3>';
         html += '<div class="modal-table-wrapper">';
         html += '<table class="data-table">';
-        html += '<thead><tr><th>Asset</th><th>Expired</th><th>Assigned</th><th>Returned</th><th>Assignment Rate</th><th>Premium</th><th>Total Notional</th><th>Assigned Notional</th><th>Assigned %</th><th>Avg Assign Strike</th><th>Avg Expiry Px (Assigned)</th><th>Avg Expiry Px (Returned)</th></tr></thead>';
+        html += '<thead><tr><th>Asset</th><th>Expired</th><th>Assigned</th><th>Returned</th><th>Assignment Rate</th><th>Premium</th><th>Assigned Notional</th><th>Avg Assign Strike</th><th>Avg Expiry Px (Assigned)</th><th>Avg Expiry Px (Returned)</th></tr></thead>';
         html += '<tbody>';
         for (const outcome of assetOutcomes) {
             const assetTotal = outcome.total_positions || 0;
@@ -876,9 +835,6 @@ function renderHistoryModalContent(history) {
             const avgAssignExpiry = outcome.avg_assigned_expiry || null;
             const avgReturnedExpiry = outcome.avg_returned_expiry || null;
             const premiumTotal = outcome.premium_total || 0;
-            const totalNotional = outcome.total_notional || 0;
-            const assignedNotional = outcome.assigned_notional || 0;
-            const assignedPct = totalNotional ? (assignedNotional / totalNotional) * 100 : 0;
 
             const assignStrikeDecimals = avgAssignStrike > 1000 ? 0 : avgAssignStrike > 1 ? 2 : 6;
             const assignExpiryDecimals = avgAssignExpiry && avgAssignExpiry > 1000 ? 0 : avgAssignExpiry && avgAssignExpiry > 1 ? 2 : 6;
@@ -891,9 +847,7 @@ function renderHistoryModalContent(history) {
             html += `<td>${formatNumber(assetReturned, 0)}</td>`;
             html += `<td>${formatPercentage(assetAssignmentRate)}</td>`;
             html += `<td>${formatCurrency(premiumTotal)}</td>`;
-            html += `<td>${formatCurrency(totalNotional)}</td>`;
-            html += `<td>${formatCurrency(assignedNotional)}</td>`;
-            html += `<td>${formatPercentage(assignedPct)}</td>`;
+            html += `<td>${formatCurrency(outcome.assigned_notional || 0)}</td>`;
             html += `<td>${avgAssignStrike ? formatCurrency(avgAssignStrike, assignStrikeDecimals) : '—'}</td>`;
             html += `<td>${avgAssignExpiry ? formatCurrency(avgAssignExpiry, assignExpiryDecimals) : '—'}</td>`;
             html += `<td>${avgReturnedExpiry ? formatCurrency(avgReturnedExpiry, returnedExpiryDecimals) : '—'}</td>`;
@@ -996,171 +950,17 @@ function renderHistoryModalContent(history) {
     body.innerHTML = html;
 }
 
-async function loadAllData() {
-    const tasks = [];
-
+function refreshAllData() {
+    loadInventory();
     if (!currentAccount) {
         setAccountStatus('Enter a wallet address');
-        await Promise.all(tasks);
         return;
     }
-
     setAccountStatus('Loading...');
-    tasks.push(
-        loadBalances(),
-        loadSuggestions(),
-        loadPositions(),
-        loadHistory()
-    );
-
-    await Promise.all(tasks);
-}
-
-function refreshAllData() {
-    loadAllData();
-}
-
-function stopSplashTyping(finalText = '') {
-    if (splashTypingTimer) {
-        clearInterval(splashTypingTimer);
-        splashTypingTimer = null;
-    }
-    if (splashTypingEl && finalText) {
-        splashTypingEl.textContent = finalText;
-    }
-}
-
-function startSplashTyping(messages = []) {
-    if (!splashTypingEl) return;
-    stopSplashTyping();
-    if (!messages.length) {
-        splashTypingEl.textContent = '';
-        return;
-    }
-    let msgIdx = 0;
-    let charIdx = 0;
-    const typeDelay = 55; // ms per character
-    const holdDelay = 1200; // pause after full line
-
-    const typeNext = () => {
-        const msg = messages[msgIdx];
-        if (charIdx <= msg.length) {
-            splashTypingEl.textContent = msg.slice(0, charIdx);
-            charIdx += 1;
-            splashTypingTimer = setTimeout(typeNext, typeDelay);
-        } else {
-            splashTypingTimer = setTimeout(() => {
-                msgIdx = (msgIdx + 1) % messages.length;
-                charIdx = 0;
-                typeNext();
-            }, holdDelay);
-        }
-    };
-
-    typeNext();
-}
-
-function showMainContent() {
-    if (splashScreenEl) {
-        splashScreenEl.style.display = 'none';
-    }
-    if (mainContentEl) {
-        mainContentEl.style.display = 'block';
-    }
-}
-
-async function launchDashboard(addressInput, { fromSplash = false } = {}) {
-    let normalized = (addressInput || '').trim();
-    if (!normalized && defaultAccount) {
-        normalized = defaultAccount;
-    }
-    if (!normalized) {
-        if (fromSplash && splashErrorEl) {
-            splashErrorEl.textContent = 'Enter a wallet address';
-            splashErrorEl.style.display = 'block';
-        } else {
-            setAccountStatus('Enter a wallet address', true);
-        }
-        return;
-    }
-    if (!/^0x[0-9a-fA-F]{40}$/.test(normalized)) {
-        if (fromSplash && splashErrorEl) {
-            splashErrorEl.textContent = 'Invalid wallet address format';
-            splashErrorEl.style.display = 'block';
-        } else {
-            setAccountStatus('Invalid wallet address format', true);
-        }
-        return;
-    }
-
-    currentAccount = normalized;
-    updateAccountUI(currentAccount);
-    try {
-        localStorage.setItem('dashboardAccount', currentAccount || '');
-    } catch (_) {
-        // ignore storage errors
-    }
-
-    // Reset cached state similar to applyAccountChange
-    historyDataCache = null;
-    historyDataTimestamp = null;
-    const detailButton = document.getElementById('history-detail-button');
-    if (detailButton) {
-        detailButton.disabled = true;
-        detailButton.textContent = '🔍 Deep Dive (Loading...)';
-    }
-    const historyModal = document.getElementById('history-modal');
-    if (historyModal) {
-        historyModal.style.display = 'none';
-    }
-    const positionsDetail = document.getElementById('positions-detail');
-    if (positionsDetail) {
-        positionsDetail.style.display = 'none';
-    }
-    positionsAssetSummary = [];
-    openPositionsData = [];
-    selectedAssetSymbol = null;
-
-    if (fromSplash) {
-        if (splashErrorEl) splashErrorEl.style.display = 'none';
-        if (splashLaunchEl) {
-            splashLaunchEl.disabled = true;
-            splashLaunchEl.textContent = 'Loading...';
-        }
-        startSplashTyping([
-            'RYSKing it all...',
-            'Pulling balances...',
-            'Pulling positions...',
-            'Pulling history...',
-            'Hang tight — arming dashboard...'
-        ]);
-    }
-
-    try {
-        await loadAllData();
-        if (fromSplash) {
-            stopSplashTyping('Loaded. Preparing dashboard...');
-            showMainContent();
-        } else {
-            setAccountStatus('');
-        }
-    } catch (err) {
-        const message = 'Failed to load data: ' + err.message;
-        if (fromSplash) {
-            stopSplashTyping();
-        }
-        if (fromSplash && splashErrorEl) {
-            splashErrorEl.textContent = message;
-            splashErrorEl.style.display = 'block';
-        } else {
-            setAccountStatus(message, true);
-        }
-    } finally {
-        if (fromSplash && splashLaunchEl) {
-            splashLaunchEl.disabled = false;
-            splashLaunchEl.textContent = 'Enter';
-        }
-    }
+    loadBalances();
+    loadSuggestions();
+    loadPositions();
+    loadHistory();
 }
 
 function applyAccountChange(addressInput) {
@@ -1290,96 +1090,95 @@ function renderPositionsHeatmap(summary) {
         return;
     }
 
-    // Sort strikes and prepare data for bar chart
     const sorted = [...strikes].sort((a, b) => (a.strike || 0) - (b.strike || 0));
-    
+    const uniqueStrikes = sorted.map(s => s.strike || 0);
+    const strikeMap = new Map();
+    const strikeKey = (value) => Number(value).toFixed(8);
+    sorted.forEach(s => strikeMap.set(strikeKey(s.strike || 0), s));
+
+    let step = Infinity;
+    for (let i = 1; i < uniqueStrikes.length; i++) {
+        const diff = uniqueStrikes[i] - uniqueStrikes[i - 1];
+        if (diff > 0 && diff < step) {
+            step = diff;
+        }
+    }
+    if (!isFinite(step) || step <= 0) {
+        step = uniqueStrikes[0] || 1;
+    }
+
+    const minStrike = uniqueStrikes[0];
+    const maxStrike = uniqueStrikes[uniqueStrikes.length - 1];
+    const count = Math.round((maxStrike - minStrike) / step);
+
     const xStrikes = [];
-    const yNotionals = [];
+    const zValues = [];
     const hoverTexts = [];
     let maxNotional = 0;
 
-    // Only include strikes that have positions
-    for (const entry of sorted) {
-        const strike = entry.strike || 0;
-        const notional = entry.notional_total || 0;
-        
-        if (notional > 0) {
-            const strikeDecimals = strike > 1000 ? 0 : strike > 1 ? 2 : 6;
-            const display = `$${formatNumber(strike, strikeDecimals)}`;
-            xStrikes.push(display);
-            yNotionals.push(notional);
+    for (let i = 0; i <= count; i++) {
+        const value = minStrike + i * step;
+        const key = strikeKey(value);
+        const entry = strikeMap.get(key);
+        const display = `$${formatNumber(value, value > 1000 ? 0 : 2)}`;
+        xStrikes.push(display);
+        if (entry) {
+            const notional = entry.notional_total || 0;
             maxNotional = Math.max(maxNotional, notional);
-            
+            zValues.push(notional);
             hoverTexts.push(
                 `Strike: ${display}<br>` +
                 `Positions: ${formatNumber(entry.count, 0)}<br>` +
+                `Quantity: ${formatNumber(entry.quantity_total, 4)}<br>` +
                 `Notional: ${formatCurrency(notional)}<br>` +
                 `Premium: ${formatCurrency(entry.premium_total || 0)}<br>` +
                 `Avg APR: ${entry.avg_apr ? formatPercentage(entry.avg_apr) : '—'}`
             );
+        } else {
+            zValues.push(null);
+            hoverTexts.push(`Strike: ${display}<br>No positions`);
         }
     }
 
-    if (xStrikes.length === 0) {
-        heatmapDiv.innerHTML = '<p class="empty-state">No strike distribution yet.</p>';
-        return;
-    }
-
-    // Create bar chart data
     const data = [{
-        type: 'bar',
+        type: 'heatmap',
+        z: [zValues],
         x: xStrikes,
-        y: yNotionals,
-        hovertext: hoverTexts,
-        hovertemplate: '%{hovertext}<extra></extra>',
-        marker: {
-            color: yNotionals.map(val => {
-                // Color gradient from green (low) to yellow (high)
-                const ratio = maxNotional > 0 ? val / maxNotional : 0;
-                if (ratio < 0.33) return '#00ff00';
-                if (ratio < 0.66) return '#88ff00';
-                return '#ffff00';
-            }),
-            line: {
-                color: '#00ff00',
-                width: 1.5
-            },
-            opacity: 0.9
-        },
-        width: Math.max(0.45, Math.min(0.9, 35 / xStrikes.length)), // Adaptive bar width
-        textposition: 'none'
+        y: [''],
+        text: [hoverTexts],
+        hovertemplate: '%{text}<extra></extra>',
+        colorscale: 'Viridis',
+        zauto: false,
+        zmin: 0,
+        zmax: maxNotional > 0 ? maxNotional : 1,
+        showscale: true,
+        colorbar: {
+            title: 'Notional',
+            tickcolor: '#00ff00',
+            tickfont: { color: '#00ff00' }
+        }
     }];
 
     const layout = {
         plot_bgcolor: '#0a0a0a',
         paper_bgcolor: '#0a0a0a',
         font: { family: 'Courier New, Monaco, Menlo, monospace', size: 11, color: '#00ff00' },
-        margin: { l: 80, r: 20, t: 20, b: 60 },
+        margin: { l: 60, r: 20, t: 20, b: 40 },
         xaxis: {
-            title: {
-                text: 'Strike Price',
-                font: { color: '#888', size: 12 }
-            },
+            title: 'Strike',
             color: '#888',
             gridcolor: '#333',
-            tickangle: xStrikes.length > 5 ? -45 : 0,
-            type: 'category' // Treat as categorical to avoid spacing issues
+            tickangle: -45
         },
         yaxis: {
-            title: {
-                text: 'Notional Value',
-                font: { color: '#888', size: 12 }
-            },
+            showticklabels: false,
             color: '#888',
-            gridcolor: '#333',
-            tickformat: '$,.0f'
+            gridcolor: '#333'
         },
         hoverlabel: {
             bgcolor: '#0d0d0d',
-            font: { color: '#00ff00' },
-            bordercolor: '#00ff00'
-        },
-        bargap: 0.35 // Gap between bars
+            font: { color: '#00ff00' }
+        }
     };
 
     const config = {
@@ -1413,6 +1212,7 @@ function renderPositionsDetailTable(positions) {
                     <th>Quantity</th>
                     <th>Strike</th>
                     <th>Premium</th>
+                    <th>Price</th>
                     <th>APR</th>
                     <th>Expiry</th>
                 </tr>
@@ -1429,6 +1229,7 @@ function renderPositionsDetailTable(positions) {
                 <td>${formatNumber(pos.quantity, 4)}</td>
                 <td>${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
                 <td>${formatCurrency(pos.premium || 0)}</td>
+                <td>${formatCurrency(pos.price || 0)}</td>
                 <td>${formatPercentage(pos.apr)}</td>
                 <td>${formatDateLabel(pos.expiry_date)}</td>
             </tr>
@@ -1794,13 +1595,6 @@ document.addEventListener('DOMContentLoaded', () => {
     defaultAccount = document.body.dataset.defaultAccount || '';
     accountInputEl = document.getElementById('account-input');
     accountStatusEl = document.getElementById('account-status');
-    accountDisplayEl = document.getElementById('current-wallet-display');
-    splashScreenEl = document.getElementById('splash-screen');
-    mainContentEl = document.getElementById('main-content');
-    splashAccountInputEl = document.getElementById('splash-account-input');
-    splashLaunchEl = document.getElementById('splash-launch');
-    splashTypingEl = document.getElementById('splash-typing');
-    splashErrorEl = document.getElementById('splash-error');
     const applyButton = document.getElementById('account-apply');
 
     let savedAccount = '';
@@ -1809,17 +1603,21 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {
         savedAccount = '';
     }
-    const initialAccount = savedAccount || '';
-    currentAccount = '';
-    // No dashboard input; splash handles entry. Keep display in sync.
-    if (splashAccountInputEl) {
-        splashAccountInputEl.value = initialAccount;
+    const initialAccount = savedAccount || defaultAccount || '';
+    currentAccount = initialAccount;
+    if (accountInputEl) {
+        accountInputEl.value = currentAccount;
     }
     updateAccountUI(currentAccount);
+    try {
+        localStorage.setItem('dashboardAccount', currentAccount || '');
+    } catch (_) {
+        // Ignore storage issues
+    }
 
     if (applyButton) {
         applyButton.addEventListener('click', () => {
-            launchDashboard(accountInputEl ? accountInputEl.value : '', { fromSplash: false });
+            applyAccountChange(accountInputEl ? accountInputEl.value : '');
         });
     }
 
@@ -1827,21 +1625,7 @@ document.addEventListener('DOMContentLoaded', () => {
         accountInputEl.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                launchDashboard(accountInputEl.value, { fromSplash: false });
-            }
-        });
-    }
-
-    if (splashLaunchEl) {
-        splashLaunchEl.addEventListener('click', () => {
-            launchDashboard(splashAccountInputEl ? splashAccountInputEl.value : '', { fromSplash: true });
-        });
-    }
-    if (splashAccountInputEl) {
-        splashAccountInputEl.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                launchDashboard(splashAccountInputEl.value, { fromSplash: true });
+                applyAccountChange(accountInputEl.value);
             }
         });
     }
@@ -1863,16 +1647,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    setAccountStatus('Enter a wallet address');
+    if (currentAccount) {
+        refreshAllData();
+    } else {
+        setAccountStatus('Enter a wallet address');
+    }
 
     // Auto-refresh every 3 minutes
     setInterval(() => {
-        if (currentAccount && mainContentEl && mainContentEl.style.display !== 'none') {
-            refreshAllData();
-        }
+        refreshAllData();
     }, 180000);
 });
-
-
-
 
