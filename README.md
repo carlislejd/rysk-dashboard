@@ -12,14 +12,17 @@ Web dashboard and agent-friendly CLI for managing Rysk option positions.
 
 ## Setup
 
-1. Install dependencies:
+1. Install Poetry (if needed):
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+pip3 install poetry
 ```
 
-2. (Optional) Configure environment variables:
+2. Install project dependencies:
+```bash
+poetry install
+```
+
+3. (Optional) Configure environment variables:
 ```bash
 # Provide a default wallet address (UI can also accept one at runtime)
 export ACCOUNT_ADDRESS="0xYourAddress"
@@ -29,12 +32,12 @@ export POSITIONS_API_URL="https://..."
 export HISTORY_API_URL="https://..."
 ```
 
-3. Run the Flask web server:
+4. Run the Flask web server:
 ```bash
-python app.py
+poetry run python app.py
 ```
 
-4. Open the dashboard and enter a wallet address when prompted:
+5. Open the dashboard and enter a wallet address when prompted:
 ```
 http://localhost:5001
 ```
