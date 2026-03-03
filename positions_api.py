@@ -11,6 +11,7 @@ from decimal import Decimal, getcontext
 import requests
 
 from expiry_price import get_expiry_price, get_underlying_address
+from hyperliquid_client import get_current_price
 
 
 # Configure high precision for decimal conversions
@@ -38,6 +39,22 @@ def _from_wei(value, decimals=18):
         return 0.0
 
 
+def _as_bool(value):
+    """Parse permissive bool values from API payloads."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return False
+
+
+def _is_put_position(item: dict) -> bool:
+    """Support both camelCase and snake_case fields."""
+    return _as_bool(item.get("isPut")) or _as_bool(item.get("is_put"))
+
+
 def _parse_timestamp(ts):
     """Convert unix timestamp to datetime, human string, and status"""
     if not ts:
@@ -63,6 +80,52 @@ def _fetch_json(url, params=None):
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     return response.json()
+
+
+def _infer_strategy_key(position: dict) -> str:
+    """Classify short option legs for UI strategy labeling."""
+    side = str(position.get("side") or "").strip().lower()
+    opt_type = str(position.get("type") or "").strip().lower()
+
+    sell_like = side in {"sell", "short", "write"}
+    buy_like = side in {"buy", "long"}
+
+    if opt_type == "put" and (sell_like or not buy_like):
+        return "cash_secured_put"
+    if opt_type == "call" and (sell_like or not buy_like):
+        return "covered_call"
+    return "other"
+
+
+def _symbol_to_market_asset(symbol: str) -> str:
+    """Map position symbols to Hyperliquid spot market symbols."""
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return ""
+
+    direct = {
+        "BTC": "BTC",
+        "UBTC": "BTC",
+        "ETH": "ETH",
+        "UETH": "ETH",
+        "SOL": "SOL",
+        "USOL": "SOL",
+        "HYPE": "HYPE",
+        "WHYPE": "HYPE",
+        "KHYPE": "HYPE",
+        "KHYPE-PT": "HYPE",
+        "HYPE-PT": "HYPE",
+        "PUMP": "PUMP",
+        "UPUMP": "PUMP",
+        "PURR": "PURR",
+    }
+    if sym in direct:
+        return direct[sym]
+
+    if sym.startswith("U") and sym[1:] in {"BTC", "ETH", "SOL", "PUMP", "PURR"}:
+        return sym[1:]
+
+    return sym
 
 
 def _annotate_expired_position(position: dict):
@@ -155,10 +218,14 @@ def fetch_positions(account_address: str):
         premium_signed = premium if item.get("isBuy") else -premium
         days_for_calc = max(days_to_expiry, 0.01) if days_to_expiry is not None else 0.01
 
+        is_buy = _as_bool(item.get("isBuy"))
+        is_put = _is_put_position(item)
+
         position = {
             "symbol": item.get("symbol"),
-            "side": "Buy" if item.get("isBuy") else "Sell",
-            "type": "Put" if item.get("is_put") else "Call",
+            # Rysk payload marks written shorts with isBuy=true in this endpoint.
+            "side": "Sell" if is_buy else "Buy",
+            "type": "Put" if is_put else "Call",
             "apr": float(item.get("apr")) if item.get("apr") else None,
             "created_at": created_human,
             "created_at_iso": created_dt.isoformat() if created_dt else None,
@@ -174,6 +241,7 @@ def fetch_positions(account_address: str):
             "tx_hash": item.get("txHash"),
             "usd_address": item.get("usd"),
         }
+        position["strategy"] = _infer_strategy_key(position)
 
         if status == "Active":
             open_positions.append(position)
@@ -214,7 +282,10 @@ def fetch_positions(account_address: str):
                 "premium_total": 0.0,
                 "notional_total": 0.0,
                 "apr_sum": 0.0,
-                "apr_count": 0
+                "apr_count": 0,
+                "covered_call_notional": 0.0,
+                "cash_secured_put_notional": 0.0,
+                "other_notional": 0.0,
             })
             strike_entry["count"] += 1
             strike_entry["quantity_total"] += quantity
@@ -223,6 +294,14 @@ def fetch_positions(account_address: str):
             if position["apr"] is not None:
                 strike_entry["apr_sum"] += position["apr"]
                 strike_entry["apr_count"] += 1
+
+            strategy_key = _infer_strategy_key(position)
+            if strategy_key == "covered_call":
+                strike_entry["covered_call_notional"] += notional
+            elif strategy_key == "cash_secured_put":
+                strike_entry["cash_secured_put_notional"] += notional
+            else:
+                strike_entry["other_notional"] += notional
         else:
             expired_positions.append(position)
 
@@ -238,17 +317,31 @@ def fetch_positions(account_address: str):
         strikes_list = []
         for strike_key, strike_entry in entry["strikes"].items():
             avg_apr = strike_entry["apr_sum"] / strike_entry["apr_count"] if strike_entry["apr_count"] else None
+            strategy_values = {
+                "covered_call": strike_entry["covered_call_notional"],
+                "cash_secured_put": strike_entry["cash_secured_put_notional"],
+                "other": strike_entry["other_notional"],
+            }
+            dominant_strategy = max(strategy_values, key=strategy_values.get)
+            non_zero_strategies = sum(1 for value in strategy_values.values() if value > 0)
+            if non_zero_strategies > 1:
+                dominant_strategy = "mixed"
+
             strikes_list.append({
                 "strike": strike_entry["strike"],
                 "count": strike_entry["count"],
                 "quantity_total": strike_entry["quantity_total"],
                 "premium_total": strike_entry["premium_total"],
                 "notional_total": strike_entry["notional_total"],
-                "avg_apr": avg_apr
+                "avg_apr": avg_apr,
+                "dominant_strategy": dominant_strategy,
+                "strategy_notional": strategy_values,
             })
         strikes_list.sort(key=lambda s: s["strike"] or 0)
 
         avg_apr = entry["apr_sum"] / entry["apr_count"] if entry["apr_count"] else None
+        market_asset = _symbol_to_market_asset(symbol)
+        current_price = get_current_price(market_asset) if market_asset else None
         asset_summary_list.append({
             "symbol": symbol,
             "count": entry["count"],
@@ -256,6 +349,7 @@ def fetch_positions(account_address: str):
             "premium_total": entry["premium_total"],
             "notional_total": entry["notional_total"],
             "avg_apr": avg_apr,
+            "current_price": current_price,
             "strikes": strikes_list
         })
 
@@ -319,8 +413,8 @@ def fetch_history(account_address: str, limit: int = 0):
 
         trades.append({
             "symbol": item.get("symbol"),
-            "side": "Buy" if item.get("isBuy") else "Sell",
-            "type": "Put" if item.get("is_put") else "Call",
+            "side": "Sell" if _as_bool(item.get("isBuy")) else "Buy",
+            "type": "Put" if _is_put_position(item) else "Call",
             "apr": float(item.get("apr")) if item.get("apr") else None,
             "created_at": created_human,
             "created_at_iso": created_dt.isoformat() if created_dt else None,

@@ -54,6 +54,74 @@ function sideBadge(side) {
     return `<span class="side-badge ${badgeClass}">${side}</span>`;
 }
 
+function getPositionStrategy(position) {
+    const explicitStrategy = String(position?.strategy || '').trim().toLowerCase();
+    if (explicitStrategy === 'cash_secured_put') {
+        return {
+            key: 'cash-secured-put',
+            label: 'Cash-Secured Put',
+            shortLabel: 'CSP'
+        };
+    }
+    if (explicitStrategy === 'covered_call') {
+        return {
+            key: 'covered-call',
+            label: 'Covered Call',
+            shortLabel: 'CC'
+        };
+    }
+
+    const side = String(position?.side || '').trim().toLowerCase();
+    const type = String(position?.type || '').trim().toLowerCase();
+    const sellLike = side === 'sell' || side === 'short' || side === 'write';
+    const buyLike = side === 'buy' || side === 'long';
+
+    if (type === 'put' && (sellLike || !buyLike)) {
+        return {
+            key: 'cash-secured-put',
+            label: 'Cash-Secured Put',
+            shortLabel: 'CSP'
+        };
+    }
+
+    if (type === 'call' && (sellLike || !buyLike)) {
+        return {
+            key: 'covered-call',
+            label: 'Covered Call',
+            shortLabel: 'CC'
+        };
+    }
+
+    return {
+        key: 'other',
+        label: 'Other',
+        shortLabel: 'Other'
+    };
+}
+
+function strategyBadge(position) {
+    const strategy = getPositionStrategy(position);
+    return `<span class="strategy-badge strategy-${strategy.key}" title="${strategy.label}">${strategy.label}</span>`;
+}
+
+function formatPositionOutcome(position) {
+    const rawOutcome = position?.outcome || '—';
+    if (rawOutcome === '—') return rawOutcome;
+
+    const strategy = getPositionStrategy(position);
+    if (strategy.key === 'cash-secured-put') {
+        if (rawOutcome === 'Assigned') return 'Assigned (Bought at strike)';
+        if (rawOutcome === 'Returned') return 'Returned (Kept premium)';
+    }
+
+    if (strategy.key === 'covered-call') {
+        if (rawOutcome === 'Assigned') return 'Assigned (Sold at strike)';
+        if (rawOutcome === 'Returned') return 'Returned (Kept asset)';
+    }
+
+    return rawOutcome;
+}
+
 let defaultAccount = '';
 let currentAccount = '';
 let accountInputEl = null;
@@ -438,7 +506,7 @@ async function loadPositions() {
             </div>
         `;
 
-        html += `<h3 class="subsection-title">Current Covered Calls (${openTitleCount})</h3>`;
+        html += `<h3 class="subsection-title">Current Open Option Positions (${openTitleCount})</h3>`;
 
         if (openPositions.length > 0) {
             html += `
@@ -446,7 +514,7 @@ async function loadPositions() {
                     <thead>
                         <tr>
                             <th>Symbol</th>
-
+                            <th>Strategy</th>
                             <th>Side</th>
                             <th>Type</th>
                             <th>Created</th>
@@ -465,6 +533,7 @@ async function loadPositions() {
                 html += `
                     <tr>
                         <td>${pos.symbol || '—'}</td>
+                        <td>${strategyBadge(pos)}</td>
                         <td>${sideBadge(pos.side)}</td>
                         <td>${pos.type || '—'}</td>
                         <td>${formatDateLabel(pos.created_at)}</td>
@@ -480,7 +549,7 @@ async function loadPositions() {
 
             html += '</tbody></table>';
         } else {
-            html += '<p class="empty-state">No open covered calls right now.</p>';
+            html += '<p class="empty-state">No open option positions right now.</p>';
         }
 
         content.innerHTML = html;
@@ -595,6 +664,9 @@ async function loadHistory() {
         const assetOutcomes = summary.asset_outcomes || [];
         if (assetOutcomes.length > 0) {
             html += `<h3 class="subsection-title">Expiry Outcomes by Asset (${assetOutcomes.length})</h3>`;
+            html += `<div class="history-actions" style="justify-content: flex-start; margin-bottom: 6px;">`;
+            html += `<button id="outcomes-show-all" class="terminal-button">Show All Assets</button>`;
+            html += `</div>`;
             html += `<div class="asset-summary-grid outcome-grid">`;
             for (const outcome of assetOutcomes) {
                 const symbol = outcome.symbol || '—';
@@ -652,7 +724,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
         : `${filteredCount} of ${totalCount}${symbolUpper ? ` · ${symbolUpper}` : ''}`;
 
     if (filteredCount === 0) {
-        return `<h3 class="subsection-title">Expired Covered Calls (${titleCount})</h3><p class="empty-state">No expired positions yet.</p>`;
+        return `<h3 class="subsection-title">Expired Option Positions (${titleCount})</h3><p class="empty-state">No expired positions yet.</p>`;
     }
 
     const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
@@ -661,7 +733,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
     const endIdx = Math.min(startIdx + pageSize, filteredCount);
     const pageData = filtered.slice(startIdx, endIdx);
 
-    let html = `<h3 class="subsection-title">Expired Covered Calls (${titleCount})</h3>`;
+    let html = `<h3 class="subsection-title">Expired Option Positions (${titleCount})</h3>`;
 
     if (totalPages > 1) {
         html += `
@@ -679,6 +751,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
                 <tr>
                     <th>Date</th>
                     <th>Symbol</th>
+                    <th>Strategy</th>
                     <th>Type</th>
                     <th>Side</th>
                     <th>Quantity</th>
@@ -693,7 +766,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
     `;
 
     for (const position of pageData) {
-        let outcomeHtml = position.outcome || '—';
+        let outcomeHtml = formatPositionOutcome(position);
         if (position.expiry_price !== null && position.expiry_price !== undefined) {
             const expiryDecimals = position.expiry_price >= 1000 ? 0 : position.expiry_price >= 1 ? 2 : 6;
             outcomeHtml += `<div class="table-subtext">Expiry ${formatCurrency(position.expiry_price, expiryDecimals)}</div>`;
@@ -703,6 +776,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
             <tr>
                 <td>${formatDateLabel(position.created_at)}</td>
                 <td>${position.symbol || '—'}</td>
+                <td>${strategyBadge(position)}</td>
                 <td>${position.type || '—'}</td>
                 <td>${sideBadge(position.side)}</td>
                 <td>${formatNumber(position.quantity, 4)}</td>
@@ -747,9 +821,25 @@ function renderExpiredSection(expiredPositions, summary, filterSymbol = null, pa
 
 function setupOutcomeFilters(expiredPositions, summary) {
     const cards = document.querySelectorAll('.outcome-card');
+    const allButton = document.getElementById('outcomes-show-all');
+
+    const clearSelection = () => {
+        cards.forEach(card => card.classList.remove('selected'));
+    };
+
+    if (allButton) {
+        allButton.addEventListener('click', () => {
+            clearSelection();
+            renderExpiredSection(expiredPositions, summary, null, 1);
+            renderAprChart(expiredPositions, null);
+        });
+    }
+
     cards.forEach(card => {
         card.style.cursor = 'pointer';
         card.addEventListener('click', () => {
+            clearSelection();
+            card.classList.add('selected');
             const symbol = card.querySelector('.asset-summary-symbol')?.textContent || '';
             renderExpiredSection(expiredPositions, summary, symbol, 1);
             renderAprChart(expiredPositions, symbol);
@@ -774,6 +864,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
     }
 
     container.style.display = 'block';
+    plot.style.width = '100%';
     titleEl.textContent = `APR Scatter${symbolUpper ? ` — ${symbolUpper}` : ''}`;
 
     const points = [];
@@ -795,6 +886,13 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
             outcome: pos.outcome || '—',
             expiry: pos.expiry_date || '',
         });
+    });
+
+    // Keep date axis stable and full-range on first render.
+    points.sort((a, b) => {
+        const ta = Date.parse(a.x) || 0;
+        const tb = Date.parse(b.x) || 0;
+        return ta - tb;
     });
 
     if (!points.length) {
@@ -845,6 +943,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
     const avgApr = points.reduce((sum, p) => sum + p.y, 0) / points.length;
 
     const layout = {
+        autosize: true,
         plot_bgcolor: '#0a0a0a',
         paper_bgcolor: '#0a0a0a',
         font: { color: '#00ff00' },
@@ -875,7 +974,9 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         y: [avgApr, avgApr],
         line: { color: '#ffaa00', dash: 'dash' },
         name: `Avg APR ${formatPercentage(avgApr)}`
-    }], layout, { displayModeBar: false, responsive: true });
+    }], layout, { displayModeBar: false, responsive: true }).then(() => {
+        Plotly.Plots.resize(plot);
+    });
 }
 
 function initHistoryModal() {
@@ -1117,14 +1218,15 @@ function renderHistoryModalContent(history) {
         html += '<h3>Top Premium Harvests</h3>';
         html += '<div class="modal-table-wrapper">';
         html += '<table class="data-table">';
-        html += '<thead><tr><th>Date</th><th>Symbol</th><th>Outcome</th><th>Quantity</th><th>Strike</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead>';
+        html += '<thead><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Outcome</th><th>Quantity</th><th>Strike</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead>';
         html += '<tbody>';
         for (const position of topPremiumPositions) {
             const strikeDecimals = position.strike > 1000 ? 0 : position.strike > 1 ? 2 : 6;
             html += '<tr>';
             html += `<td>${formatDateLabel(position.created_at)}</td>`;
             html += `<td>${position.symbol || '—'}</td>`;
-            html += `<td>${position.outcome || '—'}</td>`;
+            html += `<td>${strategyBadge(position)}</td>`;
+            html += `<td>${formatPositionOutcome(position)}</td>`;
             html += `<td>${formatNumber(position.quantity, 4)}</td>`;
             html += `<td>${formatCurrency(position.strike || 0, strikeDecimals)}</td>`;
             html += `<td>${formatCurrency(position.premium || 0)}</td>`;
@@ -1142,14 +1244,15 @@ function renderHistoryModalContent(history) {
         html += '<h3>Highest APR Captured</h3>';
         html += '<div class="modal-table-wrapper">';
         html += '<table class="data-table">';
-        html += '<thead><tr><th>Date</th><th>Symbol</th><th>Outcome</th><th>Quantity</th><th>Strike</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead>';
+        html += '<thead><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Outcome</th><th>Quantity</th><th>Strike</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead>';
         html += '<tbody>';
         for (const position of topAprPositions) {
             const strikeDecimals = position.strike > 1000 ? 0 : position.strike > 1 ? 2 : 6;
             html += '<tr>';
             html += `<td>${formatDateLabel(position.created_at)}</td>`;
             html += `<td>${position.symbol || '—'}</td>`;
-            html += `<td>${position.outcome || '—'}</td>`;
+            html += `<td>${strategyBadge(position)}</td>`;
+            html += `<td>${formatPositionOutcome(position)}</td>`;
             html += `<td>${formatNumber(position.quantity, 4)}</td>`;
             html += `<td>${formatCurrency(position.strike || 0, strikeDecimals)}</td>`;
             html += `<td>${formatCurrency(position.premium || 0)}</td>`;
@@ -1413,7 +1516,7 @@ function showAssetPositions(asset) {
     const summary = positionsAssetSummary.find(a => a.symbol === asset);
     const positions = openPositionsData.filter(pos => (pos.symbol || '').toUpperCase() === asset.toUpperCase());
 
-    document.getElementById('positions-detail-title').textContent = `${asset} Covered Calls`;
+    document.getElementById('positions-detail-title').textContent = `${asset} Open Option Positions`;
 
     const summaryContainer = document.getElementById('positions-detail-summary');
     if (summaryContainer) {
@@ -1458,6 +1561,7 @@ function renderPositionsHeatmap(summary) {
     if (!heatmapDiv) return;
 
     const strikes = summary?.strikes || [];
+    const currentPrice = summary?.current_price;
     if (!strikes.length) {
         heatmapDiv.innerHTML = '<p class="empty-state">No strike distribution yet.</p>';
         return;
@@ -1467,9 +1571,10 @@ function renderPositionsHeatmap(summary) {
     const sorted = [...strikes].sort((a, b) => (a.strike || 0) - (b.strike || 0));
     
     const xStrikes = [];
+    const xLabels = [];
     const yNotionals = [];
     const hoverTexts = [];
-    let maxNotional = 0;
+    const barColors = [];
 
     // Only include strikes that have positions
     for (const entry of sorted) {
@@ -1479,14 +1584,35 @@ function renderPositionsHeatmap(summary) {
         if (notional > 0) {
             const strikeDecimals = strike > 1000 ? 0 : strike > 1 ? 2 : 6;
             const display = `$${formatNumber(strike, strikeDecimals)}`;
-            xStrikes.push(display);
+            xStrikes.push(strike);
+            xLabels.push(display);
             yNotionals.push(notional);
-            maxNotional = Math.max(maxNotional, notional);
-            
+            const dominantStrategy = entry.dominant_strategy || 'other';
+            const strategyLabelMap = {
+                covered_call: 'Covered Call',
+                cash_secured_put: 'Cash-Secured Put',
+                mixed: 'Mixed',
+                other: 'Other'
+            };
+            const strategyColorMap = {
+                covered_call: '#00d4ff',
+                cash_secured_put: '#ffaa00',
+                mixed: '#c084fc',
+                other: '#00ff00'
+            };
+            const strategyLabel = strategyLabelMap[dominantStrategy] || 'Other';
+            barColors.push(strategyColorMap[dominantStrategy] || '#00ff00');
+
+            const strategyNotional = entry.strategy_notional || {};
+            const ccNotional = strategyNotional.covered_call || 0;
+            const cspNotional = strategyNotional.cash_secured_put || 0;
             hoverTexts.push(
                 `Strike: ${display}<br>` +
                 `Positions: ${formatNumber(entry.count, 0)}<br>` +
+                `Strategy: ${strategyLabel}<br>` +
                 `Notional: ${formatCurrency(notional)}<br>` +
+                `CC Notional: ${formatCurrency(ccNotional)}<br>` +
+                `CSP Notional: ${formatCurrency(cspNotional)}<br>` +
                 `Premium: ${formatCurrency(entry.premium_total || 0)}<br>` +
                 `Avg APR: ${entry.avg_apr ? formatPercentage(entry.avg_apr) : '—'}`
             );
@@ -1506,22 +1632,50 @@ function renderPositionsHeatmap(summary) {
         hovertext: hoverTexts,
         hovertemplate: '%{hovertext}<extra></extra>',
         marker: {
-            color: yNotionals.map(val => {
-                // Color gradient from green (low) to yellow (high)
-                const ratio = maxNotional > 0 ? val / maxNotional : 0;
-                if (ratio < 0.33) return '#00ff00';
-                if (ratio < 0.66) return '#88ff00';
-                return '#ffff00';
-            }),
+            color: barColors,
             line: {
                 color: '#00ff00',
                 width: 1.5
             },
             opacity: 0.9
         },
-        width: Math.max(0.45, Math.min(0.9, 35 / xStrikes.length)), // Adaptive bar width
         textposition: 'none'
     }];
+
+    const shapes = [];
+    const annotations = [];
+    if (currentPrice !== null && currentPrice !== undefined && Number.isFinite(Number(currentPrice))) {
+        const cp = Number(currentPrice);
+        const cpDecimals = cp > 1000 ? 0 : cp > 1 ? 2 : 6;
+        shapes.push({
+            type: 'line',
+            xref: 'x',
+            yref: 'paper',
+            x0: cp,
+            x1: cp,
+            y0: 0,
+            y1: 1,
+            line: {
+                color: '#ffffff',
+                width: 2,
+                dash: 'dash'
+            }
+        });
+        annotations.push({
+            x: cp,
+            y: 1,
+            xref: 'x',
+            yref: 'paper',
+            yanchor: 'bottom',
+            showarrow: false,
+            text: `Spot ${formatCurrency(cp, cpDecimals)}`,
+            font: { color: '#ffffff', size: 10 },
+            bgcolor: '#111111',
+            bordercolor: '#ffffff',
+            borderwidth: 1,
+            borderpad: 3
+        });
+    }
 
     const layout = {
         plot_bgcolor: '#0a0a0a',
@@ -1536,7 +1690,10 @@ function renderPositionsHeatmap(summary) {
             color: '#888',
             gridcolor: '#333',
             tickangle: xStrikes.length > 5 ? -45 : 0,
-            type: 'category' // Treat as categorical to avoid spacing issues
+            type: 'linear',
+            tickmode: 'array',
+            tickvals: xStrikes,
+            ticktext: xLabels
         },
         yaxis: {
             title: {
@@ -1552,7 +1709,9 @@ function renderPositionsHeatmap(summary) {
             font: { color: '#00ff00' },
             bordercolor: '#00ff00'
         },
-        bargap: 0.35 // Gap between bars
+        bargap: 0.35, // Gap between bars
+        shapes,
+        annotations
     };
 
     const config = {
@@ -1581,6 +1740,7 @@ function renderPositionsDetailTable(positions) {
             <thead>
                 <tr>
                     <th>Date</th>
+                    <th>Strategy</th>
                     <th>Side</th>
                     <th>Type</th>
                     <th>Quantity</th>
@@ -1597,6 +1757,7 @@ function renderPositionsDetailTable(positions) {
         html += `
             <tr>
                 <td>${formatDateLabel(pos.created_at)}</td>
+                <td>${strategyBadge(pos)}</td>
                 <td>${sideBadge(pos.side)}</td>
                 <td>${pos.type || '—'}</td>
                 <td>${formatNumber(pos.quantity, 4)}</td>
