@@ -1,13 +1,14 @@
-# Rysk Covered Calls Dashboard
+# Rysk Options Dashboard
 
-Web dashboard for managing Rysk covered call positions.
+Web dashboard and agent-friendly CLI for managing Rysk option positions.
 
 ## Features
 
 - **Token Balances**: View balances for BTC, ETH, HYPE, SOL, PUMP, PURR
 - **Available Inventory**: See current options available from Rysk API
-- **Open Positions**: Track current positions (API endpoint needed)
-- **Historical Performance**: View past performance (API endpoint needed)
+- **Open Positions**: Track current positions with strategy tagging (CC/CSP)
+- **Historical Performance**: View expired outcomes and deep-dive analytics
+- **CLI**: Query account, open positions, strike distributions, and history in table or JSON mode
 
 ## Setup
 
@@ -38,15 +39,57 @@ python app.py
 http://localhost:5001
 ```
 
+## CLI Usage
+
+Run commands via:
+
+```bash
+poetry run rysk --help
+```
+
+Core commands:
+
+```bash
+# Validate wallet format
+poetry run rysk account validate --address 0x...
+
+# Open positions (agent-friendly JSON)
+poetry run rysk positions open --address 0x... --json
+
+# Strike distribution with dominant strategy and spot
+poetry run rysk positions strikes --address 0x... --symbol UBTC --json
+
+# History summary
+poetry run rysk history summary --address 0x... --json
+
+# Expired positions filtered by outcome
+poetry run rysk history expired --address 0x... --outcome assigned --json
+
+# Deep-dive analytics (top premium / APR slices)
+poetry run rysk history deep-dive --address 0x... --symbol WHYPE --json
+```
+
+CLI reliability options:
+
+- `--retries <n>` retries upstream calls before failing
+- `--retry-delay <seconds>` delay between retries
+- Exit codes:
+  - `0` success
+  - `2` validation error
+  - `3` runtime error
+
 ## Project Structure
 
 - `app.py` - Flask web server
+- `dashboard_services.py` - Shared service layer for API routes + CLI parity
+- `rysk_cli.py` - Agent-oriented CLI entrypoint
 - `rpc_client.py` - Hyperliquid RPC client for balances
 - `inventory_api.py` - Rysk inventory API client
 - `positions_api.py` - Positions/history API client (when endpoints available)
 - `templates/dashboard.html` - Frontend HTML
 - `static/css/style.css` - Styling
 - `static/js/dashboard.js` - Frontend JavaScript
+- `tests/` - CLI and API-parity unit tests
 
 ## Token Addresses
 
