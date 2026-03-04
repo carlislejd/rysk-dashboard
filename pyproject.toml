@@ -8,7 +8,6 @@ authors = [
 readme = "README.md"
 requires-python = "^3.9"
 dependencies = [
-    "plotly (>=5.0,<6)",
     "web3 (>=7.14.0,<8.0.0)",
     "flask (>=2.0,<4)",
     "requests (>=2.25,<3)",

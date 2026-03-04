@@ -5,7 +5,6 @@ Web dashboard and agent-friendly CLI for managing Rysk option positions.
 ## Features
 
 - **Token Balances**: View balances for BTC, ETH, HYPE, SOL, PUMP, PURR
-- **Available Inventory**: See current options available from Rysk API
 - **Open Positions**: Track current positions with strategy tagging (CC/CSP)
 - **Historical Performance**: View expired outcomes and deep-dive analytics
 - **CLI**: Query account, open positions, strike distributions, and history in table or JSON mode
@@ -87,7 +86,6 @@ CLI reliability options:
 - `dashboard_services.py` - Shared service layer for API routes + CLI parity
 - `rysk_cli.py` - Agent-oriented CLI entrypoint
 - `rpc_client.py` - Hyperliquid RPC client for balances
-- `inventory_api.py` - Rysk inventory API client
 - `positions_api.py` - Positions/history API client (when endpoints available)
 - `templates/dashboard.html` - Frontend HTML
 - `static/css/style.css` - Styling
@@ -99,9 +97,7 @@ CLI reliability options:
 Token addresses are pre-configured in `rpc_client.py`:
 - BTC, ETH, HYPE (whype + khype), SOL, PUMP, PURR
 
-## API Endpoints Needed
+## External Data Sources
 
-- Positions API: For current open positions
-- History API: For historical performance data
-
-Contact Rysk team for these endpoints.
+- Rysk positions/history APIs (v12)
+- Hyperliquid APIs/RPC for spot and oracle-derived analytics

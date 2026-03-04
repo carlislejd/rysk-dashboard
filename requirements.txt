@@ -2,5 +2,4 @@ flask>=2.0,<4
 requests>=2.25,<3
 web3>=7.14.0,<8.0.0
 hyperliquid-python-sdk
-plotly>=5.0,<6
 

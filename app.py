@@ -1,16 +1,12 @@
 """
-Flask application for Rysk Covered Calls Dashboard
+Flask application for Rysk Options Dashboard.
 """
 
 from flask import Flask, render_template, jsonify, request
 import os
 from dashboard_services import (
-    get_balances_payload,
-    get_chart_payload,
     get_history_payload,
-    get_inventory_payload,
     get_positions_payload,
-    get_suggestions_payload,
     validate_account_address,
 )
 
@@ -34,42 +30,6 @@ def resolve_account_address():
 def index():
     """Main dashboard page"""
     return render_template('dashboard.html', account_address=ACCOUNT_ADDRESS)
-
-@app.route('/api/balances')
-def api_balances():
-    """API endpoint for token balances with prices and notional values"""
-    try:
-        account_address = resolve_account_address()
-        payload = get_balances_payload(account_address)
-        return jsonify({
-            "success": True,
-            **payload
-        })
-    except ValueError as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 400
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/inventory')
-def api_inventory():
-    """API endpoint for available inventory"""
-    try:
-        payload = get_inventory_payload()
-        return jsonify({
-            "success": True,
-            **payload
-        })
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
 
 @app.route('/api/positions')
 def api_positions():
@@ -99,49 +59,6 @@ def api_history():
         return jsonify({
             "success": True,
             **get_history_payload(account_address)
-        })
-    except ValueError as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 400
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/suggestions')
-def api_suggestions():
-    """API endpoint for suggested options based on balances and 25% APR goal"""
-    try:
-        account_address = resolve_account_address()
-        return jsonify({
-            "success": True,
-            **get_suggestions_payload(account_address)
-        })
-    except ValueError as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 400
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-@app.route('/api/chart')
-def api_chart():
-    """API endpoint for price chart data with strike prices"""
-    try:
-        asset = request.args.get('asset', '').upper()
-        days = int(request.args.get('days', 7))
-        account_address = resolve_account_address()
-        payload = get_chart_payload(account_address, asset=asset, days=days)
-        return jsonify({
-            "success": True,
-            **payload
         })
     except ValueError as e:
         return jsonify({
