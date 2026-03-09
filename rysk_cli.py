@@ -121,6 +121,68 @@ def cmd_positions_open(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_positions_expiring(args: argparse.Namespace) -> int:
+    account = validate_account_address(args.address)
+    payload = _call_with_retries(
+        lambda: get_positions_payload(account),
+        retries=args.retries,
+        retry_delay_s=args.retry_delay,
+    )
+    open_positions = payload["positions"].get("open_positions") or []
+    filtered = filter_open_positions(open_positions, symbol=args.symbol, strategy=args.strategy)
+
+    expiry_date = args.expiry_date
+    expiring = [p for p in filtered if (p.get("expiry_date") or "") == expiry_date]
+    total_notional = sum(_to_float(p.get("notional")) for p in expiring)
+    total_premium = sum(_to_float(p.get("premium")) for p in expiring)
+
+    by_symbol: Dict[str, float] = {}
+    by_strategy: Dict[str, float] = {}
+    for p in expiring:
+        symbol = (p.get("symbol") or "UNKNOWN").upper()
+        strategy = (p.get("strategy") or "other").lower()
+        by_symbol[symbol] = by_symbol.get(symbol, 0.0) + _to_float(p.get("notional"))
+        by_strategy[strategy] = by_strategy.get(strategy, 0.0) + _to_float(p.get("notional"))
+
+    result = {
+        "account": account,
+        "expiry_date": expiry_date,
+        "count": len(expiring),
+        "filters": {"symbol": args.symbol, "strategy": args.strategy},
+        "totals": {
+            "notional": total_notional,
+            "premium": total_premium,
+        },
+        "breakdown": {
+            "by_symbol_notional": by_symbol,
+            "by_strategy_notional": by_strategy,
+        },
+        "positions": expiring,
+    }
+
+    if args.json:
+        _print_json(result)
+    else:
+        print(f"Expiry date: {expiry_date}")
+        print(f"Positions: {len(expiring)}")
+        print(f"Total notional freeing up: {_fmt(total_notional, 2)}")
+        print(f"Total premium: {_fmt(total_premium, 2)}")
+        rows = [
+            {
+                "symbol": p.get("symbol"),
+                "strategy": p.get("strategy"),
+                "type": p.get("type"),
+                "qty": _fmt(_to_float(p.get("quantity")), 4),
+                "strike": _fmt(_to_float(p.get("strike")), 2),
+                "notional": _fmt(_to_float(p.get("notional")), 2),
+                "premium": _fmt(_to_float(p.get("premium")), 2),
+            }
+            for p in expiring
+        ]
+        _print_table(rows, ["symbol", "strategy", "type", "qty", "strike", "notional", "premium"])
+    return EXIT_OK
+
+
 def cmd_positions_strikes(args: argparse.Namespace) -> int:
     account = validate_account_address(args.address)
     payload = _call_with_retries(
@@ -276,6 +338,16 @@ def build_parser() -> argparse.ArgumentParser:
     pos_open.add_argument("--retry-delay", type=float, default=0.5)
     pos_open.add_argument("--json", action="store_true")
     pos_open.set_defaults(func=cmd_positions_open)
+
+    pos_expiring = positions_sub.add_parser("expiring", help="Notional/premium expiring on a target date")
+    pos_expiring.add_argument("--address", required=True)
+    pos_expiring.add_argument("--expiry-date", required=True, help="YYYY-MM-DD")
+    pos_expiring.add_argument("--symbol")
+    pos_expiring.add_argument("--strategy", choices=["csp", "cc", "cash_secured_put", "covered_call"])
+    pos_expiring.add_argument("--retries", type=int, default=1)
+    pos_expiring.add_argument("--retry-delay", type=float, default=0.5)
+    pos_expiring.add_argument("--json", action="store_true")
+    pos_expiring.set_defaults(func=cmd_positions_expiring)
 
     pos_strikes = positions_sub.add_parser("strikes", help="Open position strike breakdown")
     pos_strikes.add_argument("--address", required=True)

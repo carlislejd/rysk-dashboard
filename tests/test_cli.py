@@ -85,6 +85,67 @@ class TestCli(unittest.TestCase):
         self.assertIn("summary", payload)
         self.assertEqual(payload["summary"]["expired_count"], 10)
 
+    @patch("rysk_cli.get_positions_payload")
+    def test_positions_expiring_totals(self, mock_positions):
+        mock_positions.return_value = {
+            "account": "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+            "positions": {
+                "open_positions": [
+                    {
+                        "symbol": "UBTC",
+                        "strategy": "covered_call",
+                        "type": "Call",
+                        "side": "Sell",
+                        "quantity": 0.5,
+                        "strike": 67000.0,
+                        "notional": 33500.0,
+                        "premium": 500.0,
+                        "expiry_date": "2026-03-13",
+                    },
+                    {
+                        "symbol": "WHYPE",
+                        "strategy": "cash_secured_put",
+                        "type": "Put",
+                        "side": "Sell",
+                        "quantity": 1000.0,
+                        "strike": 29.0,
+                        "notional": 29000.0,
+                        "premium": 350.0,
+                        "expiry_date": "2026-03-13",
+                    },
+                    {
+                        "symbol": "WHYPE",
+                        "strategy": "cash_secured_put",
+                        "type": "Put",
+                        "side": "Sell",
+                        "quantity": 500.0,
+                        "strike": 28.0,
+                        "notional": 14000.0,
+                        "premium": 100.0,
+                        "expiry_date": "2026-03-27",
+                    },
+                ]
+            },
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rysk_cli.main(
+                [
+                    "positions",
+                    "expiring",
+                    "--address",
+                    "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+                    "--expiry-date",
+                    "2026-03-13",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual(payload["totals"]["notional"], 62500.0)
+        self.assertEqual(payload["totals"]["premium"], 850.0)
+
 
 if __name__ == "__main__":
     unittest.main()

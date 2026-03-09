@@ -23,13 +23,17 @@ poetry install
 
 3. (Optional) Configure environment variables:
 ```bash
-# Provide a default wallet address (UI can also accept one at runtime)
+# Optional default wallet (UI/CLI can also take addresses at runtime)
 export ACCOUNT_ADDRESS="0xYourAddress"
 
-# API endpoints (when available)
-export POSITIONS_API_URL="https://..."
-export HISTORY_API_URL="https://..."
+# Optional RPC override (default is Hyperliquid EVM RPC)
+export RPC_URL="https://rpc.hyperliquid.xyz/evm"
+
+# Optional Rysk API override (defaults to v12)
+export RYSK_API_BASE="https://v12.rysk.finance/api"
 ```
+
+You do **not** need a `.env` file. The app reads normal environment variables via `os.getenv`, so shell exports are enough.
 
 4. Run the Flask web server:
 ```bash
@@ -60,6 +64,9 @@ poetry run rysk positions open --address 0x... --json
 
 # Strike distribution with dominant strategy and spot
 poetry run rysk positions strikes --address 0x... --symbol UBTC --json
+
+# Notional/premium freeing up on an expiry date
+poetry run rysk positions expiring --address 0x... --expiry-date 2026-03-13 --json
 
 # History summary
 poetry run rysk history summary --address 0x... --json
