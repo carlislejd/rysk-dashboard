@@ -167,7 +167,7 @@ function updateAccountUI(address) {
 function setAccountStatus(message = '', isError = false) {
     if (!accountStatusEl) return;
     accountStatusEl.textContent = message || '';
-    accountStatusEl.style.color = isError ? '#ff5555' : '#888';
+    accountStatusEl.style.color = isError ? '#f87171' : '#71717a';
 }
 
 let positionsAssetSummary = [];
@@ -722,7 +722,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         x: points.map(p => p.x),
         y: points.map(p => p.y),
         marker: {
-            color: '#00ff00',
+            color: '#4ade80',
             size: sizes,
             opacity: opacities
         },
@@ -735,26 +735,27 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
 
     const layout = {
         autosize: true,
-        plot_bgcolor: '#0a0a0a',
-        paper_bgcolor: '#0a0a0a',
-        font: { color: '#00ff00' },
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#a1a1aa', family: 'Inter, system-ui, sans-serif' },
         margin: { l: 60, r: 20, t: 30, b: 60 },
         xaxis: {
             title: 'Date',
-            color: '#888',
-            gridcolor: '#333',
+            color: '#52525b',
+            gridcolor: '#27272a',
             type: 'date'
         },
         yaxis: {
             title: 'APR (%)',
-            color: '#888',
-            gridcolor: '#333'
+            color: '#52525b',
+            gridcolor: '#27272a'
         },
         showlegend: true,
         legend: {
-            bgcolor: '#0a0a0a',
-            bordercolor: '#333',
-            borderwidth: 1
+            bgcolor: 'rgba(0,0,0,0)',
+            bordercolor: '#27272a',
+            borderwidth: 1,
+            font: { color: '#a1a1aa' }
         }
     };
 
@@ -763,7 +764,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         mode: 'lines',
         x: [points[0].x, points[points.length - 1].x],
         y: [avgApr, avgApr],
-        line: { color: '#ffaa00', dash: 'dash' },
+        line: { color: '#fb923c', dash: 'dash' },
         name: `Avg APR ${formatPercentage(avgApr)}`
     }], layout, { displayModeBar: false, responsive: true }).then(() => {
         Plotly.Plots.resize(plot);
@@ -1386,13 +1387,13 @@ function renderPositionsHeatmap(summary) {
                 other: 'Other'
             };
             const strategyColorMap = {
-                covered_call: '#00d4ff',
-                cash_secured_put: '#ffaa00',
+                covered_call: '#22d3ee',
+                cash_secured_put: '#fb923c',
                 mixed: '#c084fc',
-                other: '#00ff00'
+                other: '#4ade80'
             };
             const strategyLabel = strategyLabelMap[dominantStrategy] || 'Other';
-            barColors.push(strategyColorMap[dominantStrategy] || '#00ff00');
+            barColors.push(strategyColorMap[dominantStrategy] || '#4ade80');
 
             const strategyNotional = entry.strategy_notional || {};
             const ccNotional = strategyNotional.covered_call || 0;
@@ -1425,10 +1426,10 @@ function renderPositionsHeatmap(summary) {
         marker: {
             color: barColors,
             line: {
-                color: '#00ff00',
-                width: 1.5
+                color: 'rgba(255,255,255,0.1)',
+                width: 1
             },
-            opacity: 0.9
+            opacity: 0.85
         },
         textposition: 'none'
     }];
@@ -1447,7 +1448,7 @@ function renderPositionsHeatmap(summary) {
             y0: 0,
             y1: 1,
             line: {
-                color: '#ffffff',
+                color: '#a1a1aa',
                 width: 2,
                 dash: 'dash'
             }
@@ -1460,26 +1461,26 @@ function renderPositionsHeatmap(summary) {
             yanchor: 'bottom',
             showarrow: false,
             text: `Spot ${formatCurrency(cp, cpDecimals)}`,
-            font: { color: '#ffffff', size: 10 },
-            bgcolor: '#111111',
-            bordercolor: '#ffffff',
+            font: { color: '#fafafa', size: 10, family: 'Inter, system-ui, sans-serif' },
+            bgcolor: '#27272a',
+            bordercolor: '#52525b',
             borderwidth: 1,
             borderpad: 3
         });
     }
 
     const layout = {
-        plot_bgcolor: '#0a0a0a',
-        paper_bgcolor: '#0a0a0a',
-        font: { family: 'Courier New, Monaco, Menlo, monospace', size: 11, color: '#00ff00' },
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#a1a1aa' },
         margin: { l: 80, r: 20, t: 20, b: 60 },
         xaxis: {
             title: {
                 text: 'Strike Price',
-                font: { color: '#888', size: 12 }
+                font: { color: '#71717a', size: 12 }
             },
-            color: '#888',
-            gridcolor: '#333',
+            color: '#71717a',
+            gridcolor: '#27272a',
             tickangle: xStrikes.length > 5 ? -45 : 0,
             type: 'linear',
             tickmode: 'array',
@@ -1489,16 +1490,16 @@ function renderPositionsHeatmap(summary) {
         yaxis: {
             title: {
                 text: 'Notional Value',
-                font: { color: '#888', size: 12 }
+                font: { color: '#71717a', size: 12 }
             },
-            color: '#888',
-            gridcolor: '#333',
+            color: '#71717a',
+            gridcolor: '#27272a',
             tickformat: '$,.0f'
         },
         hoverlabel: {
-            bgcolor: '#0d0d0d',
-            font: { color: '#00ff00' },
-            bordercolor: '#00ff00'
+            bgcolor: '#0c0c0e',
+            font: { color: '#fafafa', family: 'Inter, system-ui, sans-serif' },
+            bordercolor: '#27272a'
         },
         bargap: 0.35, // Gap between bars
         shapes,
