@@ -790,6 +790,31 @@ header h1 {
     border-bottom: 1px solid var(--border);
 }
 
+.data-table th.sortable-header {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 18px;
+}
+
+.data-table th.sortable-header::after {
+    content: "↕";
+    position: absolute;
+    right: 6px;
+    color: var(--text-dim);
+    font-size: 0.8em;
+}
+
+.data-table th.sortable-header.sorted-asc::after {
+    content: "↑";
+    color: var(--text-primary);
+}
+
+.data-table th.sortable-header.sorted-desc::after {
+    content: "↓";
+    color: var(--text-primary);
+}
+
 .tab-button {
     padding: 8px 16px;
     border: none;
@@ -879,6 +904,42 @@ header h1 {
 
 .positions-detail-summary {
     margin-bottom: 20px;
+}
+
+.positions-detail-filters {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.expiry-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+}
+
+.expiry-filter-card {
+    background: var(--panel);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: var(--font-sans);
+    font-size: 0.82em;
+    cursor: pointer;
+    text-align: center;
+    transition: all var(--transition-fast);
+}
+
+.expiry-filter-card:hover {
+    border-color: var(--text-muted);
+    color: var(--text-primary);
+}
+
+.expiry-filter-card.active {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--panel) 82%, var(--accent) 18%);
 }
 
 .detail-grid {

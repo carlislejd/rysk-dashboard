@@ -122,6 +122,80 @@ function formatPositionOutcome(position) {
     return rawOutcome;
 }
 
+function parseSortValue(raw, key) {
+    const text = String(raw || '').trim();
+    if (!text || text === '—' || text.toLowerCase() === 'unknown') {
+        return null;
+    }
+
+    if (key === 'created' || key === 'expiry') {
+        const ts = Date.parse(text);
+        return Number.isNaN(ts) ? null : ts;
+    }
+
+    if (['quantity', 'strike', 'premium', 'apr'].includes(key)) {
+        const normalized = text.replace(/[$,%\s,]/g, '');
+        const num = Number(normalized);
+        return Number.isFinite(num) ? num : null;
+    }
+
+    return text.toLowerCase();
+}
+
+function setupSortableTable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    const headers = table.querySelectorAll('th[data-sort-key]');
+    let currentSort = { key: null, direction: 'asc' };
+
+    const compareValues = (a, b) => {
+        if (a === null && b === null) return 0;
+        if (a === null) return 1;
+        if (b === null) return -1;
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        return String(a).localeCompare(String(b));
+    };
+
+    headers.forEach(header => {
+        header.classList.add('sortable-header');
+        header.addEventListener('click', () => {
+            const key = header.getAttribute('data-sort-key');
+            if (!key) return;
+
+            const direction = currentSort.key === key && currentSort.direction === 'asc' ? 'desc' : 'asc';
+            currentSort = { key, direction };
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((rowA, rowB) => {
+                const cellA = rowA.querySelector(`td[data-sort-key="${key}"]`);
+                const cellB = rowB.querySelector(`td[data-sort-key="${key}"]`);
+                const valA = parseSortValue(cellA?.getAttribute('data-sort-value') || cellA?.textContent || '', key);
+                const valB = parseSortValue(cellB?.getAttribute('data-sort-value') || cellB?.textContent || '', key);
+                const cmp = compareValues(valA, valB);
+                return direction === 'asc' ? cmp : -cmp;
+            });
+
+            rows.forEach(row => tbody.appendChild(row));
+
+            headers.forEach(h => {
+                h.classList.remove('sorted-asc', 'sorted-desc');
+            });
+            header.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        });
+    });
+}
+
+function setupSortableOpenPositionsTable() {
+    setupSortableTable('current-open-positions-table');
+}
+
+function setupSortablePositionsDetailTable() {
+    setupSortableTable('positions-detail-asset-table');
+}
+
 let defaultAccount = '';
 let currentAccount = '';
 let accountInputEl = null;
@@ -173,6 +247,7 @@ function setAccountStatus(message = '', isError = false) {
 let positionsAssetSummary = [];
 let openPositionsData = [];
 let selectedAssetSymbol = null;
+let selectedAssetExpiry = '';
 let historyDataCache = null;
 let historyDataTimestamp = null;
 let historyModalInitialized = false;
@@ -291,6 +366,7 @@ async function loadPositions() {
                     <h3 id="positions-detail-title">Asset Detail</h3>
                     <button id="positions-detail-close" class="detail-close">Close</button>
                 </div>
+                <div id="positions-detail-filters" class="positions-detail-filters"></div>
                 <div id="positions-detail-summary" class="positions-detail-summary"></div>
                 <div id="positions-heatmap" class="positions-heatmap"></div>
                 <div id="positions-detail-table" class="positions-detail-table"></div>
@@ -301,20 +377,20 @@ async function loadPositions() {
 
         if (openPositions.length > 0) {
             html += `
-                <table class="data-table">
+                <table id="current-open-positions-table" class="data-table">
                     <thead>
                         <tr>
-                            <th>Symbol</th>
-                            <th>Strategy</th>
-                            <th>Side</th>
-                            <th>Type</th>
-                            <th>Created</th>
-                            <th>Expiry</th>
-                            <th>Quantity</th>
-                            <th>Strike</th>
-                            <th>Premium</th>
-                            <th>APR</th>
-                            <th>Status</th>
+                            <th data-sort-key="symbol">Symbol</th>
+                            <th data-sort-key="strategy">Strategy</th>
+                            <th data-sort-key="side">Side</th>
+                            <th data-sort-key="type">Type</th>
+                            <th data-sort-key="created">Created</th>
+                            <th data-sort-key="expiry">Expiry</th>
+                            <th data-sort-key="quantity">Quantity</th>
+                            <th data-sort-key="strike">Strike</th>
+                            <th data-sort-key="premium">Premium</th>
+                            <th data-sort-key="apr">APR</th>
+                            <th data-sort-key="status">Status</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -323,17 +399,17 @@ async function loadPositions() {
             for (const pos of openPositions) {
                 html += `
                     <tr>
-                        <td>${pos.symbol || '—'}</td>
-                        <td>${strategyBadge(pos)}</td>
-                        <td>${sideBadge(pos.side)}</td>
-                        <td>${pos.type || '—'}</td>
-                        <td>${formatDateLabel(pos.created_at)}</td>
-                        <td>${formatDateLabel(pos.expiry_date)}</td>
-                        <td>${formatNumber(pos.quantity, 4)}</td>
-                        <td>${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
-                        <td>${formatCurrency(pos.premium || 0)}</td>
-                        <td>${formatPercentage(pos.apr)}</td>
-                        <td>${statusBadge(pos.status)}</td>
+                        <td data-sort-key="symbol" data-sort-value="${pos.symbol || ''}">${pos.symbol || '—'}</td>
+                        <td data-sort-key="strategy" data-sort-value="${pos.strategy || ''}">${strategyBadge(pos)}</td>
+                        <td data-sort-key="side" data-sort-value="${pos.side || ''}">${sideBadge(pos.side)}</td>
+                        <td data-sort-key="type" data-sort-value="${pos.type || ''}">${pos.type || '—'}</td>
+                        <td data-sort-key="created" data-sort-value="${pos.created_at || ''}">${formatDateLabel(pos.created_at)}</td>
+                        <td data-sort-key="expiry" data-sort-value="${pos.expiry_date || ''}">${formatDateLabel(pos.expiry_date)}</td>
+                        <td data-sort-key="quantity" data-sort-value="${pos.quantity ?? ''}">${formatNumber(pos.quantity, 4)}</td>
+                        <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
+                        <td data-sort-key="premium" data-sort-value="${pos.premium ?? ''}">${formatCurrency(pos.premium || 0)}</td>
+                        <td data-sort-key="apr" data-sort-value="${pos.apr ?? ''}">${formatPercentage(pos.apr)}</td>
+                        <td data-sort-key="status" data-sort-value="${pos.status || ''}">${statusBadge(pos.status)}</td>
                     </tr>
                 `;
             }
@@ -345,6 +421,7 @@ async function loadPositions() {
 
         content.innerHTML = html;
         content.style.display = 'block';
+        setupSortableOpenPositionsTable();
 
         positionsAssetSummary = assetSummary;
         openPositionsData = openPositions;
@@ -354,6 +431,7 @@ async function loadPositions() {
             showAssetPositions(previousAsset);
         } else {
             selectedAssetSymbol = null;
+            selectedAssetExpiry = '';
             const detail = document.getElementById('positions-detail');
             if (detail) detail.style.display = 'none';
         }
@@ -1188,6 +1266,7 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
     positionsAssetSummary = [];
     openPositionsData = [];
     selectedAssetSymbol = null;
+    selectedAssetExpiry = '';
 
     if (fromSplash) {
         if (splashErrorEl) splashErrorEl.style.display = 'none';
@@ -1272,6 +1351,7 @@ function applyAccountChange(addressInput) {
     positionsAssetSummary = [];
     openPositionsData = [];
     selectedAssetSymbol = null;
+    selectedAssetExpiry = '';
     setAccountStatus('Loading...');
     refreshAllData();
 }
@@ -1283,6 +1363,7 @@ function setupAssetSummaryHandlers() {
             const detail = document.getElementById('positions-detail');
             if (detail) detail.style.display = 'none';
             selectedAssetSymbol = null;
+            selectedAssetExpiry = '';
             document.querySelectorAll('.asset-card').forEach(card => card.classList.remove('selected'));
         });
     }
@@ -1298,7 +1379,11 @@ function setupAssetSummaryHandlers() {
 
 function showAssetPositions(asset) {
     if (!asset) return;
+    const previousAsset = selectedAssetSymbol;
     selectedAssetSymbol = asset;
+    if (previousAsset !== asset) {
+        selectedAssetExpiry = '';
+    }
     document.querySelectorAll('.asset-card').forEach(card => {
         card.classList.toggle('selected', card.dataset.asset === asset);
     });
@@ -1306,34 +1391,66 @@ function showAssetPositions(asset) {
     if (!detail) return;
 
     const summary = positionsAssetSummary.find(a => a.symbol === asset);
-    const positions = openPositionsData.filter(pos => (pos.symbol || '').toUpperCase() === asset.toUpperCase());
+    const assetPositions = openPositionsData.filter(pos => (pos.symbol || '').toUpperCase() === asset.toUpperCase());
+    const expiryOptions = Array.from(new Set(
+        assetPositions
+            .map(pos => pos.expiry_date)
+            .filter(Boolean)
+    )).sort((a, b) => {
+        const aTs = Date.parse(a);
+        const bTs = Date.parse(b);
+        if (Number.isNaN(aTs) || Number.isNaN(bTs)) {
+            return String(a).localeCompare(String(b));
+        }
+        return aTs - bTs;
+    });
+    const effectiveExpiry = selectedAssetExpiry && expiryOptions.includes(selectedAssetExpiry) ? selectedAssetExpiry : '';
+    selectedAssetExpiry = effectiveExpiry;
+    let positions = effectiveExpiry
+        ? assetPositions.filter(pos => pos.expiry_date === effectiveExpiry)
+        : assetPositions;
+    if (effectiveExpiry && positions.length === 0 && assetPositions.length > 0) {
+        selectedAssetExpiry = '';
+        positions = assetPositions;
+    }
 
     document.getElementById('positions-detail-title').textContent = `${asset} Open Option Positions`;
+    renderAssetDetailFilters(asset, expiryOptions, effectiveExpiry);
 
     const summaryContainer = document.getElementById('positions-detail-summary');
     if (summaryContainer) {
         if (summary) {
+            const filteredNotional = positions.reduce((acc, pos) => acc + (Number(pos.notional) || 0), 0);
+            const filteredQuantity = positions.reduce((acc, pos) => acc + (Number(pos.quantity) || 0), 0);
+            const filteredPremium = positions.reduce((acc, pos) => acc + (Number(pos.premium) || 0), 0);
+            const aprValues = positions
+                .map(pos => pos.apr)
+                .filter(apr => apr !== null && apr !== undefined)
+                .map(apr => Number(apr));
+            const avgApr = aprValues.length
+                ? aprValues.reduce((acc, apr) => acc + apr, 0) / aprValues.length
+                : null;
             summaryContainer.innerHTML = `
                 <div class="summary-grid detail-grid">
                     <div class="summary-card">
                         <span class="summary-label">Positions</span>
-                        <span class="summary-value">${formatNumber(summary.count || positions.length || 0, 0)}</span>
+                        <span class="summary-value">${formatNumber(positions.length || 0, 0)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Quantity</span>
-                        <span class="summary-value">${formatNumber(summary.quantity_total || 0, 4)}</span>
+                        <span class="summary-value">${formatNumber(filteredQuantity, 4)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Notional</span>
-                        <span class="summary-value">${formatCurrency(summary.notional_total || 0)}</span>
+                        <span class="summary-value">${formatCurrency(filteredNotional || 0)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Premium</span>
-                        <span class="summary-value">${formatCurrency(summary.premium_total || 0)}</span>
+                        <span class="summary-value">${formatCurrency(filteredPremium || 0)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Avg APR</span>
-                        <span class="summary-value">${summary.avg_apr ? formatPercentage(summary.avg_apr) : '—'}</span>
+                        <span class="summary-value">${avgApr !== null ? formatPercentage(avgApr) : '—'}</span>
                     </div>
                 </div>
             `;
@@ -1342,10 +1459,127 @@ function showAssetPositions(asset) {
         }
     }
 
-    renderPositionsHeatmap(summary);
+    renderPositionsHeatmap(buildHeatmapSummary(positions, summary?.current_price));
     renderPositionsDetailTable(positions);
 
     detail.style.display = 'block';
+}
+
+function renderAssetDetailFilters(asset, expiryOptions, selectedExpiry) {
+    const filters = document.getElementById('positions-detail-filters');
+    if (!filters) return;
+
+    const cards = [
+        {
+            value: '',
+            label: 'All Expiries',
+            selected: !selectedExpiry
+        },
+        ...expiryOptions.map(expiry => ({
+            value: expiry,
+            label: expiry,
+            selected: selectedExpiry === expiry
+        }))
+    ];
+
+    const optionsHtml = cards.map(card => `
+        <button
+            type="button"
+            class="expiry-filter-card ${card.selected ? 'active' : ''}"
+            data-expiry="${card.value}"
+        >
+            ${card.label}
+        </button>
+    `).join('');
+
+    filters.innerHTML = `
+        <span class="summary-label">Expiry Filter</span>
+        <div class="expiry-filter-grid">${optionsHtml}</div>
+    `;
+
+    filters.querySelectorAll('.expiry-filter-card').forEach(button => {
+        button.addEventListener('click', () => {
+            selectedAssetExpiry = button.dataset.expiry || '';
+            showAssetPositions(asset);
+        });
+    });
+}
+
+function buildHeatmapSummary(positions, currentPrice = null) {
+    const strikeMap = new Map();
+    for (const pos of positions || []) {
+        const strike = Number(pos.strike) || 0;
+        if (!strike) continue;
+        const key = String(strike);
+        if (!strikeMap.has(key)) {
+            strikeMap.set(key, {
+                strike,
+                count: 0,
+                quantity_total: 0,
+                premium_total: 0,
+                notional_total: 0,
+                apr_sum: 0,
+                apr_count: 0,
+                cc_notional: 0,
+                csp_notional: 0,
+                other_notional: 0
+            });
+        }
+        const entry = strikeMap.get(key);
+        const notional = Number(pos.notional) || 0;
+        entry.count += 1;
+        entry.quantity_total += Number(pos.quantity) || 0;
+        entry.premium_total += Number(pos.premium) || 0;
+        entry.notional_total += notional;
+        if (pos.apr !== null && pos.apr !== undefined) {
+            entry.apr_sum += Number(pos.apr);
+            entry.apr_count += 1;
+        }
+        const strategy = String(pos.strategy || '').toLowerCase();
+        if (strategy === 'covered_call') {
+            entry.cc_notional += notional;
+        } else if (strategy === 'cash_secured_put') {
+            entry.csp_notional += notional;
+        } else {
+            entry.other_notional += notional;
+        }
+    }
+
+    const strikes = Array.from(strikeMap.values()).map(entry => {
+        const strategyValues = {
+            covered_call: entry.cc_notional,
+            cash_secured_put: entry.csp_notional,
+            other: entry.other_notional
+        };
+        let dominant = 'other';
+        let maxValue = -1;
+        let nonZero = 0;
+        Object.entries(strategyValues).forEach(([key, value]) => {
+            if (value > 0) nonZero += 1;
+            if (value > maxValue) {
+                maxValue = value;
+                dominant = key;
+            }
+        });
+        if (nonZero > 1) dominant = 'mixed';
+
+        return {
+            strike: entry.strike,
+            count: entry.count,
+            quantity_total: entry.quantity_total,
+            premium_total: entry.premium_total,
+            notional_total: entry.notional_total,
+            avg_apr: entry.apr_count ? entry.apr_sum / entry.apr_count : null,
+            dominant_strategy: dominant,
+            strategy_notional: {
+                covered_call: entry.cc_notional,
+                cash_secured_put: entry.csp_notional,
+                other: entry.other_notional
+            }
+        };
+    }).sort((a, b) => (a.strike || 0) - (b.strike || 0));
+
+    return { strikes, current_price: currentPrice };
 }
 
 function renderPositionsHeatmap(summary) {
@@ -1528,18 +1762,18 @@ function renderPositionsDetailTable(positions) {
     }
 
     let html = `
-        <table class="data-table">
+        <table id="positions-detail-asset-table" class="data-table">
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Strategy</th>
-                    <th>Side</th>
-                    <th>Type</th>
-                    <th>Quantity</th>
-                    <th>Strike</th>
-                    <th>Premium</th>
-                    <th>APR</th>
-                    <th>Expiry</th>
+                    <th data-sort-key="created">Date</th>
+                    <th data-sort-key="strategy">Strategy</th>
+                    <th data-sort-key="side">Side</th>
+                    <th data-sort-key="type">Type</th>
+                    <th data-sort-key="quantity">Quantity</th>
+                    <th data-sort-key="strike">Strike</th>
+                    <th data-sort-key="premium">Premium</th>
+                    <th data-sort-key="apr">APR</th>
+                    <th data-sort-key="expiry">Expiry</th>
                 </tr>
             </thead>
             <tbody>
@@ -1548,21 +1782,22 @@ function renderPositionsDetailTable(positions) {
     for (const pos of positions) {
         html += `
             <tr>
-                <td>${formatDateLabel(pos.created_at)}</td>
-                <td>${strategyBadge(pos)}</td>
-                <td>${sideBadge(pos.side)}</td>
-                <td>${pos.type || '—'}</td>
-                <td>${formatNumber(pos.quantity, 4)}</td>
-                <td>${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
-                <td>${formatCurrency(pos.premium || 0)}</td>
-                <td>${formatPercentage(pos.apr)}</td>
-                <td>${formatDateLabel(pos.expiry_date)}</td>
+                <td data-sort-key="created" data-sort-value="${pos.created_at || ''}">${formatDateLabel(pos.created_at)}</td>
+                <td data-sort-key="strategy" data-sort-value="${pos.strategy || ''}">${strategyBadge(pos)}</td>
+                <td data-sort-key="side" data-sort-value="${pos.side || ''}">${sideBadge(pos.side)}</td>
+                <td data-sort-key="type" data-sort-value="${pos.type || ''}">${pos.type || '—'}</td>
+                <td data-sort-key="quantity" data-sort-value="${pos.quantity ?? ''}">${formatNumber(pos.quantity, 4)}</td>
+                <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
+                <td data-sort-key="premium" data-sort-value="${pos.premium ?? ''}">${formatCurrency(pos.premium || 0)}</td>
+                <td data-sort-key="apr" data-sort-value="${pos.apr ?? ''}">${formatPercentage(pos.apr)}</td>
+                <td data-sort-key="expiry" data-sort-value="${pos.expiry_date || ''}">${formatDateLabel(pos.expiry_date)}</td>
             </tr>
         `;
     }
 
     html += '</tbody></table>';
     container.innerHTML = html;
+    setupSortablePositionsDetailTable();
 }
 
 // Collapsible sections functionality

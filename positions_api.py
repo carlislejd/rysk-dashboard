@@ -308,7 +308,9 @@ def fetch_positions(account_address: str):
     for expired_position in expired_positions:
         _annotate_expired_position(expired_position)
 
-    limit = int(os.getenv("RYSK_POSITIONS_LIMIT", "100"))
+    # Default to returning all open positions so asset detail views stay consistent
+    # with aggregated asset_summary data. Set RYSK_POSITIONS_LIMIT > 0 to cap payload.
+    limit = int(os.getenv("RYSK_POSITIONS_LIMIT", "0"))
 
     open_sorted = sorted(open_positions, key=lambda x: (x.get("expiry") or 0, x.get("created_at_iso") or ""))
 
@@ -356,7 +358,7 @@ def fetch_positions(account_address: str):
     asset_summary_list.sort(key=lambda x: (-x["notional_total"], x["symbol"]))
 
     results = {
-        "open_positions": open_sorted[:limit],
+        "open_positions": open_sorted if limit <= 0 else open_sorted[:limit],
         "asset_summary": asset_summary_list,
         "summary": {
             "open_count": len(open_positions),
