@@ -571,8 +571,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // Carousel arrows
     function wireCarousel(trackId, leftId, rightId) {
         const t = document.getElementById(trackId);
-        document.getElementById(leftId).addEventListener('click', () => t.scrollBy({ left: -240, behavior: 'smooth' }));
-        document.getElementById(rightId).addEventListener('click', () => t.scrollBy({ left: 240, behavior: 'smooth' }));
+        const step = 240;
+        document.getElementById(leftId).addEventListener('click', () => {
+            if (t.scrollLeft <= 0) {
+                t.scrollTo({ left: t.scrollWidth, behavior: 'smooth' });
+            } else {
+                t.scrollBy({ left: -step, behavior: 'smooth' });
+            }
+        });
+        document.getElementById(rightId).addEventListener('click', () => {
+            if (t.scrollLeft + t.clientWidth >= t.scrollWidth - 1) {
+                t.scrollTo({ left: 0, behavior: 'smooth' });
+            } else {
+                t.scrollBy({ left: step, behavior: 'smooth' });
+            }
+        });
     }
     wireCarousel('asset-grid', 'asset-carousel-left', 'asset-carousel-right');
     wireCarousel('outcomes-asset-grid', 'outcomes-carousel-left', 'outcomes-carousel-right');
