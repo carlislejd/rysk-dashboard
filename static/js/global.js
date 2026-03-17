@@ -558,19 +558,64 @@ document.addEventListener('DOMContentLoaded', () => {
     function wireCarousel(trackId, leftId, rightId) {
         const t = document.getElementById(trackId);
         const step = 240;
-        document.getElementById(leftId).addEventListener('click', () => {
-            if (t.scrollLeft <= 0) {
-                t.scrollTo({ left: t.scrollWidth, behavior: 'smooth' });
-            } else {
-                t.scrollBy({ left: -step, behavior: 'smooth' });
+
+        function initLoop() {
+            const items = Array.from(t.children);
+            if (items.length < 2) return;
+
+            // Clone a screenful of items at each end
+            const cloneCount = Math.min(items.length, Math.ceil(t.clientWidth / step) + 1);
+            const tail = items.slice(-cloneCount);
+            const head = items.slice(0, cloneCount);
+            tail.forEach(el => {
+                const clone = el.cloneNode(true);
+                clone.setAttribute('data-carousel-clone', 'true');
+                t.insertBefore(clone, t.firstChild);
+            });
+            head.forEach(el => {
+                const clone = el.cloneNode(true);
+                clone.setAttribute('data-carousel-clone', 'true');
+                t.appendChild(clone);
+            });
+
+            // Start scrolled to the first real item (after prepended clones)
+            const prependWidth = tail.reduce((sum, el) => sum + el.offsetWidth, 0);
+            t.scrollLeft = prependWidth;
+
+            // When scroll stops near a clone boundary, teleport to the real items
+            let scrollTimer;
+            t.addEventListener('scroll', () => {
+                clearTimeout(scrollTimer);
+                scrollTimer = setTimeout(() => {
+                    const maxReal = t.scrollWidth - head.reduce((sum, el) => sum + el.offsetWidth, 0);
+                    if (t.scrollLeft <= 2) {
+                        t.style.scrollBehavior = 'auto';
+                        t.scrollLeft = maxReal - t.clientWidth;
+                        t.style.scrollBehavior = '';
+                    } else if (t.scrollLeft + t.clientWidth >= t.scrollWidth - 2) {
+                        t.style.scrollBehavior = 'auto';
+                        t.scrollLeft = prependWidth;
+                        t.style.scrollBehavior = '';
+                    }
+                }, 100);
+            });
+        }
+
+        // Observe for content changes (cards are loaded async)
+        const observer = new MutationObserver(() => {
+            // Only init once real (non-clone) items exist
+            if (t.children.length > 0 && !t.querySelector('[data-carousel-clone]')) {
+                initLoop();
             }
         });
+        observer.observe(t, { childList: true });
+        if (t.children.length > 0) initLoop();
+
+        document.getElementById(leftId).addEventListener('click', () => {
+            t.scrollBy({ left: -step, behavior: 'smooth' });
+        });
         document.getElementById(rightId).addEventListener('click', () => {
-            if (t.scrollLeft + t.clientWidth >= t.scrollWidth - 1) {
-                t.scrollTo({ left: 0, behavior: 'smooth' });
-            } else {
-                t.scrollBy({ left: step, behavior: 'smooth' });
-            }
+            t.scrollBy({ left: step, behavior: 'smooth' });
         });
     }
     wireCarousel('asset-grid', 'asset-carousel-left', 'asset-carousel-right');
