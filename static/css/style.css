@@ -528,6 +528,24 @@ header h1 {
     padding: 16px 20px;
     cursor: pointer;
     transition: background var(--transition-fast);
+    position: relative;
+}
+
+.asset-card::after {
+    content: '›';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 18px;
+    opacity: 0;
+    transition: opacity var(--transition-fast), right var(--transition-fast);
+}
+
+.asset-card:hover::after {
+    opacity: 1;
+    right: 8px;
 }
 
 .asset-card:hover {
@@ -536,6 +554,20 @@ header h1 {
 
 .asset-card.selected {
     background: var(--accent-dim);
+}
+
+.asset-card.selected::after {
+    opacity: 0;
+}
+
+/* Subtle one-time nudge on the first card */
+@keyframes card-nudge {
+    0%, 100% { background: transparent; }
+    50% { background: var(--bg-hover); }
+}
+
+.asset-carousel-track .asset-card:first-child:not(.selected) {
+    animation: card-nudge 2s ease 1.5s 1;
 }
 
 .asset-card-header {
