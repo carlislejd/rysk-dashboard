@@ -555,7 +555,6 @@ async function loadRecent() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadOverview(0);
-    loadInventory();
     loadAssets();
     loadOutcomes();
     loadRecent();
