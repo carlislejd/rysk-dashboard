@@ -646,4 +646,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     wireCarousel('asset-grid', 'asset-carousel-left', 'asset-carousel-right');
     wireCarousel('outcomes-asset-grid', 'outcomes-carousel-left', 'outcomes-carousel-right');
+    wireCarousel('detail-expiry-tabs', 'expiry-carousel-left', 'expiry-carousel-right');
 });

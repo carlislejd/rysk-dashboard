@@ -54,7 +54,11 @@
                 <span id="detail-asset-name"></span>
                 <span id="detail-close" style="float: right; cursor: pointer; color: var(--text-muted); font-size: 0.7em;">&times; close</span>
             </h2>
-            <div class="tabs" id="detail-expiry-tabs" style="margin-bottom: 16px;"></div>
+            <div class="asset-carousel" style="margin-top: 0;">
+                <button class="carousel-arrow left" id="expiry-carousel-left">&#8249;</button>
+                <div class="tabs tab-carousel" id="detail-expiry-tabs"></div>
+                <button class="carousel-arrow right" id="expiry-carousel-right">&#8250;</button>
+            </div>
             <div id="detail-summary" class="summary-grid" style="margin-bottom: 24px;"></div>
             <h3 class="subsection-title">Volume Over Time</h3>
             <div id="detail-volume-chart" class="chart-container"></div>

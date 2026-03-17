@@ -912,6 +912,23 @@ header h1 {
     border-bottom: 1px solid var(--border);
 }
 
+.tabs.tab-carousel {
+    overflow-x: auto;
+    scrollbar-width: none;
+    scroll-behavior: smooth;
+    flex-wrap: nowrap;
+    margin-bottom: 16px;
+}
+
+.tabs.tab-carousel::-webkit-scrollbar {
+    display: none;
+}
+
+.tabs.tab-carousel .tab-button {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 .data-table th.sortable-header {
     cursor: pointer;
     user-select: none;
