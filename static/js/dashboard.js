@@ -973,6 +973,7 @@ async function loadAllData() {
     );
 
     await Promise.all(tasks);
+    setAccountStatus('');
 }
 
 function refreshAllData() {
