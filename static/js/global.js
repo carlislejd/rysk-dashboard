@@ -37,27 +37,44 @@ function outcomeBadge(outcome) {
     return '<span class="status-badge status-default">Unknown</span>';
 }
 
-// ── Protocol Summary ──
+// ── Protocol Overview (summary + volume chart, driven by time tabs) ──
 
-async function loadSummary() {
+let overviewDays = 0; // 0 = all time
+let historyDropdownPopulated = false;
+
+async function loadOverview(days) {
+    overviewDays = days;
     const loading = document.getElementById('summary-loading');
     const content = document.getElementById('summary-content');
-    try {
-        const resp = await fetch('/api/global/summary');
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error);
 
+    // Update active tab
+    document.querySelectorAll('#overview-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.overviewDays) === days);
+    });
+
+    // Fetch summary + volume in parallel
+    const summaryParams = days > 0 ? `?days=${days}` : '';
+    const volumeDays = days > 0 ? days : 365;
+    const [summaryResp, volumeResp] = await Promise.all([
+        fetch('/api/global/summary' + summaryParams),
+        fetch(`/api/global/volume?days=${volumeDays}`),
+    ]);
+    const [summaryData, volumeData] = await Promise.all([summaryResp.json(), volumeResp.json()]);
+
+    if (summaryData.success) {
+        const data = summaryData;
+        const periodLabel = days > 0 ? `${days}d` : 'All Time';
         document.getElementById('summary-grid').innerHTML = `
             <div class="summary-card">
-                <div class="summary-label">Total Trades</div>
+                <div class="summary-label">Trades</div>
                 <div class="summary-value">${formatNumber(data.total_trades, 0)}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Total Notional</div>
+                <div class="summary-label">Notional</div>
                 <div class="summary-value">${compactCurrency(data.total_volume)}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Total Premium</div>
+                <div class="summary-label">Premium</div>
                 <div class="summary-value">${compactCurrency(data.total_premium)}</div>
                 <div class="summary-subtext">${compactCurrency(data.active_premium)} active</div>
             </div>
@@ -77,25 +94,42 @@ async function loadSummary() {
             </div>
         `;
 
-        // Populate filter dropdowns
-        if (data.assets) {
-            ['volume-symbol', 'history-symbol'].forEach(id => {
-                const sel = document.getElementById(id);
-                if (sel && sel.options.length <= 1) {
-                    data.assets.forEach(asset => {
-                        const opt = document.createElement('option');
-                        opt.value = asset;
-                        opt.textContent = shortSymbol(asset);
-                        sel.appendChild(opt);
-                    });
-                }
-            });
+        // Populate history filter dropdown once
+        if (!historyDropdownPopulated && data.assets) {
+            const historySel = document.getElementById('history-symbol');
+            if (historySel) {
+                data.assets.forEach(asset => {
+                    const opt = document.createElement('option');
+                    opt.value = asset;
+                    opt.textContent = shortSymbol(asset);
+                    historySel.appendChild(opt);
+                });
+                historyDropdownPopulated = true;
+            }
         }
 
         loading.style.display = 'none';
         content.style.display = 'block';
-    } catch (e) {
-        loading.textContent = 'Failed to load summary: ' + e.message;
+    }
+
+    if (volumeData.success) {
+        const dates = volumeData.data.map(d => d.date);
+        const volumes = volumeData.data.map(d => d.volume);
+        const premiums = volumeData.data.map(d => d.premium);
+
+        Plotly.newPlot('volume-chart', [
+            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(74, 222, 128, 0.6)' } },
+            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#fb923c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+        ], {
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
+            margin: { l: 60, r: 60, t: 20, b: 40 },
+            xaxis: { gridcolor: '#27272a', tickfont: { size: 11 } },
+            yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#fb923c' }, tickprefix: '$' },
+            legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
+            bargap: 0.15,
+        }, { responsive: true, displayModeBar: false });
     }
 }
 
@@ -183,41 +217,6 @@ async function loadInventory() {
         content.style.display = 'block';
     } catch (e) {
         loading.textContent = 'Failed to load inventory: ' + e.message;
-    }
-}
-
-// ── Volume Chart ──
-
-async function loadVolumeChart() {
-    const days = document.getElementById('volume-days').value;
-    const symbol = document.getElementById('volume-symbol').value;
-    const params = new URLSearchParams({ days });
-    if (symbol) params.set('symbol', symbol);
-
-    try {
-        const resp = await fetch('/api/global/volume?' + params);
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error);
-
-        const dates = data.data.map(d => d.date);
-        const volumes = data.data.map(d => d.volume);
-        const premiums = data.data.map(d => d.premium);
-
-        Plotly.newPlot('volume-chart', [
-            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(74, 222, 128, 0.6)' } },
-            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#fb923c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
-        ], {
-            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
-            margin: { l: 60, r: 60, t: 20, b: 40 },
-            xaxis: { gridcolor: '#27272a', tickfont: { size: 11 } },
-            yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickfont: { size: 11 }, tickprefix: '$' },
-            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#fb923c' }, tickprefix: '$' },
-            legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
-            bargap: 0.15,
-        }, { responsive: true, displayModeBar: false });
-    } catch (e) {
-        document.getElementById('volume-chart').innerHTML = `<div class="error">Failed to load chart: ${e.message}</div>`;
     }
 }
 
@@ -545,16 +544,20 @@ async function loadHistory(page = 1) {
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadSummary();
+    loadOverview(0);
     loadInventory();
-    loadVolumeChart();
     loadAssets();
     loadOutcomes();
     loadRecent();
     loadHistory();
 
-    document.getElementById('volume-days').addEventListener('change', loadVolumeChart);
-    document.getElementById('volume-symbol').addEventListener('change', loadVolumeChart);
+    // Overview time period tabs
+    document.getElementById('overview-tabs').addEventListener('click', e => {
+        const btn = e.target.closest('.tab-button');
+        if (!btn) return;
+        loadOverview(parseInt(btn.dataset.overviewDays));
+    });
+
     document.getElementById('history-symbol').addEventListener('change', () => loadHistory(1));
     document.getElementById('detail-close').addEventListener('click', closeAssetDetail);
 

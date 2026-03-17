@@ -19,16 +19,23 @@
             <h1>Rysk Global Dashboard</h1>
         </header>
 
-        <!-- 1. Protocol Summary -->
+        <!-- 1. Protocol Overview + Volume -->
         <section class="card">
             <h2>Protocol Overview</h2>
+            <div class="tabs" id="overview-tabs">
+                <button class="tab-button active" data-overview-days="0">All Time</button>
+                <button class="tab-button" data-overview-days="7">7 Days</button>
+                <button class="tab-button" data-overview-days="30">30 Days</button>
+                <button class="tab-button" data-overview-days="90">90 Days</button>
+            </div>
             <div id="summary-loading" class="loading">Loading summary...</div>
             <div id="summary-content" style="display: none;">
                 <div class="summary-grid" id="summary-grid"></div>
             </div>
+            <div id="volume-chart" class="chart-container" style="margin-top: 24px;"></div>
         </section>
 
-        <!-- 2. Asset Carousel -->
+        <!-- 3. Asset Carousel -->
         <section class="card">
             <h2>Assets</h2>
             <div id="assets-loading" class="loading">Loading assets...</div>
@@ -59,7 +66,7 @@
             <div class="pager" id="detail-trades-pager"></div>
         </section>
 
-        <!-- 3. Recent Activity -->
+        <!-- 4. Recent Activity -->
         <section class="card">
             <h2>Recent Activity</h2>
             <div id="recent-loading" class="loading">Loading...</div>
@@ -79,23 +86,6 @@
                     <tbody id="recent-body"></tbody>
                 </table>
             </div>
-        </section>
-
-        <!-- 4. Daily Volume Chart -->
-        <section class="card">
-            <h2>Daily Volume</h2>
-            <div class="chart-controls">
-                <select id="volume-days" class="chart-select">
-                    <option value="7">7 days</option>
-                    <option value="30" selected>30 days</option>
-                    <option value="90">90 days</option>
-                    <option value="365">All time</option>
-                </select>
-                <select id="volume-symbol" class="chart-select">
-                    <option value="">All assets</option>
-                </select>
-            </div>
-            <div id="volume-chart" class="chart-container"></div>
         </section>
 
         <!-- 5. Available Options (Inventory) -->

@@ -9,17 +9,24 @@ per-asset analytics.
 import time
 
 
-def get_global_summary(conn):
-    """Protocol-level aggregate stats with 24h/7d windows."""
-    row = conn.execute("""
+def get_global_summary(conn, days=0):
+    """Protocol-level aggregate stats. days=0 means all time."""
+    now = int(time.time())
+    where = ""
+    params = []
+    if days > 0:
+        cutoff = now - days * 86400
+        where = "WHERE created_at >= ?"
+        params = [cutoff]
+
+    row = conn.execute(f"""
         SELECT COUNT(*) as total_trades,
                SUM(notional_f) as total_volume,
                SUM(premium_f) as total_premium,
                AVG(apr_f) as avg_apr
-        FROM trades
-    """).fetchone()
+        FROM trades {where}
+    """, params).fetchone()
 
-    now = int(time.time())
     day_ago = now - 86400
     week_ago = now - 604800
 
@@ -42,10 +49,11 @@ def get_global_summary(conn):
     ).fetchall()]
 
     # Active vs expired premium split
-    expired_prem = conn.execute("""
-        SELECT COALESCE(SUM(premium_f), 0) FROM trades
-        WHERE outcome IS NOT NULL
-    """).fetchone()[0]
+    expired_where = "WHERE outcome IS NOT NULL" + (" AND created_at >= ?" if days > 0 else "")
+    expired_params = params if days > 0 else []
+    expired_prem = conn.execute(f"""
+        SELECT COALESCE(SUM(premium_f), 0) FROM trades {expired_where}
+    """, expired_params).fetchone()[0]
     total_prem = row["total_premium"] or 0
     active_prem = total_prem - expired_prem
 

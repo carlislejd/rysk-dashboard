@@ -94,8 +94,9 @@ def api_history():
 def api_global_summary():
     """Aggregate protocol stats"""
     try:
+        days = request.args.get("days", 0, type=int)
         conn = get_db()
-        data = get_global_summary(conn)
+        data = get_global_summary(conn, days=days)
         conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
