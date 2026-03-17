@@ -139,9 +139,28 @@ def get_asset_summary(conn):
             "premium": r["premium"],
         }
 
+    # Outcome stats per asset
+    outcomes_by_asset = {}
+    for r in conn.execute("""
+        SELECT symbol,
+               SUM(CASE WHEN outcome = 'Assigned' THEN 1 ELSE 0 END) as assigned,
+               SUM(CASE WHEN outcome = 'Returned' THEN 1 ELSE 0 END) as returned,
+               COUNT(*) as expired_total
+        FROM trades
+        WHERE outcome IS NOT NULL AND symbol != ''
+        GROUP BY symbol
+    """).fetchall():
+        outcomes_by_asset[r["symbol"]] = {
+            "assigned": r["assigned"],
+            "returned": r["returned"],
+            "expired_total": r["expired_total"],
+        }
+
     assets = []
     for r in all_time:
         sym = r["symbol"]
+        oc = outcomes_by_asset.get(sym, {"assigned": 0, "returned": 0, "expired_total": 0})
+        active_count = r["trade_count"] - oc["expired_total"]
         assets.append({
             "symbol": sym,
             "trade_count": r["trade_count"],
@@ -158,6 +177,10 @@ def get_asset_summary(conn):
             "call_premium": r["call_premium"],
             "avg_quantity": r["avg_quantity"],
             "avg_strike": r["avg_strike"],
+            "active_count": active_count,
+            "expired_count": oc["expired_total"],
+            "assigned": oc["assigned"],
+            "returned": oc["returned"],
             "last_24h": recent_24h.get(sym, {"trades": 0, "volume": 0, "premium": 0}),
             "last_7d": recent_7d.get(sym, {"trades": 0, "volume": 0, "premium": 0}),
         })

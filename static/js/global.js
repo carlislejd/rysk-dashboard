@@ -216,19 +216,22 @@ async function loadAssets() {
             const base = shortSymbol(a.symbol);
             const putPct = a.trade_count > 0 ? ((a.put_count / a.trade_count) * 100).toFixed(0) : 0;
             const callPct = a.trade_count > 0 ? ((a.call_count / a.trade_count) * 100).toFixed(0) : 0;
+            const expiredTotal = a.expired_count || 0;
+            const returnedPct = expiredTotal > 0 ? ((a.returned / expiredTotal) * 100).toFixed(0) : '—';
             return `
                 <div class="asset-card" data-asset="${a.symbol}" onclick="showAssetDetail('${a.symbol}')">
                     <div class="asset-card-header">
                         <span class="asset-symbol"><span class="token-badge ${base.toLowerCase()}">${base}</span></span>
-                        <span class="asset-count">${formatNumber(a.trade_count, 0)} trades</span>
+                        <span class="asset-count">${formatNumber(a.trade_count, 0)} orders</span>
                     </div>
                     <div class="asset-card-metrics">
                         <div class="asset-metric"><span class="asset-metric-label">Notional</span><span class="asset-metric-value">${compactCurrency(a.total_volume)}</span></div>
                         <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(a.total_premium)}</span></div>
                         <div class="asset-metric"><span class="asset-metric-label">Avg APR</span><span class="asset-metric-value asset-summary-apr">${formatPercentage(a.avg_apr)}</span></div>
                         <div class="asset-metric"><span class="asset-metric-label">Put / Call</span><span class="asset-metric-value">${putPct}% / ${callPct}%</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">7d Vol</span><span class="asset-metric-value">${compactCurrency(a.last_7d.volume)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">24h Vol</span><span class="asset-metric-value">${compactCurrency(a.last_24h.volume)}</span></div>
+                        <div class="asset-metric"><span class="asset-metric-label">Active</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
+                        <div class="asset-metric"><span class="asset-metric-label">Expired</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
+                        <div class="asset-metric"><span class="asset-metric-label">Returned</span><span class="asset-metric-value" style="color: var(--accent);">${returnedPct}%</span></div>
                     </div>
                 </div>
             `;
@@ -498,23 +501,6 @@ async function loadOutcomes() {
             <div class="summary-card"><div class="summary-label">Premium Kept</div><div class="summary-value" style="color: var(--accent);">${compactCurrency(t.returned_premium)}</div></div>
         `;
 
-        document.getElementById('outcomes-asset-grid').innerHTML = data.by_asset.map(a => {
-            const base = shortSymbol(a.symbol);
-            return `
-                <div class="asset-card">
-                    <div class="asset-card-header">
-                        <span class="asset-symbol"><span class="token-badge ${base.toLowerCase()}">${base}</span></span>
-                        <span class="asset-count">${a.total} expired</span>
-                    </div>
-                    <div class="asset-card-metrics">
-                        <div class="asset-metric"><span class="asset-metric-label">Returned</span><span class="asset-metric-value" style="color: var(--accent);">${a.returned} (${(100 - a.assigned_pct).toFixed(0)}%)</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Assigned</span><span class="asset-metric-value" style="color: var(--color-error);">${a.assigned} (${a.assigned_pct}%)</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(a.total_premium)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Notional</span><span class="asset-metric-value">${compactCurrency(a.total_notional)}</span></div>
-                    </div>
-                </div>`;
-        }).join('');
-
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
@@ -588,6 +574,5 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     wireCarousel('asset-grid', 'asset-carousel-left', 'asset-carousel-right');
-    wireCarousel('outcomes-asset-grid', 'outcomes-carousel-left', 'outcomes-carousel-right');
     wireCarousel('detail-expiry-tabs', 'expiry-carousel-left', 'expiry-carousel-right');
 });
