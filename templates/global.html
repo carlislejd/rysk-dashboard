@@ -35,7 +35,39 @@
             <div id="volume-chart" class="chart-container" style="margin-top: 24px;"></div>
         </section>
 
-        <!-- 3. Asset Carousel -->
+        <!-- 2. Recent Activity -->
+        <section class="card">
+            <h2>Recent Activity</h2>
+            <div id="recent-loading" class="loading">Loading...</div>
+            <div id="recent-content" style="display: none;">
+                <table id="recent-table" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Asset</th>
+                            <th>Type</th>
+                            <th>Strike</th>
+                            <th>Premium</th>
+                            <th>Notional</th>
+                            <th>APR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 3. Available Options (Inventory) -->
+        <section class="card">
+            <h2>Available Options</h2>
+            <div id="inventory-loading" class="loading">Loading inventory...</div>
+            <div id="inventory-content" style="display: none;">
+                <div class="tabs" id="inventory-tabs"></div>
+                <div id="inventory-panels"></div>
+            </div>
+        </section>
+
+        <!-- 4. Asset Carousel -->
         <section class="card">
             <h2>Assets</h2>
             <div id="assets-loading" class="loading">Loading assets...</div>
@@ -68,38 +100,6 @@
             <h3 class="subsection-title">Trades</h3>
             <div id="detail-trades-content"></div>
             <div class="pager" id="detail-trades-pager"></div>
-        </section>
-
-        <!-- 4. Recent Activity -->
-        <section class="card">
-            <h2>Recent Activity</h2>
-            <div id="recent-loading" class="loading">Loading...</div>
-            <div id="recent-content" style="display: none;">
-                <table id="recent-table" class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Asset</th>
-                            <th>Type</th>
-                            <th>Strike</th>
-                            <th>Premium</th>
-                            <th>Notional</th>
-                            <th>APR</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recent-body"></tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- 5. Available Options (Inventory) -->
-        <section class="card">
-            <h2>Available Options</h2>
-            <div id="inventory-loading" class="loading">Loading inventory...</div>
-            <div id="inventory-content" style="display: none;">
-                <div class="tabs" id="inventory-tabs"></div>
-                <div id="inventory-panels"></div>
-            </div>
         </section>
 
         <!-- 6. Expiry Outcomes -->
