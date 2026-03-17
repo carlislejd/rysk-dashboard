@@ -109,8 +109,9 @@ def api_global_trades():
         page = request.args.get("page", 1, type=int)
         limit = request.args.get("limit", 50, type=int)
         symbol = request.args.get("symbol", "").strip() or None
+        expiry = request.args.get("expiry", None, type=int)
         conn = get_db()
-        data = get_global_trades(conn, page=page, limit=limit, symbol=symbol)
+        data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry)
         conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
@@ -123,8 +124,9 @@ def api_global_volume():
         interval = request.args.get("interval", "day")
         symbol = request.args.get("symbol", "").strip() or None
         days = request.args.get("days", 30, type=int)
+        expiry = request.args.get("expiry", None, type=int)
         conn = get_db()
-        data = get_global_volume(conn, interval=interval, symbol=symbol, days=days)
+        data = get_global_volume(conn, interval=interval, symbol=symbol, days=days, expiry=expiry)
         conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
@@ -145,8 +147,9 @@ def api_global_assets():
 def api_global_asset_detail(symbol):
     """Detailed data for a single asset: strikes, expiries"""
     try:
+        expiry = request.args.get("expiry", None, type=int)
         conn = get_db()
-        data = get_asset_detail(conn, symbol)
+        data = get_asset_detail(conn, symbol, expiry=expiry)
         conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:

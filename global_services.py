@@ -165,10 +165,17 @@ def get_asset_summary(conn):
     return {"assets": assets}
 
 
-def get_asset_detail(conn, symbol):
-    """Deep detail for a single asset: strike distribution, expiry breakdown, recent trades."""
+def get_asset_detail(conn, symbol, expiry=None):
+    """Deep detail for a single asset, optionally filtered to a single expiry."""
+    # Build conditional WHERE
+    where = "WHERE symbol = ?"
+    params = [symbol]
+    if expiry:
+        where += " AND expiry = ?"
+        params.append(expiry)
+
     # Strike distribution
-    strikes = conn.execute("""
+    strikes = conn.execute(f"""
         SELECT strike_f,
                COUNT(*) as trade_count,
                SUM(notional_f) as volume,
@@ -177,12 +184,12 @@ def get_asset_detail(conn, symbol):
                SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END) as put_volume,
                SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END) as call_volume
         FROM trades
-        WHERE symbol = ?
+        {where}
         GROUP BY strike_f
         ORDER BY strike_f
-    """, (symbol,)).fetchall()
+    """, params).fetchall()
 
-    # Expiry breakdown with outcome data
+    # Expiry breakdown with outcome data (always unfiltered so we can show the full list)
     expiries = conn.execute("""
         SELECT expiry,
                COUNT(*) as trade_count,
@@ -238,14 +245,18 @@ def get_asset_detail(conn, symbol):
     }
 
 
-def get_global_trades(conn, page=1, limit=50, symbol=None):
-    """Paginated recent trades feed, optionally filtered by asset."""
+def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None):
+    """Paginated recent trades feed, optionally filtered by asset and/or expiry."""
     offset = (page - 1) * limit
-    where = ""
+    where_parts = []
     params = []
     if symbol:
-        where = "WHERE symbol = ?"
+        where_parts.append("symbol = ?")
         params.append(symbol)
+    if expiry:
+        where_parts.append("expiry = ?")
+        params.append(expiry)
+    where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
 
     count_row = conn.execute(
         f"SELECT COUNT(*) FROM trades {where}", params
@@ -290,7 +301,7 @@ def get_global_trades(conn, page=1, limit=50, symbol=None):
     }
 
 
-def get_global_volume(conn, interval="day", symbol=None, days=30):
+def get_global_volume(conn, interval="day", symbol=None, days=30, expiry=None):
     """Time-bucketed volume/premium/count for charts."""
     cutoff = int(time.time()) - days * 86400
     where_parts = ["created_at >= ?"]
@@ -298,6 +309,9 @@ def get_global_volume(conn, interval="day", symbol=None, days=30):
     if symbol:
         where_parts.append("symbol = ?")
         params.append(symbol)
+    if expiry:
+        where_parts.append("expiry = ?")
+        params.append(expiry)
     where = "WHERE " + " AND ".join(where_parts)
 
     if interval == "hour":

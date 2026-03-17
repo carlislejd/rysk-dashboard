@@ -261,8 +261,12 @@ async function loadAssets() {
 
 // ── Asset Detail Panel ──
 
+let detailExpiries = []; // cached expiry list for the current asset
+let selectedExpiry = null; // null = All
+
 async function showAssetDetail(symbol) {
     selectedAsset = symbol;
+    selectedExpiry = null;
     const panel = document.getElementById('asset-detail');
     const base = shortSymbol(symbol);
 
@@ -270,22 +274,77 @@ async function showAssetDetail(symbol) {
     const card = document.querySelector(`.asset-card[data-asset="${symbol}"]`);
     if (card) card.classList.add('selected');
 
-    document.getElementById('detail-asset-name').innerHTML = `<span class="token-badge ${base.toLowerCase()}">${base}</span> ${symbol} Detail`;
+    document.getElementById('detail-asset-name').innerHTML = `<span class="token-badge ${base.toLowerCase()}">${base}</span> ${symbol}`;
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    const [detailResp, volResp, tradesResp] = await Promise.all([
-        fetch(`/api/global/asset/${encodeURIComponent(symbol)}`),
-        fetch(`/api/global/volume?symbol=${encodeURIComponent(symbol)}&days=90`),
-        fetch(`/api/global/trades?symbol=${encodeURIComponent(symbol)}&limit=${DETAIL_TRADES_PER_PAGE}&page=1`),
-    ]);
-    const [detail, vol, trades] = await Promise.all([detailResp.json(), volResp.json(), tradesResp.json()]);
+    // First fetch detail to get expiry list, then load the rest
+    const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
+    const detail = await detailResp.json();
 
-    if (detail.success) renderDetailSummary(detail);
-    if (detail.success) renderStrikeChart(detail);
-    if (detail.success) renderExpiryBreakdown(detail);
+    if (detail.success) {
+        detailExpiries = detail.expiries || [];
+        renderExpiryTabs(symbol);
+        renderDetailSummary(detail);
+        renderExpiryBreakdown(detail);
+    }
+
+    // Load volume + trades in parallel (unfiltered initially)
+    loadDetailData(symbol, null);
+}
+
+function renderExpiryTabs(symbol) {
+    const tabs = document.getElementById('detail-expiry-tabs');
+    const sorted = [...detailExpiries].sort((a, b) => a.expiry - b.expiry);
+    tabs.innerHTML = `<button class="tab-button active" data-detail-expiry="all">All</button>` +
+        sorted.map(e =>
+            `<button class="tab-button" data-detail-expiry="${e.expiry}">${formatUnixDate(e.expiry)}</button>`
+        ).join('');
+
+    tabs.onclick = async (ev) => {
+        const btn = ev.target.closest('.tab-button');
+        if (!btn) return;
+        tabs.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const val = btn.dataset.detailExpiry;
+        selectedExpiry = val === 'all' ? null : parseInt(val);
+
+        // Re-fetch detail (filtered strikes) + volume + trades
+        const expiryParam = selectedExpiry ? `&expiry=${selectedExpiry}` : '';
+        const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}?${selectedExpiry ? 'expiry=' + selectedExpiry : ''}`);
+        const detail = await detailResp.json();
+
+        if (detail.success) {
+            renderDetailSummary(detail);
+            // Show expiry breakdown only for All, hide for single expiry
+            if (selectedExpiry) {
+                document.getElementById('detail-expiry-content').style.display = 'none';
+            } else {
+                document.getElementById('detail-expiry-content').style.display = '';
+                renderExpiryBreakdown(detail);
+            }
+        }
+        loadDetailData(symbol, selectedExpiry);
+    };
+}
+
+async function loadDetailData(symbol, expiry) {
+    const sym = encodeURIComponent(symbol);
+    const expiryParam = expiry ? `&expiry=${expiry}` : '';
+    const [volResp, tradesResp] = await Promise.all([
+        fetch(`/api/global/volume?symbol=${sym}&days=365${expiryParam}`),
+        fetch(`/api/global/trades?symbol=${sym}&limit=${DETAIL_TRADES_PER_PAGE}&page=1${expiryParam}`),
+    ]);
+    const [vol, trades] = await Promise.all([volResp.json(), tradesResp.json()]);
     if (vol.success) renderDetailVolumeChart(vol);
-    if (trades.success) renderDetailTrades(trades, symbol);
+
+    // Also re-fetch strike chart with expiry filter
+    const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}${expiry ? '?expiry=' + expiry : ''}`);
+    const detail = await detailResp.json();
+    if (detail.success) renderStrikeChart(detail);
+
+    if (trades.success) renderDetailTrades(trades, symbol, expiry);
 }
 
 function renderDetailSummary(detail) {
@@ -298,16 +357,17 @@ function renderDetailSummary(detail) {
     const totalCallVol = strikes.reduce((s, r) => s + r.call_volume, 0);
     const avgApr = strikes.reduce((s, r) => s + (r.avg_apr || 0) * r.trade_count, 0) / (totalTrades || 1);
 
-    // Outcome totals from expiry data
-    const totalAssigned = expiries.reduce((s, e) => s + (e.assigned || 0), 0);
-    const totalReturned = expiries.reduce((s, e) => s + (e.returned || 0), 0);
+    // Outcome totals from expiry data (use filtered or all)
+    const expirySource = selectedExpiry ? expiries.filter(e => e.expiry === selectedExpiry) : expiries;
+    const totalAssigned = expirySource.reduce((s, e) => s + (e.assigned || 0), 0);
+    const totalReturned = expirySource.reduce((s, e) => s + (e.returned || 0), 0);
     const outcomeTotal = totalAssigned + totalReturned;
     const assignedPct = outcomeTotal > 0 ? (totalAssigned / outcomeTotal * 100).toFixed(1) : '—';
 
     document.getElementById('detail-summary').innerHTML = `
         <div class="summary-card"><div class="summary-label">Trades</div><div class="summary-value">${formatNumber(totalTrades, 0)}</div></div>
-        <div class="summary-card"><div class="summary-label">Total Notional</div><div class="summary-value">${compactCurrency(totalVol)}</div></div>
-        <div class="summary-card"><div class="summary-label">Total Premium</div><div class="summary-value">${compactCurrency(totalPrem)}</div></div>
+        <div class="summary-card"><div class="summary-label">Notional</div><div class="summary-value">${compactCurrency(totalVol)}</div></div>
+        <div class="summary-card"><div class="summary-label">Premium</div><div class="summary-value">${compactCurrency(totalPrem)}</div></div>
         <div class="summary-card"><div class="summary-label">Avg APR</div><div class="summary-value">${formatPercentage(avgApr)}</div></div>
         <div class="summary-card"><div class="summary-label">Put / Call</div><div class="summary-value">${compactCurrency(totalPutVol)} / ${compactCurrency(totalCallVol)}</div></div>
         <div class="summary-card"><div class="summary-label">Assignment Rate</div><div class="summary-value">${assignedPct}%</div><div class="summary-subtext">${totalAssigned} assigned / ${totalReturned} returned</div></div>
@@ -334,7 +394,9 @@ function renderExpiryBreakdown(detail) {
     const expiries = detail.expiries || [];
     if (!expiries.length) { document.getElementById('detail-expiry-content').innerHTML = '<div class="loading">No expiry data</div>'; return; }
     const now = Date.now() / 1000;
+    document.getElementById('detail-expiry-content').style.display = '';
     document.getElementById('detail-expiry-content').innerHTML = `
+        <h3 class="subsection-title">Expiry Breakdown</h3>
         <table class="data-table" id="detail-expiry-table">
             <thead><tr>
                 <th data-sort-key="expiry">Expiry</th>
@@ -380,13 +442,23 @@ function renderDetailVolumeChart(vol) {
     }, { responsive: true, displayModeBar: false });
 }
 
-function renderDetailTrades(data, symbol) {
+function renderDetailTrades(data, symbol, expiry) {
+    const now = Date.now() / 1000;
     document.getElementById('detail-trades-content').innerHTML = `
         <table class="data-table" id="detail-trades-table"><thead><tr>
             <th data-sort-key="created">Date</th><th>Type</th><th data-sort-key="strike">Strike</th>
             <th data-sort-key="quantity">Qty</th><th data-sort-key="premium">Premium</th>
-            <th data-sort-key="notional">Notional</th><th data-sort-key="apr">APR</th><th>Expiry</th>
-        </tr></thead><tbody>${data.trades.map(t => `<tr>
+            <th data-sort-key="notional">Notional</th><th data-sort-key="apr">APR</th>
+            <th>Expiry</th><th>Outcome</th>
+        </tr></thead><tbody>${data.trades.map(t => {
+            const expired = t.expiry && t.expiry < now;
+            let outcomeHtml;
+            if (t.outcome === 'Assigned') outcomeHtml = '<span style="color: var(--color-error);">Assigned</span>';
+            else if (t.outcome === 'Returned') outcomeHtml = '<span style="color: var(--accent);">Returned</span>';
+            else if (t.outcome) outcomeHtml = t.outcome;
+            else if (!expired) outcomeHtml = '<span style="color: var(--text-muted);">Active</span>';
+            else outcomeHtml = '—';
+            return `<tr>
             <td data-sort-key="created" data-sort-value="${t.created_at}">${formatUnixDateTime(t.created_at)}</td>
             <td>${t.type}</td>
             <td data-sort-key="strike" data-sort-value="${t.strike}">${formatCurrency(t.strike, 0)}</td>
@@ -395,25 +467,30 @@ function renderDetailTrades(data, symbol) {
             <td data-sort-key="notional" data-sort-value="${t.notional}">${formatCurrency(t.notional, 0)}</td>
             <td data-sort-key="apr" data-sort-value="${t.apr || 0}">${formatPercentage(t.apr)}</td>
             <td>${formatUnixDate(t.expiry)}</td>
-        </tr>`).join('')}</tbody></table>`;
+            <td>${outcomeHtml}</td>
+        </tr>`;
+        }).join('')}</tbody></table>`;
+    const expiryParam = expiry ? `&expiry=${expiry}` : '';
     const pager = document.getElementById('detail-trades-pager');
     pager.innerHTML = `
-        <button class="pager-btn" onclick="loadDetailTrades('${symbol}', ${data.page - 1})" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
+        <button class="pager-btn" onclick="loadDetailTrades('${symbol}', ${data.page - 1}, ${expiry || 'null'})" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
         <span class="pager-info">Page ${data.page} of ${data.pages} (${formatNumber(data.total, 0)})</span>
-        <button class="pager-btn" onclick="loadDetailTrades('${symbol}', ${data.page + 1})" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
+        <button class="pager-btn" onclick="loadDetailTrades('${symbol}', ${data.page + 1}, ${expiry || 'null'})" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
     setupSortableTable('detail-trades-table');
 }
 
-async function loadDetailTrades(symbol, page) {
-    const resp = await fetch(`/api/global/trades?symbol=${encodeURIComponent(symbol)}&limit=${DETAIL_TRADES_PER_PAGE}&page=${page}`);
+async function loadDetailTrades(symbol, page, expiry) {
+    const expiryParam = expiry ? `&expiry=${expiry}` : '';
+    const resp = await fetch(`/api/global/trades?symbol=${encodeURIComponent(symbol)}&limit=${DETAIL_TRADES_PER_PAGE}&page=${page}${expiryParam}`);
     const data = await resp.json();
-    if (data.success) renderDetailTrades(data, symbol);
+    if (data.success) renderDetailTrades(data, symbol, expiry);
 }
 
 function closeAssetDetail() {
     document.getElementById('asset-detail').style.display = 'none';
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('selected'));
     selectedAsset = null;
+    selectedExpiry = null;
 }
 
 // ── Outcomes ──
