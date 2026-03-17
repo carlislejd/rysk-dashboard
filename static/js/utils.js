@@ -1,5 +1,20 @@
 // Shared utility functions for Rysk dashboards
 
+function smartDecimals(value) {
+    if (value === null || value === undefined || value === 0) return 2;
+    const abs = Math.abs(value);
+    if (abs >= 1000) return 0;    // BTC strikes, SOL, ETH, ZEC
+    if (abs >= 1) return 2;       // HYPE, XRP (shows 32.50)
+    if (abs >= 0.01) return 3;    // PURR (shows 0.072)
+    return 4;                     // PUMP (shows 0.0018)
+}
+
+function formatStrike(value) {
+    if (value === null || value === undefined) return '—';
+    const decimals = smartDecimals(value);
+    return '$' + formatNumber(value, decimals);
+}
+
 function formatNumber(num, decimals = 2) {
     if (num === null || num === undefined) return '0.00';
     return parseFloat(num).toLocaleString('en-US', {

@@ -219,7 +219,7 @@ async function loadPositions() {
                         <td data-sort-key="created" data-sort-value="${pos.created_at || ''}">${formatDateLabel(pos.created_at)}</td>
                         <td data-sort-key="expiry" data-sort-value="${pos.expiry_date || ''}">${formatDateLabel(pos.expiry_date)}</td>
                         <td data-sort-key="quantity" data-sort-value="${pos.quantity ?? ''}">${formatNumber(pos.quantity, 4)}</td>
-                        <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
+                        <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatStrike(pos.strike)}</td>
                         <td data-sort-key="premium" data-sort-value="${pos.premium ?? ''}">${formatCurrency(pos.premium || 0)}</td>
                         <td data-sort-key="apr" data-sort-value="${pos.apr ?? ''}">${formatPercentage(pos.apr)}</td>
                         <td data-sort-key="status" data-sort-value="${pos.status || ''}">${statusBadge(pos.status)}</td>
@@ -462,7 +462,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
                 <td>${position.type || '—'}</td>
                 <td>${sideBadge(position.side)}</td>
                 <td>${formatNumber(position.quantity, 4)}</td>
-                <td>${formatCurrency(position.strike, position.strike > 1000 ? 0 : 2)}</td>
+                <td>${formatStrike(position.strike)}</td>
                 <td>${formatCurrency(position.premium || 0)}</td>
                 <td>${outcomeHtml}</td>
                 <td>${formatPercentage(position.apr)}</td>
@@ -599,7 +599,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
             `Date: ${p.x}`,
             `APR: ${formatPercentage(p.y)}`,
             `Notional: ${formatCurrency(p.notional || 0)}`,
-            `Strike: ${formatCurrency(p.strike || 0, (p.strike || 0) > 1000 ? 0 : 2)}`,
+            `Strike: ${formatStrike(p.strike || 0)}`,
             `Qty: ${formatNumber(p.qty, 4)}`,
             `Premium: ${formatCurrency(p.premium || 0)}`,
             `Outcome: ${p.outcome}`,
@@ -1601,7 +1601,7 @@ function renderPositionsDetailTable(positions) {
                 <td data-sort-key="side" data-sort-value="${pos.side || ''}">${sideBadge(pos.side)}</td>
                 <td data-sort-key="type" data-sort-value="${pos.type || ''}">${pos.type || '—'}</td>
                 <td data-sort-key="quantity" data-sort-value="${pos.quantity ?? ''}">${formatNumber(pos.quantity, 4)}</td>
-                <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatCurrency(pos.strike, pos.strike > 1000 ? 0 : 2)}</td>
+                <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatStrike(pos.strike)}</td>
                 <td data-sort-key="premium" data-sort-value="${pos.premium ?? ''}">${formatCurrency(pos.premium || 0)}</td>
                 <td data-sort-key="apr" data-sort-value="${pos.apr ?? ''}">${formatPercentage(pos.apr)}</td>
                 <td data-sort-key="expiry" data-sort-value="${pos.expiry_date || ''}">${formatDateLabel(pos.expiry_date)}</td>

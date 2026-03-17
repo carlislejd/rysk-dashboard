@@ -151,9 +151,9 @@ async function loadInventory() {
         ).join('');
 
         panels.innerHTML = data.assets.map((a, i) => {
-            const indexDisplay = a.index != null ? (a.index >= 1 ? `$${formatNumber(a.index, 2)}` : `$${a.index.toFixed(6)}`) : '—';
+            const indexDisplay = a.index != null ? formatStrike(a.index) : '—';
             const renderRows = (options) => options.map(o => {
-                const strikeDisplay = o.strike >= 1 ? formatCurrency(o.strike, 0) : `$${o.strike.toFixed(4)}`;
+                const strikeDisplay = formatStrike(o.strike);
                 const apyClass = o.apy >= 50 ? 'style="color: var(--accent);"' : '';
                 return `<tr>
                     <td>${strikeDisplay}</td>
@@ -378,8 +378,8 @@ function renderStrikeChart(detail) {
     const strikes = detail.strikes || [];
     if (!strikes.length) { document.getElementById('detail-strike-chart').innerHTML = '<div class="loading">No strike data</div>'; return; }
     Plotly.newPlot('detail-strike-chart', [
-        { x: strikes.map(s => formatCurrency(s.strike, 0)), y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(248, 113, 113, 0.7)' } },
-        { x: strikes.map(s => formatCurrency(s.strike, 0)), y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(34, 211, 238, 0.7)' } },
+        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(248, 113, 113, 0.7)' } },
+        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(34, 211, 238, 0.7)' } },
     ], {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
         font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
@@ -461,7 +461,7 @@ function renderDetailTrades(data, symbol, expiry) {
             return `<tr>
             <td data-sort-key="created" data-sort-value="${t.created_at}">${formatUnixDateTime(t.created_at)}</td>
             <td>${t.type}</td>
-            <td data-sort-key="strike" data-sort-value="${t.strike}">${formatCurrency(t.strike, 0)}</td>
+            <td data-sort-key="strike" data-sort-value="${t.strike}">${formatStrike(t.strike)}</td>
             <td data-sort-key="quantity" data-sort-value="${t.quantity}">${formatNumber(t.quantity, 4)}</td>
             <td data-sort-key="premium" data-sort-value="${t.premium}">${formatCurrency(t.premium)}</td>
             <td data-sort-key="notional" data-sort-value="${t.notional}">${formatCurrency(t.notional, 0)}</td>
@@ -554,7 +554,7 @@ async function loadRecent() {
             <td>${formatUnixDateTime(t.created_at)}</td>
             <td><span class="token-badge ${shortSymbol(t.symbol).toLowerCase()}">${shortSymbol(t.symbol)}</span></td>
             <td>${t.type}</td>
-            <td>${formatCurrency(t.strike, 0)}</td>
+            <td>${formatStrike(t.strike)}</td>
             <td>${formatCurrency(t.premium)}</td>
             <td>${formatCurrency(t.notional, 0)}</td>
             <td>${formatPercentage(t.apr)}</td>
@@ -595,7 +595,7 @@ async function loadHistory(page = 1) {
             <td data-sort-key="created" data-sort-value="${t.created_at}">${formatUnixDateTime(t.created_at)}</td>
             <td data-sort-key="symbol" data-sort-value="${t.symbol}"><span class="token-badge ${shortSymbol(t.symbol).toLowerCase()}">${shortSymbol(t.symbol)}</span></td>
             <td>${t.type}</td>
-            <td data-sort-key="strike" data-sort-value="${t.strike}">${formatCurrency(t.strike, 0)}</td>
+            <td data-sort-key="strike" data-sort-value="${t.strike}">${formatStrike(t.strike)}</td>
             <td data-sort-key="premium" data-sort-value="${t.premium}">${formatCurrency(t.premium)}</td>
             <td data-sort-key="notional" data-sort-value="${t.notional}">${formatCurrency(t.notional, 0)}</td>
             <td data-sort-key="apr" data-sort-value="${t.apr || 0}">${formatPercentage(t.apr)}</td>
