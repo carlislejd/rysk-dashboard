@@ -274,7 +274,7 @@ async function showAssetDetail(symbol) {
     const card = document.querySelector(`.asset-card[data-asset="${symbol}"]`);
     if (card) card.classList.add('selected');
 
-    document.getElementById('detail-asset-name').innerHTML = `<span class="token-badge ${base.toLowerCase()}">${base}</span> ${symbol}`;
+    document.getElementById('detail-asset-name').textContent = `${symbol}`;
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -295,7 +295,7 @@ async function showAssetDetail(symbol) {
 
 function renderExpiryTabs(symbol) {
     const tabs = document.getElementById('detail-expiry-tabs');
-    const sorted = [...detailExpiries].sort((a, b) => a.expiry - b.expiry);
+    const sorted = [...detailExpiries].sort((a, b) => b.expiry - a.expiry);
     tabs.innerHTML = `<button class="tab-button active" data-detail-expiry="all">All</button>` +
         sorted.map(e =>
             `<button class="tab-button" data-detail-expiry="${e.expiry}">${formatUnixDate(e.expiry)}</button>`
