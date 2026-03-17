@@ -117,35 +117,6 @@
             </div>
         </section>
 
-        <!-- 7. Trade History -->
-        <section class="card">
-            <h2>Trade History</h2>
-            <div class="chart-controls">
-                <select id="history-symbol" class="chart-select">
-                    <option value="">All assets</option>
-                </select>
-            </div>
-            <div id="history-loading" class="loading">Loading trades...</div>
-            <div id="history-content" style="display: none;">
-                <table id="history-table" class="data-table">
-                    <thead>
-                        <tr>
-                            <th data-sort-key="created">Date</th>
-                            <th data-sort-key="symbol">Asset</th>
-                            <th>Type</th>
-                            <th data-sort-key="strike">Strike</th>
-                            <th data-sort-key="premium">Premium</th>
-                            <th data-sort-key="notional">Notional</th>
-                            <th data-sort-key="apr">APR</th>
-                            <th>Expiry</th>
-                            <th>Outcome</th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-body"></tbody>
-                </table>
-                <div class="pager" id="history-pager"></div>
-            </div>
-        </section>
     </div>
 
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>

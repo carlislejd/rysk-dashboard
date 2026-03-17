@@ -1,8 +1,6 @@
 // Global Dashboard JavaScript — Asset-focused with Inventory & Outcomes
 
 let selectedAsset = null;
-let currentHistoryPage = 1;
-const HISTORY_PER_PAGE = 20;
 const DETAIL_TRADES_PER_PAGE = 25;
 
 // ── Helpers ──
@@ -40,8 +38,6 @@ function outcomeBadge(outcome) {
 // ── Protocol Overview (summary + volume chart, driven by time tabs) ──
 
 let overviewDays = 0; // 0 = all time
-let historyDropdownPopulated = false;
-
 async function loadOverview(days) {
     overviewDays = days;
     const loading = document.getElementById('summary-loading');
@@ -66,7 +62,7 @@ async function loadOverview(days) {
         const periodLabel = days > 0 ? `${days}d` : 'All Time';
         document.getElementById('summary-grid').innerHTML = `
             <div class="summary-card">
-                <div class="summary-label">Trades</div>
+                <div class="summary-label">Orders</div>
                 <div class="summary-value">${formatNumber(data.total_trades, 0)}</div>
             </div>
             <div class="summary-card">
@@ -94,20 +90,6 @@ async function loadOverview(days) {
             </div>
         `;
 
-        // Populate history filter dropdown once
-        if (!historyDropdownPopulated && data.assets) {
-            const historySel = document.getElementById('history-symbol');
-            if (historySel) {
-                data.assets.forEach(asset => {
-                    const opt = document.createElement('option');
-                    opt.value = asset;
-                    opt.textContent = shortSymbol(asset);
-                    historySel.appendChild(opt);
-                });
-                historyDropdownPopulated = true;
-            }
-        }
-
         loading.style.display = 'none';
         content.style.display = 'block';
     }
@@ -124,10 +106,10 @@ async function loadOverview(days) {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
-            xaxis: { gridcolor: '#27272a', tickfont: { size: 11 } },
+            xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickfont: { size: 11 }, tickprefix: '$' },
             yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#fb923c' }, tickprefix: '$' },
-            legend: { orientation: 'h', y: -0.15, font: { size: 11 } },
+            legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
     }
@@ -384,9 +366,9 @@ function renderStrikeChart(detail) {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
         font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
         margin: { l: 60, r: 20, t: 20, b: 60 },
-        xaxis: { title: 'Strike', gridcolor: '#27272a', tickfont: { size: 10 }, tickangle: -45 },
+        xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
         yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickprefix: '$' },
-        legend: { orientation: 'h', y: -0.25, font: { size: 11 } }, bargap: 0.15,
+        legend: { orientation: 'h', y: -0.12, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
 }
 
@@ -435,10 +417,10 @@ function renderDetailVolumeChart(vol) {
         paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
         font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
         margin: { l: 60, r: 60, t: 20, b: 40 },
-        xaxis: { gridcolor: '#27272a', tickfont: { size: 11 } },
+        xaxis: { showgrid: false, tickfont: { size: 11 } },
         yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickfont: { size: 11 }, tickprefix: '$' },
         yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#fb923c' }, tickprefix: '$' },
-        legend: { orientation: 'h', y: -0.15, font: { size: 11 } }, bargap: 0.15,
+        legend: { orientation: 'h', y: -0.08, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
 }
 
@@ -569,55 +551,6 @@ async function loadRecent() {
 
 // ── Trade History (paginated) ──
 
-async function loadHistory(page = 1) {
-    const loading = document.getElementById('history-loading');
-    const content = document.getElementById('history-content');
-    currentHistoryPage = page;
-    const symbol = document.getElementById('history-symbol').value || '';
-
-    try {
-        const params = new URLSearchParams({ page, limit: HISTORY_PER_PAGE });
-        if (symbol) params.set('symbol', symbol);
-        const resp = await fetch('/api/global/trades?' + params);
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error);
-
-        const now = Date.now() / 1000;
-        document.getElementById('history-body').innerHTML = data.trades.map(t => {
-            const expired = t.expiry && t.expiry < now;
-            let outcomeHtml;
-            if (t.outcome === 'Assigned') outcomeHtml = '<span style="color: var(--color-error);">Assigned</span>';
-            else if (t.outcome === 'Returned') outcomeHtml = '<span style="color: var(--accent);">Returned</span>';
-            else if (t.outcome) outcomeHtml = t.outcome;
-            else if (!expired) outcomeHtml = '<span style="color: var(--text-muted);">Active</span>';
-            else outcomeHtml = '—';
-            return `<tr>
-            <td data-sort-key="created" data-sort-value="${t.created_at}">${formatUnixDateTime(t.created_at)}</td>
-            <td data-sort-key="symbol" data-sort-value="${t.symbol}"><span class="token-badge ${shortSymbol(t.symbol).toLowerCase()}">${shortSymbol(t.symbol)}</span></td>
-            <td>${t.type}</td>
-            <td data-sort-key="strike" data-sort-value="${t.strike}">${formatStrike(t.strike)}</td>
-            <td data-sort-key="premium" data-sort-value="${t.premium}">${formatCurrency(t.premium)}</td>
-            <td data-sort-key="notional" data-sort-value="${t.notional}">${formatCurrency(t.notional, 0)}</td>
-            <td data-sort-key="apr" data-sort-value="${t.apr || 0}">${formatPercentage(t.apr)}</td>
-            <td>${formatUnixDate(t.expiry)}</td>
-            <td>${outcomeHtml}</td>
-        </tr>`;
-        }).join('');
-
-        const pager = document.getElementById('history-pager');
-        pager.innerHTML = `
-            <button class="pager-btn" onclick="loadHistory(${page - 1})" ${page <= 1 ? 'disabled' : ''}>Prev</button>
-            <span class="pager-info">Page ${page} of ${data.pages} (${formatNumber(data.total, 0)} trades)</span>
-            <button class="pager-btn" onclick="loadHistory(${page + 1})" ${page >= data.pages ? 'disabled' : ''}>Next</button>`;
-
-        loading.style.display = 'none';
-        content.style.display = 'block';
-        setupSortableTable('history-table');
-    } catch (e) {
-        loading.textContent = 'Failed to load trades: ' + e.message;
-    }
-}
-
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -626,7 +559,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAssets();
     loadOutcomes();
     loadRecent();
-    loadHistory();
 
     // Overview time period tabs
     document.getElementById('overview-tabs').addEventListener('click', e => {
@@ -635,7 +567,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadOverview(parseInt(btn.dataset.overviewDays));
     });
 
-    document.getElementById('history-symbol').addEventListener('change', () => loadHistory(1));
     document.getElementById('detail-close').addEventListener('click', closeAssetDetail);
 
     // Carousel arrows
