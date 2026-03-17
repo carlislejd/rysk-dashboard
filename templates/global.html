@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rysk Global Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <nav class="dashboard-nav">
+                <a href="/" class="active">Global</a>
+                <a href="/account">Account</a>
+            </nav>
+            <h1>Rysk Global Dashboard</h1>
+        </header>
+
+        <!-- 1. Protocol Summary -->
+        <section class="card">
+            <h2>Protocol Overview</h2>
+            <div id="summary-loading" class="loading">Loading summary...</div>
+            <div id="summary-content" style="display: none;">
+                <div class="summary-grid" id="summary-grid"></div>
+            </div>
+        </section>
+
+        <!-- 2. Asset Carousel -->
+        <section class="card">
+            <h2>Assets</h2>
+            <div id="assets-loading" class="loading">Loading assets...</div>
+            <div id="assets-content" style="display: none;">
+                <div class="asset-carousel">
+                    <button class="carousel-arrow left" id="asset-carousel-left">&#8249;</button>
+                    <div class="asset-carousel-track" id="asset-grid"></div>
+                    <button class="carousel-arrow right" id="asset-carousel-right">&#8250;</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Asset Detail Panel (appears when card clicked) -->
+        <section id="asset-detail" class="card" style="display: none;">
+            <h2>
+                <span id="detail-asset-name"></span>
+                <span id="detail-close" style="float: right; cursor: pointer; color: var(--text-muted); font-size: 0.7em;">&times; close</span>
+            </h2>
+            <div id="detail-summary" class="summary-grid" style="margin-bottom: 24px;"></div>
+            <h3 class="subsection-title">Strike Distribution</h3>
+            <div id="detail-strike-chart" class="chart-container"></div>
+            <h3 class="subsection-title">Expiry Breakdown</h3>
+            <div id="detail-expiry-content"></div>
+            <h3 class="subsection-title">Volume Over Time</h3>
+            <div id="detail-volume-chart" class="chart-container"></div>
+            <h3 class="subsection-title">Recent Trades</h3>
+            <div id="detail-trades-content"></div>
+            <div class="pager" id="detail-trades-pager"></div>
+        </section>
+
+        <!-- 3. Recent Activity -->
+        <section class="card">
+            <h2>Recent Activity</h2>
+            <div id="recent-loading" class="loading">Loading...</div>
+            <div id="recent-content" style="display: none;">
+                <table id="recent-table" class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Asset</th>
+                            <th>Type</th>
+                            <th>Strike</th>
+                            <th>Premium</th>
+                            <th>Notional</th>
+                            <th>APR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 4. Daily Volume Chart -->
+        <section class="card">
+            <h2>Daily Volume</h2>
+            <div class="chart-controls">
+                <select id="volume-days" class="chart-select">
+                    <option value="7">7 days</option>
+                    <option value="30" selected>30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="365">All time</option>
+                </select>
+                <select id="volume-symbol" class="chart-select">
+                    <option value="">All assets</option>
+                </select>
+            </div>
+            <div id="volume-chart" class="chart-container"></div>
+        </section>
+
+        <!-- 5. Available Options (Inventory) -->
+        <section class="card">
+            <h2>Available Options</h2>
+            <div id="inventory-loading" class="loading">Loading inventory...</div>
+            <div id="inventory-content" style="display: none;">
+                <div class="tabs" id="inventory-tabs"></div>
+                <div id="inventory-panels"></div>
+            </div>
+        </section>
+
+        <!-- 6. Expiry Outcomes -->
+        <section class="card">
+            <h2>Expiry Outcomes</h2>
+            <div id="outcomes-loading" class="loading">Loading outcomes...</div>
+            <div id="outcomes-content" style="display: none;">
+                <div class="summary-grid" id="outcomes-summary"></div>
+                <h3 class="subsection-title">By Asset</h3>
+                <div class="asset-carousel" id="outcomes-carousel-wrap">
+                    <button class="carousel-arrow left" id="outcomes-carousel-left">&#8249;</button>
+                    <div class="asset-carousel-track" id="outcomes-asset-grid"></div>
+                    <button class="carousel-arrow right" id="outcomes-carousel-right">&#8250;</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7. Trade History -->
+        <section class="card">
+            <h2>Trade History</h2>
+            <div class="chart-controls">
+                <select id="history-symbol" class="chart-select">
+                    <option value="">All assets</option>
+                </select>
+            </div>
+            <div id="history-loading" class="loading">Loading trades...</div>
+            <div id="history-content" style="display: none;">
+                <table id="history-table" class="data-table">
+                    <thead>
+                        <tr>
+                            <th data-sort-key="created">Date</th>
+                            <th data-sort-key="symbol">Asset</th>
+                            <th>Type</th>
+                            <th data-sort-key="strike">Strike</th>
+                            <th data-sort-key="premium">Premium</th>
+                            <th data-sort-key="notional">Notional</th>
+                            <th data-sort-key="apr">APR</th>
+                            <th>Expiry</th>
+                            <th>Outcome</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+                <div class="pager" id="history-pager"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/global.js') }}"></script>
+</body>
+</html>

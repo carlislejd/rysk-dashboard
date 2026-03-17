@@ -11,7 +11,8 @@ dependencies = [
     "web3 (>=7.14.0,<8.0.0)",
     "flask (>=2.0,<4)",
     "requests (>=2.25,<3)",
-    "hyperliquid-python-sdk"
+    "hyperliquid-python-sdk",
+    "gunicorn (>=22.0,<24)"
 ]
 
 [project.scripts]

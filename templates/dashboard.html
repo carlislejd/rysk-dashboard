@@ -26,6 +26,10 @@
     <div id="main-content" style="display: none;">
     <div class="container">
         <header>
+            <nav class="dashboard-nav">
+                <a href="/">Global</a>
+                <a href="/account" class="active">Account</a>
+            </nav>
             <h1>Rysk Options Dashboard</h1>
             <div class="account-bar">
                 <div class="account-display">
@@ -86,6 +90,7 @@
     </div>
 
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ TOKEN_ADDRESSES = {
     "PURR": os.getenv("PURR_ADDRESS", "0x9b498C3c8A0b8CD8BA1D9851d40D186F1872b44E"),
     "USDT0": os.getenv("USDT0_ADDRESS", "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb"),
     "ZEC": os.getenv("ZEC_ADDRESS", "0xbe068Bb3c7ef5B56360655638f75bf5A6C5f8C10"),
+    "XRP": os.getenv("XRP_ADDRESS", "0xd70659a6396285bf7214d7ea9673184e7c72e07e"),
 }
 
 # HYPE variants (whype and khype - treated as same asset)
@@ -38,6 +39,7 @@ TOKEN_DECIMALS = {
     "PURR": 18,
     "USDT0": 6,
     "ZEC": 18,
+    "XRP": 18,
 }
 
 def get_rpc_connection():

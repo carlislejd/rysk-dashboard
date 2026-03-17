@@ -1,0 +1,22 @@
+services:
+  # Main web service with persistent disk for SQLite
+  - type: web
+    name: rysk-dashboard
+    runtime: python
+    buildCommand: ./scripts/render_build.sh
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: RYSK_DB_PATH
+        value: /data/rysk_trades.db
+      - key: RYSK_EXPIRY_CACHE_FILE
+        value: /data/expiry_cache.json
+      - key: PORT
+        value: "10000"
+      - key: RYSK_SYNC_ENABLED
+        value: "true"
+    disk:
+      name: rysk-data
+      mountPath: /data
+      sizeGB: 1

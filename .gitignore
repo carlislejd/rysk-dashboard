@@ -19,6 +19,9 @@ poetry.toml
 # Logs and local data
 logs/*.csv
 data/expiry_cache.json
+data/*.db
+data/*.db-shm
+data/*.db-wal
 
 # OS / Editor junk
 .DS_Store

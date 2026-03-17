@@ -68,6 +68,61 @@ body {
     padding: 0 32px;
 }
 
+/* --- Navigation --- */
+.dashboard-nav {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+
+.dashboard-nav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding-bottom: 6px;
+    border-bottom: 2px solid transparent;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.dashboard-nav a:hover {
+    color: var(--text-secondary);
+}
+
+.dashboard-nav a.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--text-primary);
+}
+
+/* --- Chart Controls --- */
+.chart-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.chart-select {
+    background: var(--bg);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.chart-select:hover {
+    border-color: var(--border-hover);
+}
+
+.chart-select:focus {
+    outline: none;
+    border-color: var(--text-muted);
+}
+
 /* --- Splash Screen --- */
 .splash-screen {
     position: fixed;
@@ -405,6 +460,66 @@ header h1 {
     border: 1px solid var(--border);
 }
 
+/* --- Asset Carousel --- */
+.asset-carousel {
+    position: relative;
+    margin-top: 16px;
+}
+
+.asset-carousel-track {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    border: 1px solid var(--border);
+}
+
+.asset-carousel-track::-webkit-scrollbar {
+    display: none;
+}
+
+.asset-carousel-track .asset-card {
+    min-width: 220px;
+    flex-shrink: 0;
+    border-bottom: none;
+}
+
+.asset-carousel-track .asset-card:last-child {
+    border-right: none;
+}
+
+.carousel-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    z-index: 2;
+    transition: all var(--transition-fast);
+}
+
+.carousel-arrow:hover {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+.carousel-arrow.left {
+    left: -14px;
+}
+
+.carousel-arrow.right {
+    right: -14px;
+}
+
 .asset-card {
     background: transparent;
     border: none;
@@ -445,6 +560,13 @@ header h1 {
 .asset-card-metrics {
     display: grid;
     gap: 6px;
+}
+
+.asset-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
 }
 
 .asset-metric-label {
