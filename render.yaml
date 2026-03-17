@@ -4,7 +4,7 @@ services:
     name: rysk-dashboard
     runtime: python
     buildCommand: ./scripts/render_build.sh
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload
+    startCommand: ./scripts/render_start.sh
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.7"
