@@ -7,7 +7,7 @@ services:
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --preload
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.7"
       - key: RYSK_DB_PATH
         value: /data/rysk_trades.db
       - key: RYSK_EXPIRY_CACHE_FILE
