@@ -514,7 +514,7 @@ async function loadRecent() {
     const loading = document.getElementById('recent-loading');
     const content = document.getElementById('recent-content');
     try {
-        const resp = await fetch('/api/global/trades?limit=10');
+        const resp = await fetch('/api/global/trades?limit=10&iv=true');
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -526,6 +526,7 @@ async function loadRecent() {
             <td>${formatCurrency(t.premium)}</td>
             <td>${formatCurrency(t.notional, 0)}</td>
             <td>${formatPercentage(t.apr)}</td>
+            <td>${t.iv != null ? formatPercentage(t.iv, 1) : '—'}</td>
         </tr>`).join('');
 
         loading.style.display = 'none';

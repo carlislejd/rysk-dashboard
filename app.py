@@ -17,6 +17,7 @@ from global_services import (
     get_asset_summary,
     get_asset_detail,
     get_outcome_summary,
+    enrich_trades_with_iv,
 )
 from inventory_services import fetch_inventory
 
@@ -110,9 +111,12 @@ def api_global_trades():
         limit = request.args.get("limit", 50, type=int)
         symbol = request.args.get("symbol", "").strip() or None
         expiry = request.args.get("expiry", None, type=int)
+        iv = request.args.get("iv", "").lower() in ("1", "true")
         conn = get_db()
         data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry)
         conn.close()
+        if iv:
+            enrich_trades_with_iv(data["trades"])
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

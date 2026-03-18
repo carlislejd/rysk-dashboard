@@ -8,6 +8,74 @@ per-asset analytics.
 
 import time
 
+import requests as _requests
+
+from iv_calc import implied_volatility
+from positions_api import _symbol_to_market_asset
+
+RISK_FREE_RATE = 0.045  # 4.5%
+_HL_INFO_URL = "https://api.hyperliquid.xyz/info"
+
+
+def _fetch_spot_at_time(coin, timestamp_s):
+    """Fetch the spot price for a coin at a specific unix timestamp using 1m candles."""
+    ts_ms = int(timestamp_s * 1000)
+    try:
+        resp = _requests.post(_HL_INFO_URL, json={
+            "type": "candleSnapshot",
+            "req": {"coin": coin, "interval": "1m", "startTime": ts_ms - 60000, "endTime": ts_ms + 60000}
+        }, timeout=5)
+        candles = resp.json()
+        if candles:
+            # Pick the candle closest to our timestamp
+            best = min(candles, key=lambda c: abs(c["t"] - ts_ms))
+            return float(best["c"])  # close price
+    except Exception:
+        pass
+    return None
+
+
+def enrich_trades_with_iv(trades):
+    """Add implied_volatility field to trades using spot price at time of trade."""
+    # Group by (market_asset, created_at rounded to minute) to batch candle fetches
+    spot_cache = {}  # key: (coin, minute_ts) -> price
+
+    for t in trades:
+        market = _symbol_to_market_asset(t.get("symbol", ""))
+        created = t.get("created_at")
+        strike = t.get("strike")
+        premium = t.get("premium")
+        expiry = t.get("expiry")
+        is_put = t.get("type") == "Put"
+        quantity = t.get("quantity", 0)
+
+        if not (market and created and strike and premium and expiry and quantity):
+            t["iv"] = None
+            continue
+
+        # Time to expiry at the moment of the trade, not now
+        T = (expiry - created) / (365.25 * 86400)
+        if T <= 0:
+            t["iv"] = None
+            continue
+
+        # Fetch spot price at trade time (cache by coin + minute)
+        minute_key = (market, created // 60)
+        if minute_key not in spot_cache:
+            spot_cache[minute_key] = _fetch_spot_at_time(market, created)
+        spot = spot_cache[minute_key]
+
+        if not spot:
+            t["iv"] = None
+            continue
+
+        price_per_unit = premium / quantity if quantity > 0 else 0
+        iv = implied_volatility(price_per_unit, spot, strike, T, RISK_FREE_RATE, is_put)
+        t["iv"] = round(iv * 100, 1) if iv is not None else None
+        t["spot_at_trade"] = spot
+
+    return trades
+
 
 def get_global_summary(conn, days=0):
     """Protocol-level aggregate stats. days=0 means all time."""
