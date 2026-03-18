@@ -16,29 +16,70 @@ from positions_api import _symbol_to_market_asset
 RISK_FREE_RATE = 0.045  # 4.5%
 _HL_INFO_URL = "https://api.hyperliquid.xyz/info"
 
+# Cache spot lookups: key (coin, minute_ts) -> (price, fetched_at)
+_spot_cache = {}
+_SPOT_CACHE_TTL = 300  # 5 minutes — recent trades don't change
 
-def _fetch_spot_at_time(coin, timestamp_s):
-    """Fetch the spot price for a coin at a specific unix timestamp using 1m candles."""
-    ts_ms = int(timestamp_s * 1000)
-    try:
-        resp = _requests.post(_HL_INFO_URL, json={
-            "type": "candleSnapshot",
-            "req": {"coin": coin, "interval": "1m", "startTime": ts_ms - 60000, "endTime": ts_ms + 60000}
-        }, timeout=5)
-        candles = resp.json()
-        if candles:
-            # Pick the candle closest to our timestamp
-            best = min(candles, key=lambda c: abs(c["t"] - ts_ms))
-            return float(best["c"])  # close price
-    except Exception:
-        pass
-    return None
+# Cache the full enriched recent trades result
+_recent_iv_cache = {"data": None, "timestamp": 0}
+_RECENT_IV_TTL = 60  # 1 minute
+
+
+def _prefetch_spots(trades):
+    """Batch-fetch spot prices for all trades, one API call per unique coin."""
+    # Group trades by coin, find time range per coin
+    coin_ranges = {}  # coin -> (min_ts, max_ts)
+    for t in trades:
+        market = _symbol_to_market_asset(t.get("symbol", ""))
+        created = t.get("created_at")
+        if not market or not created:
+            continue
+        minute_key = (market, created // 60)
+        cached = _spot_cache.get(minute_key)
+        if cached and (time.time() - cached[1]) < _SPOT_CACHE_TTL:
+            continue  # already cached
+        if market not in coin_ranges:
+            coin_ranges[market] = (created, created)
+        else:
+            lo, hi = coin_ranges[market]
+            coin_ranges[market] = (min(lo, created), max(hi, created))
+
+    # One API call per coin covering the full time range
+    now_ts = time.time()
+    for coin, (lo, hi) in coin_ranges.items():
+        try:
+            resp = _requests.post(_HL_INFO_URL, json={
+                "type": "candleSnapshot",
+                "req": {
+                    "coin": coin, "interval": "1m",
+                    "startTime": int(lo * 1000) - 60000,
+                    "endTime": int(hi * 1000) + 60000,
+                }
+            }, timeout=10)
+            candles = resp.json()
+            # Index candles by minute
+            for c in candles:
+                minute = c["t"] // 60000
+                _spot_cache[(coin, minute)] = (float(c["c"]), now_ts)
+        except Exception:
+            pass
 
 
 def enrich_trades_with_iv(trades):
     """Add implied_volatility field to trades using spot price at time of trade."""
-    # Group by (market_asset, created_at rounded to minute) to batch candle fetches
-    spot_cache = {}  # key: (coin, minute_ts) -> price
+    # Return cached result if the same trades were recently enriched
+    now_ts = time.time()
+    trade_key = tuple(t.get("tx_hash") for t in trades)
+    if (_recent_iv_cache["data"] is not None
+            and now_ts - _recent_iv_cache["timestamp"] < _RECENT_IV_TTL
+            and _recent_iv_cache.get("key") == trade_key):
+        for t, cached in zip(trades, _recent_iv_cache["data"]):
+            t["iv"] = cached.get("iv")
+            t["spot_at_trade"] = cached.get("spot_at_trade")
+        return trades
+
+    # Batch-fetch all spot prices (one call per coin)
+    _prefetch_spots(trades)
 
     for t in trades:
         market = _symbol_to_market_asset(t.get("symbol", ""))
@@ -53,17 +94,13 @@ def enrich_trades_with_iv(trades):
             t["iv"] = None
             continue
 
-        # Time to expiry at the moment of the trade, not now
         T = (expiry - created) / (365.25 * 86400)
         if T <= 0:
             t["iv"] = None
             continue
 
-        # Fetch spot price at trade time (cache by coin + minute)
-        minute_key = (market, created // 60)
-        if minute_key not in spot_cache:
-            spot_cache[minute_key] = _fetch_spot_at_time(market, created)
-        spot = spot_cache[minute_key]
+        spot_entry = _spot_cache.get((market, created // 60))
+        spot = spot_entry[0] if spot_entry else None
 
         if not spot:
             t["iv"] = None
@@ -73,6 +110,11 @@ def enrich_trades_with_iv(trades):
         iv = implied_volatility(price_per_unit, spot, strike, T, RISK_FREE_RATE, is_put)
         t["iv"] = round(iv * 100, 1) if iv is not None else None
         t["spot_at_trade"] = spot
+
+    # Cache the result
+    _recent_iv_cache["data"] = [{"iv": t.get("iv"), "spot_at_trade": t.get("spot_at_trade")} for t in trades]
+    _recent_iv_cache["timestamp"] = now_ts
+    _recent_iv_cache["key"] = trade_key
 
     return trades
 
