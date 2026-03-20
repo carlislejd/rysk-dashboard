@@ -5,6 +5,11 @@ Flask application for Rysk Options Dashboard.
 from flask import Flask, render_template, jsonify, request
 import os
 from dashboard_services import (
+    build_history_expiry_prices,
+    build_history_deep_dive,
+    build_positions_expiring,
+    filter_expired_positions,
+    filter_open_positions,
     get_history_payload,
     get_positions_payload,
     validate_account_address,
@@ -51,6 +56,19 @@ def account():
     """Per-wallet dashboard"""
     return render_template('dashboard.html', account_address=ACCOUNT_ADDRESS)
 
+
+@app.route('/docs')
+def docs():
+    """Documentation for CLI and hosted endpoints."""
+    return render_template(
+        'docs.html',
+        api_base=os.getenv("PUBLIC_BASE_URL", "https://rysk-dashboard.onrender.com").rstrip("/"),
+        sample_address=os.getenv(
+            "DOCS_SAMPLE_ADDRESS",
+            ACCOUNT_ADDRESS or "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+        ),
+    )
+
 @app.route('/api/positions')
 def api_positions():
     """API endpoint for current positions"""
@@ -71,6 +89,98 @@ def api_positions():
             "error": str(e)
         }), 500
 
+
+@app.route('/api/cli/account/validate')
+def api_cli_account_validate():
+    """CLI-shaped endpoint for address validation."""
+    try:
+        account_address = resolve_account_address()
+        return jsonify({
+            "success": True,
+            "ok": True,
+            "address": account_address,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/positions/open')
+def api_cli_positions_open():
+    """CLI-shaped endpoint for open positions."""
+    try:
+        account_address = resolve_account_address()
+        symbol = request.args.get("symbol", "").strip() or None
+        strategy = request.args.get("strategy", "").strip() or None
+
+        payload = get_positions_payload(account_address)
+        open_positions = payload["positions"].get("open_positions") or []
+        filtered = filter_open_positions(open_positions, symbol=symbol, strategy=strategy)
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            "count": len(filtered),
+            "filters": {"symbol": symbol, "strategy": strategy},
+            "open_positions": filtered,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/positions/strikes')
+def api_cli_positions_strikes():
+    """CLI-shaped endpoint for strikes by asset."""
+    try:
+        account_address = resolve_account_address()
+        symbol = request.args.get("symbol", "").strip() or None
+
+        payload = get_positions_payload(account_address)
+        asset_summary = payload["positions"].get("asset_summary") or []
+        if symbol:
+            wanted = symbol.upper()
+            asset_summary = [a for a in asset_summary if (a.get("symbol") or "").upper() == wanted]
+
+        result_assets = []
+        for asset in asset_summary:
+            result_assets.append(
+                {
+                    "symbol": asset.get("symbol"),
+                    "current_price": asset.get("current_price"),
+                    "strikes": asset.get("strikes") or [],
+                }
+            )
+
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            "assets": result_assets,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 @app.route('/api/history')
 def api_history():
     """API endpoint for historical performance"""
@@ -79,6 +189,155 @@ def api_history():
         return jsonify({
             "success": True,
             **get_history_payload(account_address)
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/positions/expiring')
+def api_cli_positions_expiring():
+    """CLI-shaped endpoint for expiring open position notional."""
+    try:
+        account_address = resolve_account_address()
+        expiry_date = request.args.get("expiry_date", "").strip()
+        if not expiry_date:
+            raise ValueError("expiry_date query param is required (YYYY-MM-DD)")
+        symbol = request.args.get("symbol", "").strip() or None
+        strategy = request.args.get("strategy", "").strip() or None
+
+        payload = get_positions_payload(account_address)
+        open_positions = payload["positions"].get("open_positions") or []
+        result = build_positions_expiring(
+            open_positions,
+            expiry_date=expiry_date,
+            symbol=symbol,
+            strategy=strategy,
+        )
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            **result,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/history/expiry-prices')
+def api_cli_history_expiry_prices():
+    """CLI-shaped endpoint for realized expiry prices."""
+    try:
+        account_address = resolve_account_address()
+        symbol = request.args.get("symbol", "").strip() or None
+        expiry_date = request.args.get("expiry_date", "").strip() or None
+
+        payload = get_history_payload(account_address)
+        expired_positions = payload["history"].get("expired_positions") or []
+        result = build_history_expiry_prices(
+            expired_positions,
+            symbol=symbol,
+            expiry_date=expiry_date,
+        )
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            **result,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/history/summary')
+def api_cli_history_summary():
+    """CLI-shaped endpoint for history summary."""
+    try:
+        account_address = resolve_account_address()
+        payload = get_history_payload(account_address)
+        summary = payload["history"].get("summary") or {}
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            "summary": summary,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/history/expired')
+def api_cli_history_expired():
+    """CLI-shaped endpoint for filtered expired positions."""
+    try:
+        account_address = resolve_account_address()
+        symbol = request.args.get("symbol", "").strip() or None
+        outcome = request.args.get("outcome", "").strip() or None
+
+        payload = get_history_payload(account_address)
+        expired_positions = payload["history"].get("expired_positions") or []
+        filtered = filter_expired_positions(expired_positions, symbol=symbol, outcome=outcome)
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            "count": len(filtered),
+            "filters": {"symbol": symbol, "outcome": outcome},
+            "expired_positions": filtered,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/cli/history/deep-dive')
+def api_cli_history_deep_dive():
+    """CLI-shaped endpoint for deep-dive history analytics."""
+    try:
+        account_address = resolve_account_address()
+        symbol = request.args.get("symbol", "").strip() or None
+
+        payload = get_history_payload(account_address)
+        deep_dive = build_history_deep_dive(payload["history"], symbol=symbol)
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            "symbol": symbol,
+            "deep_dive": deep_dive,
         })
     except ValueError as e:
         return jsonify({

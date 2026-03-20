@@ -1276,6 +1276,58 @@ header h1 {
     font-size: 0.85em;
 }
 
+/* --- Docs Page --- */
+.docs-section h2 {
+    margin-bottom: 10px;
+}
+
+.docs-code {
+    margin-top: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    line-height: 1.55;
+    padding: 12px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+
+.docs-endpoint-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.docs-endpoint {
+    display: block;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 10px 12px;
+    transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.docs-endpoint:hover {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.docs-endpoint strong {
+    display: block;
+    font-size: 0.9em;
+    margin-bottom: 4px;
+}
+
+.docs-endpoint span {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.76em;
+    color: var(--text-muted);
+}
+
 /* --- APY/Risk --- */
 .apy-high { color: var(--accent); }
 .apy-medium { color: #facc15; }

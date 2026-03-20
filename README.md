@@ -76,7 +76,26 @@ poetry run rysk history expired --address 0x... --outcome assigned --json
 
 # Deep-dive analytics (top premium / APR slices)
 poetry run rysk history deep-dive --address 0x... --symbol WHYPE --json
+
+# Realized expiry prices grouped by asset + expiry date
+poetry run rysk history expiry-prices --address 0x... --json
 ```
+
+Agent-friendly schema for `history expiry-prices --json`:
+
+- `group_count`: number of `(symbol, expiry_date)` groups
+- `positions_considered`: total expired rows after filters
+- `groups[]` entries include:
+  - `symbol`
+  - `expiry_date`
+  - `positions_total`
+  - `positions_with_price`
+  - `avg_expiry_price`
+  - `min_expiry_price`
+  - `max_expiry_price`
+  - `assigned_count`
+  - `returned_count`
+  - `unknown_count`
 
 CLI reliability options:
 

@@ -146,6 +146,63 @@ class TestCli(unittest.TestCase):
         self.assertEqual(payload["totals"]["notional"], 62500.0)
         self.assertEqual(payload["totals"]["premium"], 850.0)
 
+    @patch("rysk_cli.get_history_payload")
+    def test_history_expiry_prices_grouping(self, mock_history):
+        mock_history.return_value = {
+            "account": "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+            "history": {
+                "expired_positions": [
+                    {
+                        "symbol": "UBTC",
+                        "expiry": 1773360000,
+                        "expiry_date": "2026-03-13",
+                        "expiry_price": 67000.0,
+                        "outcome": "Assigned",
+                    },
+                    {
+                        "symbol": "UBTC",
+                        "expiry": 1773360000,
+                        "expiry_date": "2026-03-13",
+                        "expiry_price": 69000.0,
+                        "outcome": "Returned",
+                    },
+                    {
+                        "symbol": "WHYPE",
+                        "expiry": 1773360000,
+                        "expiry_date": "2026-03-13",
+                        "expiry_price": 28.5,
+                        "outcome": "Assigned",
+                    },
+                    {
+                        "symbol": "WHYPE",
+                        "expiry": 1773964800,
+                        "expiry_date": "2026-03-20",
+                        "expiry_price": None,
+                        "outcome": "Unknown",
+                    },
+                ]
+            },
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rysk_cli.main(
+                [
+                    "history",
+                    "expiry-prices",
+                    "--address",
+                    "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["group_count"], 3)
+        ubtc = [g for g in payload["groups"] if g["symbol"] == "UBTC" and g["expiry_date"] == "2026-03-13"][0]
+        self.assertEqual(ubtc["expiry"], 1773360000)
+        self.assertEqual(ubtc["positions_total"], 2)
+        self.assertEqual(ubtc["positions_with_price"], 2)
+        self.assertEqual(ubtc["avg_expiry_price"], 68000.0)
+
 
 if __name__ == "__main__":
     unittest.main()

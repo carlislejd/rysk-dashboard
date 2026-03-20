@@ -5,7 +5,7 @@ Shared service helpers for dashboard API routes and CLI commands.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from positions_api import fetch_history, fetch_positions
 
@@ -32,6 +32,13 @@ def get_history_payload(account_address: str) -> Dict:
         "account": account_address,
         "history": fetch_history(account_address),
     }
+
+
+def _to_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def filter_open_positions(positions: List[Dict], symbol: Optional[str], strategy: Optional[str]) -> List[Dict]:
@@ -88,4 +95,109 @@ def build_history_deep_dive(history: Dict, symbol: Optional[str] = None) -> Dict
         "positions_considered": len(filtered),
         "top_premium_positions": top_premium,
         "top_apr_positions": top_apr,
+    }
+
+
+def build_positions_expiring(
+    open_positions: List[Dict],
+    expiry_date: str,
+    symbol: Optional[str] = None,
+    strategy: Optional[str] = None,
+) -> Dict[str, Any]:
+    filtered = filter_open_positions(open_positions, symbol=symbol, strategy=strategy)
+    expiring = [p for p in filtered if (p.get("expiry_date") or "") == expiry_date]
+    total_notional = sum(_to_float(p.get("notional")) for p in expiring)
+    total_premium = sum(_to_float(p.get("premium")) for p in expiring)
+
+    by_symbol: Dict[str, float] = {}
+    by_strategy: Dict[str, float] = {}
+    for p in expiring:
+        sym = (p.get("symbol") or "UNKNOWN").upper()
+        strat = (p.get("strategy") or "other").lower()
+        by_symbol[sym] = by_symbol.get(sym, 0.0) + _to_float(p.get("notional"))
+        by_strategy[strat] = by_strategy.get(strat, 0.0) + _to_float(p.get("notional"))
+
+    return {
+        "expiry_date": expiry_date,
+        "count": len(expiring),
+        "filters": {"symbol": symbol, "strategy": strategy},
+        "totals": {
+            "notional": total_notional,
+            "premium": total_premium,
+        },
+        "breakdown": {
+            "by_symbol_notional": by_symbol,
+            "by_strategy_notional": by_strategy,
+        },
+        "positions": expiring,
+    }
+
+
+def build_history_expiry_prices(
+    expired_positions: List[Dict],
+    symbol: Optional[str] = None,
+    expiry_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    filtered = filter_expired_positions(expired_positions, symbol=symbol, outcome=None)
+    if expiry_date:
+        filtered = [p for p in filtered if (p.get("expiry_date") or "") == expiry_date]
+
+    grouped: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    for pos in filtered:
+        sym = (pos.get("symbol") or "UNKNOWN").upper()
+        expiry_raw = pos.get("expiry")
+        expiry_ts = int(_to_float(expiry_raw)) if expiry_raw is not None else 0
+        expiry_day = pos.get("expiry_date") or "Unknown"
+        key = (sym, expiry_ts)
+        entry = grouped.setdefault(
+            key,
+            {
+                "symbol": sym,
+                "expiry": expiry_ts if expiry_ts > 0 else None,
+                "expiry_date": expiry_day,
+                "positions_total": 0,
+                "positions_with_price": 0,
+                "assigned_count": 0,
+                "returned_count": 0,
+                "unknown_count": 0,
+                "avg_expiry_price": None,
+                "min_expiry_price": None,
+                "max_expiry_price": None,
+            },
+        )
+
+        entry["positions_total"] += 1
+        outcome = (pos.get("outcome") or "Unknown").lower()
+        if outcome == "assigned":
+            entry["assigned_count"] += 1
+        elif outcome == "returned":
+            entry["returned_count"] += 1
+        else:
+            entry["unknown_count"] += 1
+
+        expiry_price = pos.get("expiry_price")
+        if expiry_price is None:
+            continue
+        price = _to_float(expiry_price)
+        entry["positions_with_price"] += 1
+        if entry["avg_expiry_price"] is None:
+            entry["avg_expiry_price"] = 0.0
+            entry["min_expiry_price"] = price
+            entry["max_expiry_price"] = price
+        entry["avg_expiry_price"] += price
+        entry["min_expiry_price"] = min(_to_float(entry["min_expiry_price"]), price)
+        entry["max_expiry_price"] = max(_to_float(entry["max_expiry_price"]), price)
+
+    rows = list(grouped.values())
+    for row in rows:
+        priced = row["positions_with_price"]
+        if priced > 0 and row["avg_expiry_price"] is not None:
+            row["avg_expiry_price"] = row["avg_expiry_price"] / priced
+
+    rows.sort(key=lambda r: (-(r.get("expiry") or 0), (r.get("symbol") or "")))
+    return {
+        "filters": {"symbol": symbol, "expiry_date": expiry_date},
+        "groups": rows,
+        "group_count": len(rows),
+        "positions_considered": len(filtered),
     }

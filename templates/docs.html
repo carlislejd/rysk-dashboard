@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rysk Docs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <nav class="dashboard-nav">
+                <a href="/">Global</a>
+                <a href="/account">Account</a>
+                <a href="/docs" class="active">Docs</a>
+            </nav>
+            <h1>Rysk Docs</h1>
+            <div class="account-bar">
+                <div class="account-display">CLI calls and hosted API endpoints for agents</div>
+            </div>
+        </header>
+
+        <section class="card docs-section">
+            <h2>Hosted Endpoints (Click to Open JSON)</h2>
+            <p class="subtitle">Base URL: <code>{{ api_base }}</code></p>
+            <div class="docs-endpoint-grid">
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/account/validate?address={{ sample_address }}" target="_blank" rel="noopener noreferrer">
+                    <strong>Account Validate</strong>
+                    <span>GET /api/cli/account/validate?address=...</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/positions/open?address={{ sample_address }}" target="_blank" rel="noopener noreferrer">
+                    <strong>Positions Open</strong>
+                    <span>GET /api/cli/positions/open?address=...&symbol=...&strategy=...</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/positions/expiring?address={{ sample_address }}&expiry_date=2026-03-13" target="_blank" rel="noopener noreferrer">
+                    <strong>Positions Expiring</strong>
+                    <span>GET /api/cli/positions/expiring?address=...&expiry_date=YYYY-MM-DD</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/positions/strikes?address={{ sample_address }}&symbol=UBTC" target="_blank" rel="noopener noreferrer">
+                    <strong>Positions Strikes</strong>
+                    <span>GET /api/cli/positions/strikes?address=...&symbol=...</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/summary?address={{ sample_address }}" target="_blank" rel="noopener noreferrer">
+                    <strong>History Summary</strong>
+                    <span>GET /api/cli/history/summary?address=...</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/expired?address={{ sample_address }}&outcome=assigned" target="_blank" rel="noopener noreferrer">
+                    <strong>History Expired</strong>
+                    <span>GET /api/cli/history/expired?address=...&symbol=...&outcome=...</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/deep-dive?address={{ sample_address }}&symbol=WHYPE" target="_blank" rel="noopener noreferrer">
+                    <strong>History Deep Dive</strong>
+                    <span>GET /api/cli/history/deep-dive?address=...&symbol=...</span>
+                </a>
+                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/expiry-prices?address={{ sample_address }}&symbol=UBTC" target="_blank" rel="noopener noreferrer">
+                    <strong>History Expiry Prices</strong>
+                    <span>GET /api/cli/history/expiry-prices?address=...&symbol=...&expiry_date=...</span>
+                </a>
+            </div>
+        </section>
+
+        <section class="card docs-section">
+            <h2>Example Output (Shape)</h2>
+            <pre class="docs-code">{
+  "success": true,
+  "account": "0x...",
+  "count": 2,
+  "filters": {"symbol": "UBTC", "strategy": "covered_call"},
+  "open_positions": [
+    {"symbol": "UBTC", "strategy": "covered_call", "type": "Call", "notional": 33500.0}
+  ]
+}
+
+{
+  "success": true,
+  "account": "0x...",
+  "filters": {"symbol": "UBTC", "expiry_date": null},
+  "group_count": 3,
+  "positions_considered": 14,
+  "groups": [
+    {
+      "symbol": "UBTC",
+      "expiry": 1773360000,
+      "expiry_date": "2026-03-13",
+      "avg_expiry_price": 68000.0
+    }
+  ]
+}</pre>
+        </section>
+
+        <section class="card docs-section">
+            <h2>Native Dashboard Endpoints</h2>
+            <pre class="docs-code">{{ api_base }}/api/positions?address={{ sample_address }}
+{{ api_base }}/api/history?address={{ sample_address }}</pre>
+        </section>
+    </div>
+</body>
+</html>

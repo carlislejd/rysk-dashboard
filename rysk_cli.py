@@ -11,7 +11,9 @@ import time
 from typing import Any, Dict, Iterable, List
 
 from dashboard_services import (
+    build_history_expiry_prices,
     build_history_deep_dive,
+    build_positions_expiring,
     filter_expired_positions,
     filter_open_positions,
     get_history_payload,
@@ -129,44 +131,23 @@ def cmd_positions_expiring(args: argparse.Namespace) -> int:
         retry_delay_s=args.retry_delay,
     )
     open_positions = payload["positions"].get("open_positions") or []
-    filtered = filter_open_positions(open_positions, symbol=args.symbol, strategy=args.strategy)
-
-    expiry_date = args.expiry_date
-    expiring = [p for p in filtered if (p.get("expiry_date") or "") == expiry_date]
-    total_notional = sum(_to_float(p.get("notional")) for p in expiring)
-    total_premium = sum(_to_float(p.get("premium")) for p in expiring)
-
-    by_symbol: Dict[str, float] = {}
-    by_strategy: Dict[str, float] = {}
-    for p in expiring:
-        symbol = (p.get("symbol") or "UNKNOWN").upper()
-        strategy = (p.get("strategy") or "other").lower()
-        by_symbol[symbol] = by_symbol.get(symbol, 0.0) + _to_float(p.get("notional"))
-        by_strategy[strategy] = by_strategy.get(strategy, 0.0) + _to_float(p.get("notional"))
-
     result = {
         "account": account,
-        "expiry_date": expiry_date,
-        "count": len(expiring),
-        "filters": {"symbol": args.symbol, "strategy": args.strategy},
-        "totals": {
-            "notional": total_notional,
-            "premium": total_premium,
-        },
-        "breakdown": {
-            "by_symbol_notional": by_symbol,
-            "by_strategy_notional": by_strategy,
-        },
-        "positions": expiring,
+        **build_positions_expiring(
+            open_positions,
+            expiry_date=args.expiry_date,
+            symbol=args.symbol,
+            strategy=args.strategy,
+        ),
     }
 
     if args.json:
         _print_json(result)
     else:
-        print(f"Expiry date: {expiry_date}")
-        print(f"Positions: {len(expiring)}")
-        print(f"Total notional freeing up: {_fmt(total_notional, 2)}")
-        print(f"Total premium: {_fmt(total_premium, 2)}")
+        print(f"Expiry date: {result['expiry_date']}")
+        print(f"Positions: {result['count']}")
+        print(f"Total notional freeing up: {_fmt(result['totals']['notional'], 2)}")
+        print(f"Total premium: {_fmt(result['totals']['premium'], 2)}")
         rows = [
             {
                 "symbol": p.get("symbol"),
@@ -177,7 +158,7 @@ def cmd_positions_expiring(args: argparse.Namespace) -> int:
                 "notional": _fmt(_to_float(p.get("notional")), 2),
                 "premium": _fmt(_to_float(p.get("premium")), 2),
             }
-            for p in expiring
+            for p in result["positions"]
         ]
         _print_table(rows, ["symbol", "strategy", "type", "qty", "strike", "notional", "premium"])
     return EXIT_OK
@@ -317,6 +298,51 @@ def cmd_history_deep_dive(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_history_expiry_prices(args: argparse.Namespace) -> int:
+    account = validate_account_address(args.address)
+    payload = _call_with_retries(
+        lambda: get_history_payload(account),
+        retries=args.retries,
+        retry_delay_s=args.retry_delay,
+    )
+    expired_positions = payload["history"].get("expired_positions") or []
+    agg = build_history_expiry_prices(
+        expired_positions,
+        symbol=args.symbol,
+        expiry_date=args.expiry_date,
+    )
+    rows = agg["groups"]
+    result = {
+        "account": account,
+        **agg,
+    }
+
+    if args.json:
+        _print_json(result)
+    else:
+        table_rows = [
+            {
+                "symbol": r.get("symbol"),
+                "expiry": r.get("expiry"),
+                "expiry_date": r.get("expiry_date"),
+                "total": r.get("positions_total"),
+                "priced": r.get("positions_with_price"),
+                "avg_px": _fmt(r.get("avg_expiry_price"), 2),
+                "min_px": _fmt(r.get("min_expiry_price"), 2),
+                "max_px": _fmt(r.get("max_expiry_price"), 2),
+                "assigned": r.get("assigned_count"),
+                "returned": r.get("returned_count"),
+                "unknown": r.get("unknown_count"),
+            }
+            for r in rows
+        ]
+        _print_table(
+            table_rows,
+            ["symbol", "expiry", "expiry_date", "total", "priced", "avg_px", "min_px", "max_px", "assigned", "returned", "unknown"],
+        )
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rysk", description="Rysk dashboard CLI for agents and operators")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -383,6 +409,18 @@ def build_parser() -> argparse.ArgumentParser:
     hist_deep.add_argument("--retry-delay", type=float, default=0.5)
     hist_deep.add_argument("--json", action="store_true")
     hist_deep.set_defaults(func=cmd_history_deep_dive)
+
+    hist_expiry_prices = history_sub.add_parser(
+        "expiry-prices",
+        help="Aggregate realized expiry prices by asset and expiry date",
+    )
+    hist_expiry_prices.add_argument("--address", required=True)
+    hist_expiry_prices.add_argument("--symbol")
+    hist_expiry_prices.add_argument("--expiry-date", help="Optional filter YYYY-MM-DD")
+    hist_expiry_prices.add_argument("--retries", type=int, default=1)
+    hist_expiry_prices.add_argument("--retry-delay", type=float, default=0.5)
+    hist_expiry_prices.add_argument("--json", action="store_true")
+    hist_expiry_prices.set_defaults(func=cmd_history_expiry_prices)
 
     return parser
 
