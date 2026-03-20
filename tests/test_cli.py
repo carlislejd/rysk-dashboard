@@ -203,7 +203,7 @@ class TestCli(unittest.TestCase):
         self.assertEqual(ubtc["expiry"], 1773360000)
         self.assertEqual(ubtc["positions_total"], 2)
         self.assertEqual(ubtc["positions_with_price"], 2)
-        self.assertEqual(ubtc["avg_expiry_price"], 68000.0)
+        self.assertEqual(ubtc["expiry_price"], 67000.0)
 
 
 if __name__ == "__main__":

@@ -215,7 +215,8 @@ def cmd_history_summary(args: argparse.Namespace) -> int:
         retries=args.retries,
         retry_delay_s=args.retry_delay,
     )
-    summary = payload["history"].get("summary") or {}
+    summary = dict(payload["history"].get("summary") or {})
+    summary.pop("unknown_count", None)
     result = {"account": account, "summary": summary}
     if args.json:
         _print_json(result)
@@ -225,7 +226,6 @@ def cmd_history_summary(args: argparse.Namespace) -> int:
             {"metric": "net_premium", "value": _fmt(_to_float(summary.get("net_premium")), 2)},
             {"metric": "assigned_count", "value": summary.get("assigned_count", 0)},
             {"metric": "returned_count", "value": summary.get("returned_count", 0)},
-            {"metric": "unknown_count", "value": summary.get("unknown_count", 0)},
             {"metric": "total_notional", "value": _fmt(_to_float(summary.get("total_notional")), 2)},
         ]
         _print_table(rows, ["metric", "value"])
@@ -327,18 +327,15 @@ def cmd_history_expiry_prices(args: argparse.Namespace) -> int:
                 "expiry_date": r.get("expiry_date"),
                 "total": r.get("positions_total"),
                 "priced": r.get("positions_with_price"),
-                "avg_px": _fmt(r.get("avg_expiry_price"), 2),
-                "min_px": _fmt(r.get("min_expiry_price"), 2),
-                "max_px": _fmt(r.get("max_expiry_price"), 2),
+                "expiry_price": _fmt(r.get("expiry_price"), 2),
                 "assigned": r.get("assigned_count"),
                 "returned": r.get("returned_count"),
-                "unknown": r.get("unknown_count"),
             }
             for r in rows
         ]
         _print_table(
             table_rows,
-            ["symbol", "expiry", "expiry_date", "total", "priced", "avg_px", "min_px", "max_px", "assigned", "returned", "unknown"],
+            ["symbol", "expiry", "expiry_date", "total", "priced", "expiry_price", "assigned", "returned"],
         )
     return EXIT_OK
 

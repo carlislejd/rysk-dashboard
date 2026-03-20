@@ -83,13 +83,15 @@ class TestAppServiceParity(unittest.TestCase):
         self.assertTrue(payload["success"])
         self.assertEqual(payload["group_count"], 1)
         self.assertEqual(payload["groups"][0]["expiry"], 1773360000)
+        self.assertEqual(payload["groups"][0]["expiry_price"], 68000.0)
+        self.assertNotIn("unknown_count", payload["groups"][0])
 
     @patch("app.get_history_payload")
     def test_api_cli_history_summary_expired_and_deep_dive_shapes(self, mock_get_history):
         mock_get_history.return_value = {
             "account": TEST_ADDRESS,
             "history": {
-                "summary": {"expired_count": 2},
+                "summary": {"expired_count": 2, "unknown_count": 0},
                 "expired_positions": [
                     {"symbol": "UBTC", "outcome": "Assigned", "premium": 100.0, "apr": 10.0},
                     {"symbol": "UBTC", "outcome": "Returned", "premium": 80.0, "apr": 8.0},
@@ -104,6 +106,7 @@ class TestAppServiceParity(unittest.TestCase):
         self.assertEqual(expired_resp.status_code, 200)
         self.assertEqual(deep_dive_resp.status_code, 200)
         self.assertEqual(summary_resp.get_json()["summary"]["expired_count"], 2)
+        self.assertNotIn("unknown_count", summary_resp.get_json()["summary"])
         self.assertEqual(expired_resp.get_json()["count"], 2)
         self.assertIn("deep_dive", deep_dive_resp.get_json())
 

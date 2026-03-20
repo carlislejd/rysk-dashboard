@@ -276,7 +276,8 @@ def api_cli_history_summary():
     try:
         account_address = resolve_account_address()
         payload = get_history_payload(account_address)
-        summary = payload["history"].get("summary") or {}
+        summary = dict(payload["history"].get("summary") or {})
+        summary.pop("unknown_count", None)
         return jsonify({
             "success": True,
             "account": account_address,

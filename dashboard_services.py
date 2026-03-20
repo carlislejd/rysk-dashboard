@@ -73,7 +73,8 @@ def filter_expired_positions(expired_positions: List[Dict], symbol: Optional[str
 
 
 def build_history_deep_dive(history: Dict, symbol: Optional[str] = None) -> Dict:
-    summary = history.get("summary") or {}
+    summary = dict(history.get("summary") or {})
+    summary.pop("unknown_count", None)
     expired_positions = history.get("expired_positions") or []
     filtered = filter_expired_positions(expired_positions, symbol=symbol, outcome=None)
 
@@ -159,10 +160,7 @@ def build_history_expiry_prices(
                 "positions_with_price": 0,
                 "assigned_count": 0,
                 "returned_count": 0,
-                "unknown_count": 0,
-                "avg_expiry_price": None,
-                "min_expiry_price": None,
-                "max_expiry_price": None,
+                "expiry_price": None,
             },
         )
 
@@ -172,28 +170,17 @@ def build_history_expiry_prices(
             entry["assigned_count"] += 1
         elif outcome == "returned":
             entry["returned_count"] += 1
-        else:
-            entry["unknown_count"] += 1
 
         expiry_price = pos.get("expiry_price")
         if expiry_price is None:
             continue
         price = _to_float(expiry_price)
         entry["positions_with_price"] += 1
-        if entry["avg_expiry_price"] is None:
-            entry["avg_expiry_price"] = 0.0
-            entry["min_expiry_price"] = price
-            entry["max_expiry_price"] = price
-        entry["avg_expiry_price"] += price
-        entry["min_expiry_price"] = min(_to_float(entry["min_expiry_price"]), price)
-        entry["max_expiry_price"] = max(_to_float(entry["max_expiry_price"]), price)
+        # Rysk has one settlement print per underlying + expiry.
+        if entry["expiry_price"] is None:
+            entry["expiry_price"] = price
 
     rows = list(grouped.values())
-    for row in rows:
-        priced = row["positions_with_price"]
-        if priced > 0 and row["avg_expiry_price"] is not None:
-            row["avg_expiry_price"] = row["avg_expiry_price"] / priced
-
     rows.sort(key=lambda r: (-(r.get("expiry") or 0), (r.get("symbol") or "")))
     return {
         "filters": {"symbol": symbol, "expiry_date": expiry_date},

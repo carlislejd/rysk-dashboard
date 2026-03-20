@@ -87,15 +87,13 @@ Agent-friendly schema for `history expiry-prices --json`:
 - `positions_considered`: total expired rows after filters
 - `groups[]` entries include:
   - `symbol`
+  - `expiry` (unix timestamp)
   - `expiry_date`
   - `positions_total`
   - `positions_with_price`
-  - `avg_expiry_price`
-  - `min_expiry_price`
-  - `max_expiry_price`
+  - `expiry_price`
   - `assigned_count`
   - `returned_count`
-  - `unknown_count`
 
 CLI reliability options:
 
