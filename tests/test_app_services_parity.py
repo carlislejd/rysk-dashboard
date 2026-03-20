@@ -127,6 +127,24 @@ class TestAppServiceParity(unittest.TestCase):
         self.assertEqual(positions_resp.status_code, 200)
         self.assertEqual(history_resp.status_code, 200)
 
+    @patch("app.backfill_outcomes")
+    @patch("app.ADMIN_BACKFILL_TOKEN", "test-token")
+    def test_admin_backfill_endpoint_requires_token_and_runs(self, mock_backfill):
+        mock_backfill.return_value = {"groups_processed": 1, "rows_updated": 2, "rows_with_outcomes": 10}
+        client = app.test_client()
+
+        unauthorized = client.post("/api/admin/backfill-outcomes")
+        self.assertEqual(unauthorized.status_code, 401)
+
+        authorized = client.post(
+            "/api/admin/backfill-outcomes",
+            headers={"X-Admin-Token": "test-token"},
+        )
+        self.assertEqual(authorized.status_code, 200)
+        payload = authorized.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["rows_updated"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

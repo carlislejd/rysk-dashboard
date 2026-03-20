@@ -25,11 +25,13 @@ from global_services import (
     enrich_trades_with_iv,
 )
 from inventory_services import fetch_inventory
+from scripts.backfill_outcomes import backfill_outcomes
 
 app = Flask(__name__)
 
 # Configuration
 ACCOUNT_ADDRESS = os.getenv("ACCOUNT_ADDRESS", "")
+ADMIN_BACKFILL_TOKEN = os.getenv("ADMIN_BACKFILL_TOKEN", "")
 
 # Initialize database on startup
 with app.app_context():
@@ -436,6 +438,31 @@ def api_global_outcomes():
         data = get_outcome_summary(conn)
         conn.close()
         return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/backfill-outcomes', methods=['POST'])
+def api_admin_backfill_outcomes():
+    """Protected admin endpoint to run outcome backfill on-demand."""
+    try:
+        if not ADMIN_BACKFILL_TOKEN:
+            return jsonify({
+                "success": False,
+                "error": "ADMIN_BACKFILL_TOKEN is not configured"
+            }), 503
+
+        provided = (request.headers.get("X-Admin-Token") or "").strip()
+        if not provided:
+            auth = (request.headers.get("Authorization") or "").strip()
+            if auth.lower().startswith("bearer "):
+                provided = auth[7:].strip()
+
+        if provided != ADMIN_BACKFILL_TOKEN:
+            return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+        result = backfill_outcomes() or {}
+        return jsonify({"success": True, **result})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

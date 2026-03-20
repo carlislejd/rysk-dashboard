@@ -16,7 +16,39 @@ services:
         value: "10000"
       - key: RYSK_SYNC_ENABLED
         value: "true"
+      - key: ADMIN_BACKFILL_TOKEN
+        generateValue: true
     disk:
       name: rysk-data
       mountPath: /data
       sizeGB: 1
+
+  # Weekly outcome backfill trigger (first pass on expiry day)
+  - type: cron
+    name: rysk-backfill-outcomes-pass-1
+    runtime: python
+    schedule: "30 09 * * 5"
+    buildCommand: ./scripts/render_build.sh
+    startCommand: |
+      curl -fsS -X POST "https://rysk-dashboard.onrender.com/api/admin/backfill-outcomes" \
+        -H "X-Admin-Token: ${ADMIN_BACKFILL_TOKEN}"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
+      - key: ADMIN_BACKFILL_TOKEN
+        sync: false
+
+  # Weekly outcome backfill trigger (second pass for late finalization)
+  - type: cron
+    name: rysk-backfill-outcomes-pass-2
+    runtime: python
+    schedule: "00 14 * * 5"
+    buildCommand: ./scripts/render_build.sh
+    startCommand: |
+      curl -fsS -X POST "https://rysk-dashboard.onrender.com/api/admin/backfill-outcomes" \
+        -H "X-Admin-Token: ${ADMIN_BACKFILL_TOKEN}"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
+      - key: ADMIN_BACKFILL_TOKEN
+        sync: false

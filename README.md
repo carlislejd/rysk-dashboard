@@ -125,3 +125,20 @@ Token addresses are pre-configured in `rpc_client.py`:
 
 - Rysk positions/history APIs (v12)
 - Hyperliquid APIs/RPC for spot and oracle-derived analytics
+
+## Outcome Automation
+
+To keep expiry outcomes fresh without restarts:
+
+- Use the protected admin endpoint:
+  - `POST /api/admin/backfill-outcomes`
+  - Header: `X-Admin-Token: <ADMIN_BACKFILL_TOKEN>`
+- Configure `ADMIN_BACKFILL_TOKEN` in environment.
+- Schedule two weekly runs on expiry day (example in `render.yaml`):
+  - `30 09 * * 5` (first pass)
+  - `00 14 * * 5` (second pass for late oracle finalization)
+
+Safety behavior:
+
+- Backfill only updates unresolved rows (`outcome IS NULL`, or provisional `Unknown` with missing `expiry_price_f`).
+- It does **not** overwrite finalized `Assigned`/`Returned` rows.

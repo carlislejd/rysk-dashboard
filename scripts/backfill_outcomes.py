@@ -30,7 +30,10 @@ def backfill_outcomes():
         FROM trades
         WHERE expiry IS NOT NULL
           AND expiry < ?
-          AND outcome IS NULL
+          AND (
+            outcome IS NULL
+            OR (outcome = 'Unknown' AND (expiry_price_f IS NULL OR expiry_price_f = 0))
+          )
           AND symbol != ''
         ORDER BY expiry
     """, (now,)).fetchall()
@@ -68,10 +71,15 @@ def backfill_outcomes():
                 pass
 
         if price is None or not finalized:
-            # Mark as Unknown
+            # Mark unresolved rows as Unknown. Assigned/Returned rows are never overwritten.
             conn.execute("""
-                UPDATE trades SET outcome = 'Unknown'
-                WHERE symbol = ? AND expiry = ? AND outcome IS NULL
+                UPDATE trades
+                SET outcome = 'Unknown'
+                WHERE symbol = ? AND expiry = ?
+                  AND (
+                    outcome IS NULL
+                    OR (outcome = 'Unknown' AND (expiry_price_f IS NULL OR expiry_price_f = 0))
+                  )
             """, (symbol, expiry_ts))
             count = conn.total_changes
             conn.commit()
@@ -79,11 +87,15 @@ def backfill_outcomes():
             total_updated += count
             continue
 
-        # Compute outcomes for all trades in this group
+        # Compute outcomes only for unresolved rows in this group.
         trades = conn.execute("""
             SELECT rowid, is_put, strike_f
             FROM trades
-            WHERE symbol = ? AND expiry = ? AND outcome IS NULL
+            WHERE symbol = ? AND expiry = ?
+              AND (
+                outcome IS NULL
+                OR (outcome = 'Unknown' AND (expiry_price_f IS NULL OR expiry_price_f = 0))
+              )
         """, (symbol, expiry_ts)).fetchall()
 
         for trade in trades:
@@ -111,6 +123,11 @@ def backfill_outcomes():
     total = conn.execute("SELECT COUNT(*) FROM trades WHERE outcome IS NOT NULL").fetchone()[0]
     print(f"\nDone. Updated {total_updated} trades. Total with outcomes: {total}")
     conn.close()
+    return {
+        "groups_processed": len(groups),
+        "rows_updated": total_updated,
+        "rows_with_outcomes": total,
+    }
 
 
 if __name__ == "__main__":
