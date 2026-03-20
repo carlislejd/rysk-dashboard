@@ -60,18 +60,18 @@ def account():
 @app.route('/docs')
 def docs():
     """Documentation for CLI and hosted endpoints."""
+    configured_base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
+    api_base = configured_base or request.host_url.rstrip("/")
     return render_template(
         'docs.html',
-        api_base=os.getenv("PUBLIC_BASE_URL", "https://rysk-dashboard.onrender.com").rstrip("/"),
-        sample_address=os.getenv(
-            "DOCS_SAMPLE_ADDRESS",
-            ACCOUNT_ADDRESS or "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
-        ),
+        api_base=api_base,
+        sample_address=os.getenv("DOCS_SAMPLE_ADDRESS", ACCOUNT_ADDRESS or ""),
     )
+
 
 @app.route('/api/positions')
 def api_positions():
-    """API endpoint for current positions"""
+    """API endpoint for current positions."""
     try:
         account_address = resolve_account_address()
         return jsonify({
@@ -181,9 +181,10 @@ def api_cli_positions_strikes():
             "error": str(e)
         }), 500
 
+
 @app.route('/api/history')
 def api_history():
-    """API endpoint for historical performance"""
+    """API endpoint for historical performance."""
     try:
         account_address = resolve_account_address()
         return jsonify({
@@ -200,7 +201,6 @@ def api_history():
             "success": False,
             "error": str(e)
         }), 500
-
 
 @app.route('/api/cli/positions/expiring')
 def api_cli_positions_expiring():

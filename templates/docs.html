@@ -24,38 +24,59 @@
         </header>
 
         <section class="card docs-section">
-            <h2>Hosted Endpoints (Click to Open JSON)</h2>
+            <h2>How To Use</h2>
+            <pre class="docs-code">1) Enter a wallet address above.
+2) Click "Apply Address".
+3) Click an endpoint card to preview JSON here.
+4) Click "Open Endpoint" to open that URL in a new tab.</pre>
+        </section>
+
+        <section class="card docs-section">
+            <h2>Hosted Endpoints (Preview Before Opening)</h2>
             <p class="subtitle">Base URL: <code>{{ api_base }}</code></p>
+            <div class="docs-address-row">
+                <input
+                    id="docs-address-input"
+                    class="account-input docs-address-input"
+                    type="text"
+                    value="{{ sample_address }}"
+                    placeholder="Enter wallet address (0x...)"
+                    spellcheck="false"
+                    autocomplete="off"
+                >
+                <button id="docs-apply-address" class="terminal-button" type="button">Apply Address</button>
+            </div>
+            <div id="docs-address-status" class="account-status"></div>
             <div class="docs-endpoint-grid">
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/account/validate?address={{ sample_address }}" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/account/validate?address={address}" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Account Validate</strong>
                     <span>GET /api/cli/account/validate?address=...</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/positions/open?address={{ sample_address }}" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/positions/open?address={address}" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Positions Open</strong>
                     <span>GET /api/cli/positions/open?address=...&symbol=...&strategy=...</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/positions/expiring?address={{ sample_address }}&expiry_date=2026-03-13" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/positions/expiring?address={address}&expiry_date=2026-03-13" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Positions Expiring</strong>
                     <span>GET /api/cli/positions/expiring?address=...&expiry_date=YYYY-MM-DD</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/positions/strikes?address={{ sample_address }}&symbol=UBTC" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/positions/strikes?address={address}&symbol=UBTC" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Positions Strikes</strong>
                     <span>GET /api/cli/positions/strikes?address=...&symbol=...</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/summary?address={{ sample_address }}" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/history/summary?address={address}" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Summary</strong>
                     <span>GET /api/cli/history/summary?address=...</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/expired?address={{ sample_address }}&outcome=assigned" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/history/expired?address={address}&outcome=assigned" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Expired</strong>
                     <span>GET /api/cli/history/expired?address=...&symbol=...&outcome=...</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/deep-dive?address={{ sample_address }}&symbol=WHYPE" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/history/deep-dive?address={address}&symbol=WHYPE" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Deep Dive</strong>
                     <span>GET /api/cli/history/deep-dive?address=...&symbol=...</span>
                 </a>
-                <a class="docs-endpoint" href="{{ api_base }}/api/cli/history/expiry-prices?address={{ sample_address }}&symbol=UBTC" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/cli/history/expiry-prices?address={address}&symbol=UBTC" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Expiry Prices</strong>
                     <span>GET /api/cli/history/expiry-prices?address=...&symbol=...&expiry_date=...</span>
                 </a>
@@ -63,39 +84,21 @@
         </section>
 
         <section class="card docs-section">
-            <h2>Example Output (Shape)</h2>
-            <pre class="docs-code">{
-  "success": true,
-  "account": "0x...",
-  "count": 2,
-  "filters": {"symbol": "UBTC", "strategy": "covered_call"},
-  "open_positions": [
-    {"symbol": "UBTC", "strategy": "covered_call", "type": "Call", "notional": 33500.0}
-  ]
-}
-
-{
-  "success": true,
-  "account": "0x...",
-  "filters": {"symbol": "UBTC", "expiry_date": null},
-  "group_count": 3,
-  "positions_considered": 14,
-  "groups": [
-    {
-      "symbol": "UBTC",
-      "expiry": 1773360000,
-      "expiry_date": "2026-03-13",
-      "avg_expiry_price": 68000.0
-    }
-  ]
-}</pre>
+            <h2>Example Output (Live Preview)</h2>
+            <div class="docs-output-toolbar">
+                <div id="docs-selected-endpoint" class="account-status">No endpoint selected.</div>
+                <div class="docs-output-actions">
+                    <button id="docs-output-expand" class="terminal-button" type="button">Expand</button>
+                    <a id="docs-open-endpoint" class="terminal-button docs-open-endpoint disabled" href="#" target="_blank" rel="noopener noreferrer">Open Endpoint</a>
+                </div>
+            </div>
+            <pre id="docs-live-output" class="docs-code">Select an endpoint card above to load live JSON preview.</pre>
         </section>
 
-        <section class="card docs-section">
-            <h2>Native Dashboard Endpoints</h2>
-            <pre class="docs-code">{{ api_base }}/api/positions?address={{ sample_address }}
-{{ api_base }}/api/history?address={{ sample_address }}</pre>
-        </section>
     </div>
+    <script>
+        window.DOCS_API_BASE = "{{ api_base }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/docs.js') }}"></script>
 </body>
 </html>

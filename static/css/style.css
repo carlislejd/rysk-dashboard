@@ -1292,12 +1292,30 @@ header h1 {
     padding: 12px;
     white-space: pre-wrap;
     overflow-x: auto;
+    max-height: 320px;
+}
+
+.docs-code.expanded {
+    max-height: none;
 }
 
 .docs-endpoint-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 10px;
+}
+
+.docs-address-row {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0 14px;
+    flex-wrap: wrap;
+}
+
+.docs-address-input {
+    min-width: 320px;
+    max-width: 560px;
+    width: 100%;
 }
 
 .docs-endpoint {
@@ -1326,6 +1344,26 @@ header h1 {
     font-family: var(--font-mono);
     font-size: 0.76em;
     color: var(--text-muted);
+}
+
+.docs-output-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 0 8px;
+    flex-wrap: wrap;
+}
+
+.docs-output-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.docs-open-endpoint.disabled {
+    pointer-events: none;
+    opacity: 0.4;
 }
 
 /* --- APY/Risk --- */

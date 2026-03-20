@@ -6,12 +6,14 @@ from unittest.mock import patch
 
 import rysk_cli
 
+TEST_ADDRESS = "0x1111111111111111111111111111111111111111"
+
 
 class TestCli(unittest.TestCase):
     def test_address_validate_json(self):
         buf = io.StringIO()
         with redirect_stdout(buf):
-            code = rysk_cli.main(["account", "validate", "--address", "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B", "--json"])
+            code = rysk_cli.main(["account", "validate", "--address", TEST_ADDRESS, "--json"])
         self.assertEqual(code, 0)
         payload = json.loads(buf.getvalue())
         self.assertTrue(payload["ok"])
@@ -19,7 +21,7 @@ class TestCli(unittest.TestCase):
     @patch("rysk_cli.get_positions_payload")
     def test_positions_open_json_schema(self, mock_positions):
         mock_positions.return_value = {
-            "account": "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+            "account": TEST_ADDRESS,
             "positions": {
                 "open_positions": [
                     {
@@ -43,7 +45,7 @@ class TestCli(unittest.TestCase):
                     "positions",
                     "open",
                     "--address",
-                    "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+                    TEST_ADDRESS,
                     "--json",
                 ]
             )
@@ -56,7 +58,7 @@ class TestCli(unittest.TestCase):
     @patch("rysk_cli.get_history_payload")
     def test_history_summary_json_schema(self, mock_history):
         mock_history.return_value = {
-            "account": "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+            "account": TEST_ADDRESS,
             "history": {
                 "summary": {
                     "expired_count": 10,
@@ -76,7 +78,7 @@ class TestCli(unittest.TestCase):
                     "history",
                     "summary",
                     "--address",
-                    "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+                    TEST_ADDRESS,
                     "--json",
                 ]
             )
@@ -88,7 +90,7 @@ class TestCli(unittest.TestCase):
     @patch("rysk_cli.get_positions_payload")
     def test_positions_expiring_totals(self, mock_positions):
         mock_positions.return_value = {
-            "account": "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+            "account": TEST_ADDRESS,
             "positions": {
                 "open_positions": [
                     {
@@ -134,7 +136,7 @@ class TestCli(unittest.TestCase):
                     "positions",
                     "expiring",
                     "--address",
-                    "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+                    TEST_ADDRESS,
                     "--expiry-date",
                     "2026-03-13",
                     "--json",
@@ -149,7 +151,7 @@ class TestCli(unittest.TestCase):
     @patch("rysk_cli.get_history_payload")
     def test_history_expiry_prices_grouping(self, mock_history):
         mock_history.return_value = {
-            "account": "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+            "account": TEST_ADDRESS,
             "history": {
                 "expired_positions": [
                     {
@@ -190,7 +192,7 @@ class TestCli(unittest.TestCase):
                     "history",
                     "expiry-prices",
                     "--address",
-                    "0xbE504fBfC1AD30708a79f5821ed5eA6Eef1A877B",
+                    TEST_ADDRESS,
                     "--json",
                 ]
             )
