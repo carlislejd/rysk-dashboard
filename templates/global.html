@@ -94,12 +94,18 @@
             <div class="pager" id="detail-trades-pager"></div>
         </section>
 
-        <!-- 6. Expiry Outcomes -->
+        <!-- 6. Expiry Explorer -->
         <section class="card">
-            <h2>Expiry Outcomes</h2>
-            <div id="outcomes-loading" class="loading">Loading outcomes...</div>
-            <div id="outcomes-content" style="display: none;">
-                <div class="summary-grid" id="outcomes-summary"></div>
+            <h2>Expiry Explorer</h2>
+            <div id="expiry-loading" class="loading">Loading expiries...</div>
+            <div id="expiry-content" style="display: none;">
+                <div class="asset-carousel" style="margin-top: 0;">
+                    <button class="carousel-arrow left" id="expiry-explorer-left">&#8249;</button>
+                    <div class="tabs tab-carousel" id="expiry-explorer-tabs"></div>
+                    <button class="carousel-arrow right" id="expiry-explorer-right">&#8250;</button>
+                </div>
+                <div class="summary-grid" id="expiry-summary"></div>
+                <div id="expiry-detail-content" style="margin-top: 16px;"></div>
             </div>
         </section>
 

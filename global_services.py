@@ -378,6 +378,81 @@ def get_asset_detail(conn, symbol, expiry=None):
     }
 
 
+def get_expiry_overview(conn):
+    """List of all expiry dates with rich aggregate stats for the expiry section."""
+    now = int(time.time())
+
+    rows = conn.execute("""
+        SELECT expiry,
+               COUNT(*) as total_orders,
+               COUNT(DISTINCT symbol) as asset_count,
+               SUM(notional_f) as total_notional,
+               SUM(premium_f) as total_premium,
+               AVG(apr_f) as avg_apr,
+               SUM(CASE WHEN is_put = 1 THEN 1 ELSE 0 END) as put_count,
+               SUM(CASE WHEN is_put = 0 THEN 1 ELSE 0 END) as call_count,
+               SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END) as put_notional,
+               SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END) as call_notional,
+               SUM(CASE WHEN outcome = 'Assigned' THEN 1 ELSE 0 END) as assigned,
+               SUM(CASE WHEN outcome = 'Returned' THEN 1 ELSE 0 END) as returned,
+               AVG(expiry - created_at) as avg_dte_seconds,
+               MAX(premium_f) as max_single_premium,
+               MAX(notional_f) as max_single_notional
+        FROM trades
+        WHERE expiry IS NOT NULL AND symbol != ''
+        GROUP BY expiry
+        ORDER BY expiry DESC
+    """).fetchall()
+
+    expiries = []
+    for r in rows:
+        expired = r["expiry"] < now
+        total = r["total_orders"]
+        assigned = r["assigned"] or 0
+        returned = r["returned"] or 0
+        outcome_total = assigned + returned
+        premium_yield = (r["total_premium"] / r["total_notional"] * 100) if r["total_notional"] else 0
+        avg_dte_days = (r["avg_dte_seconds"] or 0) / 86400
+
+        # Most traded asset for this expiry
+        top_asset = conn.execute("""
+            SELECT symbol, COUNT(*) as cnt FROM trades
+            WHERE expiry = ? AND symbol != ''
+            GROUP BY symbol ORDER BY cnt DESC LIMIT 1
+        """, (r["expiry"],)).fetchone()
+
+        # All assets for this expiry
+        assets = [row[0] for row in conn.execute("""
+            SELECT DISTINCT symbol FROM trades
+            WHERE expiry = ? AND symbol != '' ORDER BY symbol
+        """, (r["expiry"],)).fetchall()]
+
+        expiries.append({
+            "expiry": r["expiry"],
+            "expired": expired,
+            "total_orders": total,
+            "asset_count": r["asset_count"],
+            "assets": assets,
+            "top_asset": top_asset["symbol"] if top_asset else None,
+            "total_notional": r["total_notional"],
+            "total_premium": r["total_premium"],
+            "premium_yield": round(premium_yield, 2),
+            "avg_apr": r["avg_apr"],
+            "avg_dte_days": round(avg_dte_days, 1),
+            "put_count": r["put_count"],
+            "call_count": r["call_count"],
+            "put_notional": r["put_notional"],
+            "call_notional": r["call_notional"],
+            "assigned": assigned,
+            "returned": returned,
+            "return_rate": round(returned / outcome_total * 100, 1) if outcome_total else None,
+            "max_single_premium": r["max_single_premium"],
+            "max_single_notional": r["max_single_notional"],
+        })
+
+    return {"expiries": expiries}
+
+
 def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None):
     """Paginated recent trades feed, optionally filtered by asset and/or expiry."""
     offset = (page - 1) * limit

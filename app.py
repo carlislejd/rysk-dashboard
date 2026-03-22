@@ -22,6 +22,7 @@ from global_services import (
     get_asset_summary,
     get_asset_detail,
     get_outcome_summary,
+    get_expiry_overview,
     enrich_trades_with_iv,
 )
 from inventory_services import fetch_inventory
@@ -436,6 +437,17 @@ def api_global_outcomes():
     try:
         conn = get_db()
         data = get_outcome_summary(conn)
+        conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/global/expiries')
+def api_global_expiries():
+    """Rich per-expiry overview stats"""
+    try:
+        conn = get_db()
+        data = get_expiry_overview(conn)
         conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
