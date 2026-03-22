@@ -9,6 +9,76 @@ function setupSortablePositionsDetailTable() {
     setupSortableTable('positions-detail-asset-table');
 }
 
+function renderOpenPositionsPage(page) {
+    if (page !== undefined) openPositionsPage = page;
+    const container = document.getElementById('open-positions-container');
+    if (!container) return;
+
+    if (openPositionsData.length === 0) {
+        container.innerHTML = '<p class="empty-state">No open option positions right now.</p>';
+        return;
+    }
+
+    const total = openPositionsData.length;
+    const totalPages = Math.ceil(total / OPEN_POSITIONS_PER_PAGE);
+    openPositionsPage = Math.max(1, Math.min(openPositionsPage, totalPages));
+    const start = (openPositionsPage - 1) * OPEN_POSITIONS_PER_PAGE;
+    const pageData = openPositionsData.slice(start, start + OPEN_POSITIONS_PER_PAGE);
+
+    let html = `
+        <table id="current-open-positions-table" class="data-table">
+            <thead>
+                <tr>
+                    <th data-sort-key="symbol">Symbol</th>
+                    <th data-sort-key="strategy">Strategy</th>
+                    <th data-sort-key="side">Side</th>
+                    <th data-sort-key="type">Type</th>
+                    <th data-sort-key="created">Created</th>
+                    <th data-sort-key="expiry">Expiry</th>
+                    <th data-sort-key="quantity">Quantity</th>
+                    <th data-sort-key="strike">Strike</th>
+                    <th data-sort-key="premium">Premium</th>
+                    <th data-sort-key="apr">APR</th>
+                    <th data-sort-key="status">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const pos of pageData) {
+        html += `
+            <tr>
+                <td data-sort-key="symbol" data-sort-value="${pos.symbol || ''}">${pos.symbol || '—'}</td>
+                <td data-sort-key="strategy" data-sort-value="${pos.strategy || ''}">${strategyBadge(pos)}</td>
+                <td data-sort-key="side" data-sort-value="${pos.side || ''}">${sideBadge(pos.side)}</td>
+                <td data-sort-key="type" data-sort-value="${pos.type || ''}">${pos.type || '—'}</td>
+                <td data-sort-key="created" data-sort-value="${pos.created_at || ''}">${formatDateLabel(pos.created_at)}</td>
+                <td data-sort-key="expiry" data-sort-value="${pos.expiry_date || ''}">${formatDateLabel(pos.expiry_date)}</td>
+                <td data-sort-key="quantity" data-sort-value="${pos.quantity ?? ''}">${formatNumber(pos.quantity, 4)}</td>
+                <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatStrike(pos.strike)}</td>
+                <td data-sort-key="premium" data-sort-value="${pos.premium ?? ''}">${formatCurrency(pos.premium || 0)}</td>
+                <td data-sort-key="apr" data-sort-value="${pos.apr ?? ''}">${formatPercentage(pos.apr)}</td>
+                <td data-sort-key="status" data-sort-value="${pos.status || ''}">${statusBadge(pos.status)}</td>
+            </tr>
+        `;
+    }
+
+    html += '</tbody></table>';
+
+    if (totalPages > 1) {
+        html += `
+            <div class="pager">
+                <button class="pager-btn" onclick="renderOpenPositionsPage(${openPositionsPage - 1})" ${openPositionsPage <= 1 ? 'disabled' : ''}>Prev</button>
+                <span class="pager-info">Page ${openPositionsPage} of ${totalPages} (${total} positions)</span>
+                <button class="pager-btn" onclick="renderOpenPositionsPage(${openPositionsPage + 1})" ${openPositionsPage >= totalPages ? 'disabled' : ''}>Next</button>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+    setupSortableOpenPositionsTable();
+}
+
 let defaultAccount = '';
 let currentAccount = '';
 let accountInputEl = null;
@@ -59,6 +129,8 @@ function setAccountStatus(message = '', isError = false) {
 
 let positionsAssetSummary = [];
 let openPositionsData = [];
+let openPositionsPage = 1;
+const OPEN_POSITIONS_PER_PAGE = 15;
 let selectedAssetSymbol = null;
 let selectedAssetExpiry = '';
 let historyDataCache = null;
@@ -187,57 +259,15 @@ async function loadPositions() {
         `;
 
         html += `<h3 class="subsection-title">Current Open Option Positions (${openTitleCount})</h3>`;
-
-        if (openPositions.length > 0) {
-            html += `
-                <table id="current-open-positions-table" class="data-table">
-                    <thead>
-                        <tr>
-                            <th data-sort-key="symbol">Symbol</th>
-                            <th data-sort-key="strategy">Strategy</th>
-                            <th data-sort-key="side">Side</th>
-                            <th data-sort-key="type">Type</th>
-                            <th data-sort-key="created">Created</th>
-                            <th data-sort-key="expiry">Expiry</th>
-                            <th data-sort-key="quantity">Quantity</th>
-                            <th data-sort-key="strike">Strike</th>
-                            <th data-sort-key="premium">Premium</th>
-                            <th data-sort-key="apr">APR</th>
-                            <th data-sort-key="status">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            for (const pos of openPositions) {
-                html += `
-                    <tr>
-                        <td data-sort-key="symbol" data-sort-value="${pos.symbol || ''}">${pos.symbol || '—'}</td>
-                        <td data-sort-key="strategy" data-sort-value="${pos.strategy || ''}">${strategyBadge(pos)}</td>
-                        <td data-sort-key="side" data-sort-value="${pos.side || ''}">${sideBadge(pos.side)}</td>
-                        <td data-sort-key="type" data-sort-value="${pos.type || ''}">${pos.type || '—'}</td>
-                        <td data-sort-key="created" data-sort-value="${pos.created_at || ''}">${formatDateLabel(pos.created_at)}</td>
-                        <td data-sort-key="expiry" data-sort-value="${pos.expiry_date || ''}">${formatDateLabel(pos.expiry_date)}</td>
-                        <td data-sort-key="quantity" data-sort-value="${pos.quantity ?? ''}">${formatNumber(pos.quantity, 4)}</td>
-                        <td data-sort-key="strike" data-sort-value="${pos.strike ?? ''}">${formatStrike(pos.strike)}</td>
-                        <td data-sort-key="premium" data-sort-value="${pos.premium ?? ''}">${formatCurrency(pos.premium || 0)}</td>
-                        <td data-sort-key="apr" data-sort-value="${pos.apr ?? ''}">${formatPercentage(pos.apr)}</td>
-                        <td data-sort-key="status" data-sort-value="${pos.status || ''}">${statusBadge(pos.status)}</td>
-                    </tr>
-                `;
-            }
-
-            html += '</tbody></table>';
-        } else {
-            html += '<p class="empty-state">No open option positions right now.</p>';
-        }
+        html += '<div id="open-positions-container"></div>';
 
         content.innerHTML = html;
         content.style.display = 'block';
-        setupSortableOpenPositionsTable();
 
         positionsAssetSummary = assetSummary;
         openPositionsData = openPositions;
+        openPositionsPage = 1;
+        renderOpenPositionsPage();
         setupAssetSummaryHandlers();
 
         if (previousAsset && assetSummary.some(a => a.symbol === previousAsset)) {
