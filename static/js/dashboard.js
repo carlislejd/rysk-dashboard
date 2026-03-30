@@ -1114,7 +1114,7 @@ function renderAccountPnl(historyData) {
 
     pnlGrid.innerHTML = `
         <div class="summary-card">
-            <div class="summary-label">Returned Premium</div>
+            <div class="summary-label">Returned Position Premium</div>
             <div class="summary-value" style="color: var(--accent);">${formatCurrency(returnedPremium)}</div>
             <div class="summary-subtext">Kept from ${returnedPositions.length} returned positions</div>
         </div>
@@ -1180,7 +1180,7 @@ function renderAccountPnl(historyData) {
         Plotly.newPlot('pnl-chart-account', [
             { x: dates, y: dailyPrem, type: 'bar', name: 'Expiry Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Returned Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },

@@ -660,7 +660,7 @@ async function loadPnlChart(days) {
         Plotly.newPlot('pnl-chart', [
             { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
@@ -775,7 +775,7 @@ async function loadOutcomes() {
             <div class="summary-card"><div class="summary-label">Assigned</div><div class="summary-value" style="color: var(--color-error);">${formatNumber(t.assigned, 0)}</div><div class="summary-subtext">${formatPercentage(t.assigned_pct)}</div></div>
             <div class="summary-card"><div class="summary-label">Returned</div><div class="summary-value" style="color: var(--accent);">${formatNumber(t.returned, 0)}</div><div class="summary-subtext">${formatPercentage(t.returned_pct)}</div></div>
             <div class="summary-card"><div class="summary-label">Total Premium</div><div class="summary-value">${compactCurrency(t.total_premium)}</div></div>
-            <div class="summary-card"><div class="summary-label">Returned Premium</div><div class="summary-value" style="color: var(--accent);">${compactCurrency(t.returned_premium)}</div><div class="summary-subtext">Pure profit</div></div>
+            <div class="summary-card"><div class="summary-label">Returned Position Premium</div><div class="summary-value" style="color: var(--accent);">${compactCurrency(t.returned_premium)}</div><div class="summary-subtext">Pure profit</div></div>
         `;
 
         if (data.by_asset && data.by_asset.length) {
