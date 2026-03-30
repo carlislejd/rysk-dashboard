@@ -277,70 +277,95 @@ function renderStrikeChart(detail) {
     if (!strikes.length) { document.getElementById('detail-strike-chart').innerHTML = '<div class="loading">No strike data</div>'; return; }
 
     const currentPrice = detail.current_price;
-    const strikeLabels = strikes.map(s => formatStrike(s.strike));
+    // Use raw numeric values for x-axis so positions align with actual prices
+    const strikeValues = strikes.map(s => s.strike);
+    const minStrike = strikeValues[0];
+    const maxStrike = strikeValues[strikeValues.length - 1];
+    // Compute bar width from minimum gap between consecutive strikes
+    let barWidth = (maxStrike - minStrike) / strikes.length;
+    for (let i = 1; i < strikeValues.length; i++) {
+        const gap = strikeValues[i] - strikeValues[i - 1];
+        if (gap > 0 && gap < barWidth) barWidth = gap;
+    }
+    barWidth *= 0.8; // slight padding
 
-    // Build shapes + annotations for current price vertical line
     const shapes = [];
     const annotations = [];
+
     if (currentPrice != null) {
-        // Find where current price falls relative to strike labels
         const cpLabel = formatStrike(currentPrice);
-        // Use a vertical line at the closest strike index
-        let closestIdx = 0;
-        let closestDist = Infinity;
-        strikes.forEach((s, i) => {
-            const d = Math.abs(s.strike - currentPrice);
-            if (d < closestDist) { closestDist = d; closestIdx = i; }
-        });
-        // Interpolate position between strikes for a precise line
-        let xPos = closestIdx;
-        if (strikes.length > 1) {
-            // Find the two strikes that bracket the current price
-            for (let i = 0; i < strikes.length - 1; i++) {
-                const lo = strikes[i].strike, hi = strikes[i + 1].strike;
-                if ((currentPrice >= lo && currentPrice <= hi) || (currentPrice <= lo && currentPrice >= hi)) {
-                    const frac = (currentPrice - lo) / (hi - lo);
-                    xPos = i + frac;
-                    break;
-                }
-            }
-            // If price is below all strikes or above all strikes, clamp
-            if (currentPrice <= strikes[0].strike) xPos = -0.3;
-            if (currentPrice >= strikes[strikes.length - 1].strike) xPos = strikes.length - 0.7;
-        }
+        const xPad = barWidth; // small padding beyond the bar edges
+        const xMin = minStrike - xPad;
+        const xMax = maxStrike + xPad;
 
-        // Count puts ITM (strike > price) and calls ITM (strike < price)
-        let putsItm = 0, callsItm = 0, putsItmNotional = 0, callsItmNotional = 0;
+        // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
+        let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
         for (const s of strikes) {
-            if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
             if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
+            if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
         }
-        const totalItmNotional = putsItmNotional + callsItmNotional;
 
+        // --- ITM Calls zone (left of price) ---
         shapes.push({
-            type: 'line', x0: xPos, x1: xPos, y0: 0, y1: 1, yref: 'paper',
-            line: { color: 'rgba(244, 244, 245, 0.5)', width: 1.5, dash: 'dot' }
+            type: 'rect', x0: xMin, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: 'rgba(56, 189, 248, 0.04)', line: { width: 0 }, layer: 'below'
         });
-        const itmLabel = totalItmNotional > 0 ? ` · ${compactCurrency(totalItmNotional)} ITM` : '';
+        // --- ITM Puts zone (right of price) ---
+        shapes.push({
+            type: 'rect', x0: currentPrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: 'rgba(239, 112, 112, 0.04)', line: { width: 0 }, layer: 'below'
+        });
+
+        // Current price divider line
+        shapes.push({
+            type: 'line', x0: currentPrice, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(244, 244, 245, 0.35)', width: 1.5, dash: 'dot' }
+        });
+
+        // Zone labels — positioned inside each zone
+        const callZoneMid = (xMin + currentPrice) / 2;
+        const putZoneMid = (currentPrice + xMax) / 2;
+
+        if (callsItm > 0 || callsItmNotional > 0) {
+            annotations.push({
+                x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${callsItm} Call${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
+                showarrow: false,
+                font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+            });
+        }
+
+        if (putsItm > 0 || putsItmNotional > 0) {
+            annotations.push({
+                x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${putsItm} Put${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
+                showarrow: false,
+                font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+            });
+        }
+
+        // Current price label (centered on line)
         annotations.push({
-            x: xPos, y: 1, yref: 'paper', yanchor: 'bottom',
-            text: `Price ${cpLabel}${itmLabel}`,
+            x: currentPrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
+            text: `<b>Price ${cpLabel}</b>`,
             showarrow: false,
             font: { size: 10, color: '#f4f4f5', family: 'Inter, system-ui, sans-serif' },
-            bgcolor: 'rgba(9,9,11,0.8)', borderpad: 4,
+            bgcolor: 'rgba(9,9,11,0.85)', borderpad: 3,
         });
     }
 
     Plotly.newPlot('detail-strike-chart', [
-        { x: strikeLabels, y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(239, 112, 112, 0.7)' } },
-        { x: strikeLabels, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' } },
+        { x: strikeValues, y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(239, 112, 112, 0.7)' }, width: barWidth },
+        { x: strikeValues, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' }, width: barWidth },
     ], {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
         font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
-        margin: { l: 60, r: 20, t: 30, b: 60 },
-        xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
+        margin: { l: 60, r: 20, t: 40, b: 60 },
+        xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickprefix: '$', tickangle: -45 },
         yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickprefix: '$' },
-        legend: { orientation: 'h', y: -0.12, font: { size: 11 } }, bargap: 0.15,
+        legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
         shapes, annotations,
     }, { responsive: true, displayModeBar: false });
 }
