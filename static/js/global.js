@@ -275,16 +275,73 @@ function renderDetailSummary(detail) {
 function renderStrikeChart(detail) {
     const strikes = detail.strikes || [];
     if (!strikes.length) { document.getElementById('detail-strike-chart').innerHTML = '<div class="loading">No strike data</div>'; return; }
+
+    const currentPrice = detail.current_price;
+    const strikeLabels = strikes.map(s => formatStrike(s.strike));
+
+    // Build shapes + annotations for current price vertical line
+    const shapes = [];
+    const annotations = [];
+    if (currentPrice != null) {
+        // Find where current price falls relative to strike labels
+        const cpLabel = formatStrike(currentPrice);
+        // Use a vertical line at the closest strike index
+        let closestIdx = 0;
+        let closestDist = Infinity;
+        strikes.forEach((s, i) => {
+            const d = Math.abs(s.strike - currentPrice);
+            if (d < closestDist) { closestDist = d; closestIdx = i; }
+        });
+        // Interpolate position between strikes for a precise line
+        let xPos = closestIdx;
+        if (strikes.length > 1) {
+            // Find the two strikes that bracket the current price
+            for (let i = 0; i < strikes.length - 1; i++) {
+                const lo = strikes[i].strike, hi = strikes[i + 1].strike;
+                if ((currentPrice >= lo && currentPrice <= hi) || (currentPrice <= lo && currentPrice >= hi)) {
+                    const frac = (currentPrice - lo) / (hi - lo);
+                    xPos = i + frac;
+                    break;
+                }
+            }
+            // If price is below all strikes or above all strikes, clamp
+            if (currentPrice <= strikes[0].strike) xPos = -0.3;
+            if (currentPrice >= strikes[strikes.length - 1].strike) xPos = strikes.length - 0.7;
+        }
+
+        // Count puts ITM (strike > price) and calls ITM (strike < price)
+        let putsItm = 0, callsItm = 0, putsItmNotional = 0, callsItmNotional = 0;
+        for (const s of strikes) {
+            if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
+            if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
+        }
+        const totalItmNotional = putsItmNotional + callsItmNotional;
+
+        shapes.push({
+            type: 'line', x0: xPos, x1: xPos, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(244, 244, 245, 0.5)', width: 1.5, dash: 'dot' }
+        });
+        const itmLabel = totalItmNotional > 0 ? ` · ${compactCurrency(totalItmNotional)} ITM` : '';
+        annotations.push({
+            x: xPos, y: 1, yref: 'paper', yanchor: 'bottom',
+            text: `Price ${cpLabel}${itmLabel}`,
+            showarrow: false,
+            font: { size: 10, color: '#f4f4f5', family: 'Inter, system-ui, sans-serif' },
+            bgcolor: 'rgba(9,9,11,0.8)', borderpad: 4,
+        });
+    }
+
     Plotly.newPlot('detail-strike-chart', [
-        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(239, 112, 112, 0.7)' } },
-        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' } },
+        { x: strikeLabels, y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(239, 112, 112, 0.7)' } },
+        { x: strikeLabels, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' } },
     ], {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
         font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
-        margin: { l: 60, r: 20, t: 20, b: 60 },
+        margin: { l: 60, r: 20, t: 30, b: 60 },
         xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
         yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickprefix: '$' },
         legend: { orientation: 'h', y: -0.12, font: { size: 11 } }, bargap: 0.15,
+        shapes, annotations,
     }, { responsive: true, displayModeBar: false });
 }
 
@@ -723,42 +780,6 @@ async function loadPutCallRatio(days) {
 
 // ── Assignment Rate Trend ──
 
-async function loadAssignmentTrend() {
-    const loading = document.getElementById('assignment-loading');
-    const chart = document.getElementById('assignment-chart');
-    try {
-        const resp = await fetch('/api/global/assignment-trend');
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error);
-
-        const filtered = data.data.filter(d => d.assignment_rate !== null);
-        const dates = filtered.map(d => formatUnixDate(d.expiry));
-        const assignRates = filtered.map(d => d.assignment_rate);
-        const returnRates = filtered.map(d => d.return_rate);
-        const totals = filtered.map(d => d.total);
-
-        loading.style.display = 'none';
-        chart.style.display = 'block';
-
-        Plotly.newPlot('assignment-chart', [
-            { x: dates, y: totals, type: 'bar', name: 'Total Trades', marker: { color: 'rgba(161, 161, 170, 0.2)' }, yaxis: 'y2' },
-            { x: dates, y: assignRates, type: 'scatter', mode: 'lines+markers', name: 'Assignment Rate', line: { color: '#ef7070', width: 2 }, marker: { size: 5 } },
-            { x: dates, y: returnRates, type: 'scatter', mode: 'lines+markers', name: 'Return Rate', line: { color: '#34d399', width: 2 }, marker: { size: 5 } },
-        ], {
-            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
-            margin: { l: 50, r: 60, t: 20, b: 60 },
-            xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
-            yaxis: { title: 'Rate (%)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
-            yaxis2: { title: 'Trades', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 } },
-            legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
-            bargap: 0.15,
-        }, { responsive: true, displayModeBar: false });
-    } catch (e) {
-        loading.textContent = 'Failed to load assignment trend: ' + e.message;
-    }
-}
-
 // ── Outcomes Breakdown ──
 
 async function loadOutcomes() {
@@ -820,7 +841,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadRecent(),
         loadAssets(),
         loadPutCallRatio(90),
-        loadAssignmentTrend(),
         loadOutcomes(),
         loadExpiryExplorer(),
     ]).then(() => {

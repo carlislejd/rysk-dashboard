@@ -30,6 +30,7 @@ from global_services import (
     get_premium_over_time,
 )
 from inventory_services import fetch_inventory
+from hyperliquid_client import get_current_price
 from scripts.backfill_outcomes import backfill_outcomes
 
 app = Flask(__name__)
@@ -424,7 +425,7 @@ def api_global_assets():
 
 @app.route('/api/global/asset/<symbol>')
 def api_global_asset_detail(symbol):
-    """Detailed data for a single asset: strikes, expiries"""
+    """Detailed data for a single asset: strikes, expiries, current price"""
     try:
         expiry = request.args.get("expiry", None, type=int)
         conn = get_db()
@@ -432,6 +433,10 @@ def api_global_asset_detail(symbol):
             data = get_asset_detail(conn, symbol, expiry=expiry)
         finally:
             conn.close()
+        # Fetch live price for the asset
+        short = symbol.split('-')[0] if '-' in symbol else symbol
+        current_price = get_current_price(short)
+        data["current_price"] = current_price
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

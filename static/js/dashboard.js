@@ -1064,23 +1064,75 @@ function renderPortfolioHealth(positionsData, historyData) {
 
     // Expiring this week alert
     if (expiringThisWeek.length > 0) {
+        // Build price lookup from asset_summary
+        const assetSummary = positionsData?.asset_summary || [];
+        const priceMap = {};
+        for (const a of assetSummary) {
+            if (a.symbol && a.current_price != null) priceMap[a.symbol] = a.current_price;
+        }
+
         const totalExpiringNotional = expiringThisWeek.reduce((s, p) => s + (p.notional || 0), 0);
         const totalExpiringPremium = expiringThisWeek.reduce((s, p) => s + (p.premium || 0), 0);
+        const itmCount = expiringThisWeek.filter(p => {
+            const cp = priceMap[p.symbol];
+            if (cp == null || !p.strike) return false;
+            const isPut = (p.type || '').toLowerCase() === 'put';
+            return isPut ? cp < p.strike : cp > p.strike;
+        }).length;
+
         healthExpiring.innerHTML = `
             <h3 class="subsection-title">Expiring This Week (${expiringThisWeek.length})</h3>
-            <div style="margin-bottom: 8px; font-size: 0.85em; color: var(--text-muted);">
-                ${formatCurrency(totalExpiringNotional, 0)} notional · ${formatCurrency(totalExpiringPremium)} premium at stake
+            <div style="margin-bottom: 12px; font-size: 0.85em; color: var(--text-muted);">
+                ${formatCurrency(totalExpiringNotional, 0)} notional · ${formatCurrency(totalExpiringPremium)} premium at stake${itmCount > 0 ? ` · <span style="color: var(--color-error);">${itmCount} ITM</span>` : ''}
             </div>
             <table class="data-table">
-                <thead><tr><th>Asset</th><th>Strategy</th><th>Strike</th><th>Days</th><th>Premium</th><th>APR</th></tr></thead>
-                <tbody>${expiringThisWeek.map(p => `<tr>
-                    <td>${p.symbol || '—'}</td>
-                    <td>${strategyBadge(p)}</td>
-                    <td>${formatStrike(p.strike)}</td>
-                    <td>${formatNumber(p.days_to_expiry, 1)}</td>
-                    <td>${formatCurrency(p.premium || 0)}</td>
-                    <td>${formatPercentage(p.apr)}</td>
-                </tr>`).join('')}</tbody>
+                <thead><tr><th>Asset</th><th>Strategy</th><th>Strike vs Price</th><th>Days</th><th>Premium</th><th>Status</th></tr></thead>
+                <tbody>${expiringThisWeek.map(p => {
+                    const cp = priceMap[p.symbol];
+                    const isPut = (p.type || '').toLowerCase() === 'put';
+                    const hasPrice = cp != null && p.strike;
+                    const itm = hasPrice && (isPut ? cp < p.strike : cp > p.strike);
+                    const statusColor = !hasPrice ? 'var(--text-muted)' : itm ? 'var(--color-error)' : 'var(--accent)';
+                    const statusLabel = !hasPrice ? '—' : itm ? 'ITM' : 'OTM';
+
+                    // Build a mini strike-vs-price bar
+                    let miniBar = '';
+                    if (hasPrice) {
+                        const lo = Math.min(p.strike, cp) * 0.95;
+                        const hi = Math.max(p.strike, cp) * 1.05;
+                        const range = hi - lo || 1;
+                        const strikePct = ((p.strike - lo) / range * 100).toFixed(1);
+                        const pricePct = ((cp - lo) / range * 100).toFixed(1);
+                        const barColor = itm ? 'var(--color-error)' : 'var(--accent)';
+                        const leftPct = Math.min(strikePct, pricePct);
+                        const widthPct = Math.abs(strikePct - pricePct);
+                        const pctFromStrike = ((cp - p.strike) / p.strike * 100).toFixed(1);
+                        const pctLabel = (pctFromStrike >= 0 ? '+' : '') + pctFromStrike + '%';
+
+                        miniBar = `
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="flex: 1; min-width: 80px;">
+                                    <div style="position: relative; height: 6px; background: rgba(255,255,255,0.04); border-radius: 3px; overflow: visible;">
+                                        <div style="position: absolute; left: ${leftPct}%; width: ${Math.max(widthPct, 1)}%; height: 100%; background: ${barColor}; border-radius: 3px; opacity: 0.5;"></div>
+                                        <div style="position: absolute; left: ${strikePct}%; top: -3px; width: 2px; height: 12px; background: var(--text-primary); border-radius: 1px;" title="Strike ${formatStrike(p.strike)}"></div>
+                                        <div style="position: absolute; left: ${pricePct}%; top: -2px; width: 6px; height: 6px; margin-left: -2px; border-radius: 50%; border: 1.5px solid ${barColor}; background: var(--bg);" title="Price ${formatCurrency(cp)}"></div>
+                                    </div>
+                                </div>
+                                <span style="font-size: 0.78em; color: var(--text-muted); white-space: nowrap;">${formatStrike(p.strike)} <span style="color: ${barColor};">${pctLabel}</span></span>
+                            </div>`;
+                    } else {
+                        miniBar = `<span>${formatStrike(p.strike)}</span>`;
+                    }
+
+                    return `<tr>
+                        <td>${p.symbol || '—'}</td>
+                        <td>${strategyBadge(p)}</td>
+                        <td style="min-width: 200px;">${miniBar}</td>
+                        <td>${formatNumber(p.days_to_expiry, 1)}</td>
+                        <td>${formatCurrency(p.premium || 0)}</td>
+                        <td><span style="color: ${statusColor}; font-weight: 500; font-size: 0.82em;">${statusLabel}</span></td>
+                    </tr>`;
+                }).join('')}</tbody>
             </table>
         `;
     } else {
