@@ -20,6 +20,10 @@ ASSET_MAPPING = {
 # Cache for API instance
 _api_instance = None
 
+# Cache all_mids result to avoid redundant full-fetch per asset
+_mids_cache = {"data": None, "timestamp": 0}
+_MIDS_CACHE_TTL = 30  # 30 seconds
+
 def get_hyperliquid_api():
     """Get or create Hyperliquid API instance"""
     global _api_instance
@@ -76,15 +80,20 @@ def get_price_history(asset: str, days: int = 7, interval: str = "1h"):
         return None
 
 def get_current_price(asset: str):
-    """Get current price for an asset"""
+    """Get current price for an asset (cached to avoid redundant API calls)"""
     api = get_hyperliquid_api()
-    
+
     hyperliquid_name = ASSET_MAPPING.get(asset.upper())
     if not hyperliquid_name:
         return None
-    
+
     try:
-        mids = api.all_mids()
+        now = time.time()
+        if _mids_cache["data"] is None or (now - _mids_cache["timestamp"]) >= _MIDS_CACHE_TTL:
+            _mids_cache["data"] = api.all_mids()
+            _mids_cache["timestamp"] = now
+
+        mids = _mids_cache["data"]
         if hyperliquid_name in mids:
             return float(mids[hyperliquid_name])
         return None

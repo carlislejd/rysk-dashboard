@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rysk Global Dashboard</title>
+    <title>Rysk — Protocol Overview</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -17,10 +17,20 @@
                 <a href="/account">Account</a>
                 <a href="/docs">Docs</a>
             </nav>
-            <h1>Rysk Global Dashboard</h1>
+            <h1>Rysk Protocol Overview</h1>
         </header>
 
-        <!-- 1. Protocol Overview + Volume -->
+        <!-- 1. Market Pulse — what's hot right now -->
+        <section class="card">
+            <h2>Market Pulse</h2>
+            <div id="pulse-loading" class="loading">Loading...</div>
+            <div id="pulse-content" style="display: none;">
+                <div class="summary-grid" id="pulse-grid"></div>
+                <div id="pulse-strikes" style="margin-top: 16px;"></div>
+            </div>
+        </section>
+
+        <!-- 2. Protocol Overview + Volume -->
         <section class="card">
             <h2>Protocol Overview</h2>
             <div class="tabs" id="overview-tabs">
@@ -36,7 +46,19 @@
             <div id="volume-chart" class="chart-container" style="margin-top: 24px;"></div>
         </section>
 
-        <!-- 2. Recent Activity -->
+        <!-- 3. Premium PnL — cumulative premium over time -->
+        <section class="card">
+            <h2>Protocol Premium (PnL)</h2>
+            <div class="tabs" id="pnl-tabs">
+                <button class="tab-button active" data-pnl-days="90">90 Days</button>
+                <button class="tab-button" data-pnl-days="180">180 Days</button>
+                <button class="tab-button" data-pnl-days="365">All Time</button>
+            </div>
+            <div id="pnl-loading" class="loading">Loading...</div>
+            <div id="pnl-chart" class="chart-container" style="display: none;"></div>
+        </section>
+
+        <!-- 4. Recent Activity -->
         <section class="card">
             <h2>Recent Activity</h2>
             <div id="recent-loading" class="loading">Loading...</div>
@@ -59,7 +81,7 @@
             </div>
         </section>
 
-        <!-- 3. Asset Carousel -->
+        <!-- 5. Asset Carousel -->
         <section class="card">
             <h2>Assets</h2>
             <div id="assets-loading" class="loading">Loading assets...</div>
@@ -76,7 +98,7 @@
         <section id="asset-detail" class="card" style="display: none;">
             <h2>
                 <span id="detail-asset-name"></span>
-                <span id="detail-close" style="float: right; cursor: pointer; color: var(--text-muted); font-size: 0.7em;">&times; close</span>
+                <span id="detail-close" style="float: right; cursor: pointer; color: var(--text-muted); font-size: 0.75em; font-weight: 400;">&times;</span>
             </h2>
             <div class="asset-carousel" style="margin-top: 0;">
                 <button class="carousel-arrow left" id="expiry-carousel-left">&#8249;</button>
@@ -94,7 +116,36 @@
             <div class="pager" id="detail-trades-pager"></div>
         </section>
 
-        <!-- 6. Expiry Explorer -->
+        <!-- 6. Put/Call Ratio Trend -->
+        <section class="card">
+            <h2>Put / Call Trend</h2>
+            <div class="tabs" id="pcr-tabs">
+                <button class="tab-button active" data-pcr-days="90">90 Days</button>
+                <button class="tab-button" data-pcr-days="180">180 Days</button>
+                <button class="tab-button" data-pcr-days="365">All Time</button>
+            </div>
+            <div id="pcr-loading" class="loading">Loading...</div>
+            <div id="pcr-chart" class="chart-container" style="display: none;"></div>
+        </section>
+
+        <!-- 7. Assignment Rate Trend -->
+        <section class="card">
+            <h2>Assignment Rate Trend</h2>
+            <div id="assignment-loading" class="loading">Loading...</div>
+            <div id="assignment-chart" class="chart-container" style="display: none;"></div>
+        </section>
+
+        <!-- 8. Outcomes Breakdown -->
+        <section class="card">
+            <h2>Outcome Analysis</h2>
+            <div id="outcomes-loading" class="loading">Loading...</div>
+            <div id="outcomes-content" style="display: none;">
+                <div class="summary-grid" id="outcomes-summary"></div>
+                <div id="outcomes-by-asset" style="margin-top: 16px;"></div>
+            </div>
+        </section>
+
+        <!-- 9. Expiry Explorer -->
         <section class="card">
             <h2>Expiry Explorer</h2>
             <div id="expiry-loading" class="loading">Loading expiries...</div>

@@ -100,105 +100,18 @@ async function loadOverview(days) {
         const premiums = volumeData.data.map(d => d.premium);
 
         Plotly.newPlot('volume-chart', [
-            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(74, 222, 128, 0.6)' } },
-            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#fb923c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(52, 211, 153, 0.6)' } },
+            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#f59e0b', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
+            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
-            yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickfont: { size: 11 }, tickprefix: '$' },
-            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#fb923c' }, tickprefix: '$' },
+            yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f59e0b' }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
-    }
-}
-
-// ── Inventory ──
-
-async function loadInventory() {
-    const loading = document.getElementById('inventory-loading');
-    const content = document.getElementById('inventory-content');
-    try {
-        const resp = await fetch('/api/global/inventory');
-        const data = await resp.json();
-        if (!data.success) throw new Error(data.error);
-
-        const tabs = document.getElementById('inventory-tabs');
-        const panels = document.getElementById('inventory-panels');
-
-        tabs.innerHTML = data.assets.map((a, i) =>
-            `<button class="tab-button ${i === 0 ? 'active' : ''}" data-inv-tab="${a.asset}">${a.asset}</button>`
-        ).join('');
-
-        panels.innerHTML = data.assets.map((a, i) => {
-            const indexDisplay = a.index != null ? formatStrike(a.index) : '—';
-            const renderRows = (options) => options.map(o => {
-                const strikeDisplay = formatStrike(o.strike);
-                const apyClass = o.apy >= 50 ? 'style="color: var(--accent);"' : '';
-                return `<tr>
-                    <td>${strikeDisplay}</td>
-                    <td>${o.expiry_label || formatUnixDate(o.expiry)}</td>
-                    <td>${formatNumber(o.days_to_expiry, 1)}</td>
-                    <td ${apyClass}>${formatPercentage(o.apy, 1)}</td>
-                    <td>${o.delta ? formatNumber(o.delta, 3) : '—'}</td>
-                    <td>${o.bid_iv ? formatPercentage(o.bid_iv, 1) : '—'}</td>
-                    <td>${o.ask_iv ? formatPercentage(o.ask_iv, 1) : '—'}</td>
-                </tr>`;
-            }).join('');
-            const puts = a.options.filter(o => o.is_put);
-            const calls = a.options.filter(o => !o.is_put);
-            return `
-                <div class="inventory-table ${i === 0 ? 'active' : ''}" data-inv-panel="${a.asset}">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
-                        <div class="tabs" style="margin-bottom: 0; border-bottom: none;">
-                            <button class="tab-button active" data-type-tab="puts" data-type-asset="${a.asset}">Puts (${a.put_count})</button>
-                            <button class="tab-button" data-type-tab="calls" data-type-asset="${a.asset}">Calls (${a.call_count})</button>
-                        </div>
-                        <span style="font-family: var(--font-mono); color: var(--text-primary);">
-                            Index: ${indexDisplay}
-                        </span>
-                    </div>
-                    <table class="data-table" data-type-panel="puts" data-type-asset="${a.asset}">
-                        <thead><tr><th>Strike</th><th>Expiry</th><th>Days</th><th>APY</th><th>Delta</th><th>Bid IV</th><th>Ask IV</th></tr></thead>
-                        <tbody>${puts.length ? renderRows(puts) : '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">No puts available</td></tr>'}</tbody>
-                    </table>
-                    <table class="data-table" data-type-panel="calls" data-type-asset="${a.asset}" style="display: none;">
-                        <thead><tr><th>Strike</th><th>Expiry</th><th>Days</th><th>APY</th><th>Delta</th><th>Bid IV</th><th>Ask IV</th></tr></thead>
-                        <tbody>${calls.length ? renderRows(calls) : '<tr><td colspan="7" style="text-align:center; color: var(--text-muted);">No calls available</td></tr>'}</tbody>
-                    </table>
-                </div>
-            `;
-        }).join('');
-
-        // Asset tab switching
-        tabs.addEventListener('click', e => {
-            const btn = e.target.closest('.tab-button');
-            if (!btn) return;
-            const asset = btn.dataset.invTab;
-            tabs.querySelectorAll('.tab-button').forEach(b => b.classList.toggle('active', b === btn));
-            panels.querySelectorAll('.inventory-table').forEach(p => p.classList.toggle('active', p.dataset.invPanel === asset));
-        });
-
-        // Put/Call type switching within each panel
-        panels.addEventListener('click', e => {
-            const btn = e.target.closest('[data-type-tab]');
-            if (!btn) return;
-            const type = btn.dataset.typeTab;
-            const asset = btn.dataset.typeAsset;
-            const panel = panels.querySelector(`.inventory-table[data-inv-panel="${asset}"]`);
-            if (!panel) return;
-            panel.querySelectorAll('[data-type-tab]').forEach(b => b.classList.toggle('active', b === btn));
-            panel.querySelectorAll('[data-type-panel]').forEach(t => {
-                t.style.display = t.dataset.typePanel === type ? '' : 'none';
-            });
-        });
-
-        loading.style.display = 'none';
-        content.style.display = 'block';
-    } catch (e) {
-        loading.textContent = 'Failed to load inventory: ' + e.message;
     }
 }
 
@@ -363,14 +276,14 @@ function renderStrikeChart(detail) {
     const strikes = detail.strikes || [];
     if (!strikes.length) { document.getElementById('detail-strike-chart').innerHTML = '<div class="loading">No strike data</div>'; return; }
     Plotly.newPlot('detail-strike-chart', [
-        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(248, 113, 113, 0.7)' } },
-        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(34, 211, 238, 0.7)' } },
+        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(239, 112, 112, 0.7)' } },
+        { x: strikes.map(s => formatStrike(s.strike)), y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' } },
     ], {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
+        font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
         margin: { l: 60, r: 20, t: 20, b: 60 },
         xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
-        yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickprefix: '$' },
+        yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickprefix: '$' },
         legend: { orientation: 'h', y: -0.12, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
 }
@@ -414,15 +327,15 @@ function renderExpiryBreakdown(detail) {
 
 function renderDetailVolumeChart(vol) {
     Plotly.newPlot('detail-volume-chart', [
-        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(74, 222, 128, 0.6)' } },
-        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#fb923c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(52, 211, 153, 0.6)' } },
+        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#f59e0b', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
     ], {
         paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'Inter, sans-serif', color: '#a1a1aa', size: 12 },
+        font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
         margin: { l: 60, r: 60, t: 20, b: 40 },
         xaxis: { showgrid: false, tickfont: { size: 11 } },
-        yaxis: { title: 'Notional ($)', gridcolor: '#27272a', tickfont: { size: 11 }, tickprefix: '$' },
-        yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#fb923c' }, tickprefix: '$' },
+        yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+        yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f59e0b' }, tickprefix: '$' },
         legend: { orientation: 'h', y: -0.08, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
 }
@@ -644,15 +557,278 @@ async function loadRecent() {
     }
 }
 
-// ── Trade History (paginated) ──
+// ── Market Pulse ──
+
+async function loadMarketPulse() {
+    const loading = document.getElementById('pulse-loading');
+    const content = document.getElementById('pulse-content');
+    try {
+        const resp = await fetch('/api/global/market-pulse');
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        const top = data.top_asset_24h;
+        const act = data.activity;
+        const dte = data.avg_dte;
+        const active = data.active_positions;
+        const volIndicator = act.volume_vs_daily_avg !== null
+            ? (act.volume_vs_daily_avg > 0 ? `+${act.volume_vs_daily_avg}%` : `${act.volume_vs_daily_avg}%`)
+            : '—';
+        const volColor = act.volume_vs_daily_avg > 0 ? 'var(--accent)' : (act.volume_vs_daily_avg < 0 ? 'var(--color-error)' : 'var(--text-muted)');
+
+        document.getElementById('pulse-grid').innerHTML = `
+            <div class="summary-card">
+                <div class="summary-label">Hottest Asset (24h)</div>
+                <div class="summary-value">${top ? `<span class="token-badge ${shortSymbol(top.symbol).toLowerCase()}">${shortSymbol(top.symbol)}</span>` : '—'}</div>
+                <div class="summary-subtext">${top ? `${top.trades} trades · ${compactCurrency(top.volume)}` : 'No activity'}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">24h Volume</div>
+                <div class="summary-value">${compactCurrency(act.volume_24h)}</div>
+                <div class="summary-subtext" style="color: ${volColor};">${volIndicator} vs 7d avg</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">24h Premium</div>
+                <div class="summary-value">${compactCurrency(act.premium_24h)}</div>
+                <div class="summary-subtext">${act.trades_24h} trades</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Avg DTE (7d)</div>
+                <div class="summary-value">${dte.avg || '—'}d</div>
+                <div class="summary-subtext">${dte.min || '—'}d — ${dte.max || '—'}d range</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Active Positions</div>
+                <div class="summary-value">${formatNumber(active.count, 0)}</div>
+                <div class="summary-subtext">${compactCurrency(active.notional)} notional</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">7d Volume</div>
+                <div class="summary-value">${compactCurrency(act.volume_7d)}</div>
+                <div class="summary-subtext">${act.trades_7d} trades</div>
+            </div>
+        `;
+
+        // Popular strikes
+        if (data.popular_strikes && data.popular_strikes.length) {
+            document.getElementById('pulse-strikes').innerHTML = `
+                <h3 class="subsection-title">Trending Strikes (7d)</h3>
+                <table class="data-table">
+                    <thead><tr><th>Asset</th><th>Strike</th><th>Trades</th><th>Notional</th></tr></thead>
+                    <tbody>${data.popular_strikes.map(s => `<tr>
+                        <td><span class="token-badge ${shortSymbol(s.symbol).toLowerCase()}">${shortSymbol(s.symbol)}</span></td>
+                        <td>${formatStrike(s.strike)}</td>
+                        <td>${s.count}</td>
+                        <td>${compactCurrency(s.volume)}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            `;
+        }
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    } catch (e) {
+        loading.textContent = 'Failed to load market pulse: ' + e.message;
+    }
+}
+
+// ── Premium PnL Chart ──
+
+let pnlDays = 90;
+async function loadPnlChart(days) {
+    pnlDays = days;
+    const loading = document.getElementById('pnl-loading');
+    const chart = document.getElementById('pnl-chart');
+
+    document.querySelectorAll('#pnl-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.pnlDays) === days);
+    });
+
+    try {
+        const resp = await fetch(`/api/global/premium-over-time?days=${days}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        const dates = data.data.map(d => d.date);
+        const cumPremium = data.data.map(d => d.cumulative_premium);
+        const cumReturned = data.data.map(d => d.cumulative_returned_premium);
+        const dailyPremium = data.data.map(d => d.daily_premium);
+
+        loading.style.display = 'none';
+        chart.style.display = 'block';
+
+        Plotly.newPlot('pnl-chart', [
+            { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
+            { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#34d399', width: 2.5 } },
+            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Realized (Returned)', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+        ], {
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            margin: { l: 60, r: 60, t: 20, b: 40 },
+            xaxis: { showgrid: false, tickfont: { size: 11 } },
+            yaxis: { title: 'Cumulative ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis2: { title: 'Daily ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
+            legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
+            bargap: 0.15,
+        }, { responsive: true, displayModeBar: false });
+    } catch (e) {
+        loading.textContent = 'Failed to load PnL: ' + e.message;
+    }
+}
+
+// ── Put/Call Ratio Trend ──
+
+let pcrDays = 90;
+async function loadPutCallRatio(days) {
+    pcrDays = days;
+    const loading = document.getElementById('pcr-loading');
+    const chart = document.getElementById('pcr-chart');
+
+    document.querySelectorAll('#pcr-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.pcrDays) === days);
+    });
+
+    try {
+        const resp = await fetch(`/api/global/put-call-ratio?days=${days}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        const weeks = data.data.map(d => d.week);
+        const putPcts = data.data.map(d => d.put_pct);
+        const callPcts = data.data.map(d => 100 - d.put_pct);
+        const ratios = data.data.map(d => d.ratio);
+
+        loading.style.display = 'none';
+        chart.style.display = 'block';
+
+        Plotly.newPlot('pcr-chart', [
+            { x: weeks, y: putPcts, type: 'bar', name: 'Put %', marker: { color: 'rgba(239, 112, 112, 0.6)' } },
+            { x: weeks, y: callPcts, type: 'bar', name: 'Call %', marker: { color: 'rgba(56, 189, 248, 0.6)' } },
+            { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#f0b940', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+        ], {
+            barmode: 'stack',
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            margin: { l: 50, r: 60, t: 20, b: 40 },
+            xaxis: { showgrid: false, tickfont: { size: 11 } },
+            yaxis: { title: 'Share (%)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
+            yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f0b940' } },
+            legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
+            bargap: 0.15,
+        }, { responsive: true, displayModeBar: false });
+    } catch (e) {
+        loading.textContent = 'Failed to load put/call ratio: ' + e.message;
+    }
+}
+
+// ── Assignment Rate Trend ──
+
+async function loadAssignmentTrend() {
+    const loading = document.getElementById('assignment-loading');
+    const chart = document.getElementById('assignment-chart');
+    try {
+        const resp = await fetch('/api/global/assignment-trend');
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        const filtered = data.data.filter(d => d.assignment_rate !== null);
+        const dates = filtered.map(d => formatUnixDate(d.expiry));
+        const assignRates = filtered.map(d => d.assignment_rate);
+        const returnRates = filtered.map(d => d.return_rate);
+        const totals = filtered.map(d => d.total);
+
+        loading.style.display = 'none';
+        chart.style.display = 'block';
+
+        Plotly.newPlot('assignment-chart', [
+            { x: dates, y: totals, type: 'bar', name: 'Total Trades', marker: { color: 'rgba(161, 161, 170, 0.2)' }, yaxis: 'y2' },
+            { x: dates, y: assignRates, type: 'scatter', mode: 'lines+markers', name: 'Assignment Rate', line: { color: '#ef7070', width: 2 }, marker: { size: 5 } },
+            { x: dates, y: returnRates, type: 'scatter', mode: 'lines+markers', name: 'Return Rate', line: { color: '#34d399', width: 2 }, marker: { size: 5 } },
+        ], {
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            margin: { l: 50, r: 60, t: 20, b: 60 },
+            xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
+            yaxis: { title: 'Rate (%)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
+            yaxis2: { title: 'Trades', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 } },
+            legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
+            bargap: 0.15,
+        }, { responsive: true, displayModeBar: false });
+    } catch (e) {
+        loading.textContent = 'Failed to load assignment trend: ' + e.message;
+    }
+}
+
+// ── Outcomes Breakdown ──
+
+async function loadOutcomes() {
+    const loading = document.getElementById('outcomes-loading');
+    const content = document.getElementById('outcomes-content');
+    try {
+        const resp = await fetch('/api/global/outcomes');
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        const t = data.totals;
+        document.getElementById('outcomes-summary').innerHTML = `
+            <div class="summary-card"><div class="summary-label">Expired Trades</div><div class="summary-value">${formatNumber(t.total, 0)}</div></div>
+            <div class="summary-card"><div class="summary-label">Assigned</div><div class="summary-value" style="color: var(--color-error);">${formatNumber(t.assigned, 0)}</div><div class="summary-subtext">${formatPercentage(t.assigned_pct)}</div></div>
+            <div class="summary-card"><div class="summary-label">Returned</div><div class="summary-value" style="color: var(--accent);">${formatNumber(t.returned, 0)}</div><div class="summary-subtext">${formatPercentage(t.returned_pct)}</div></div>
+            <div class="summary-card"><div class="summary-label">Total Premium</div><div class="summary-value">${compactCurrency(t.total_premium)}</div></div>
+            <div class="summary-card"><div class="summary-label">Returned Premium</div><div class="summary-value" style="color: var(--accent);">${compactCurrency(t.returned_premium)}</div><div class="summary-subtext">Pure profit</div></div>
+        `;
+
+        if (data.by_asset && data.by_asset.length) {
+            document.getElementById('outcomes-by-asset').innerHTML = `
+                <h3 class="subsection-title">By Asset</h3>
+                <table class="data-table" id="outcomes-asset-table">
+                    <thead><tr>
+                        <th>Asset</th><th data-sort-key="total">Expired</th>
+                        <th data-sort-key="assigned">Assigned</th><th data-sort-key="returned">Returned</th>
+                        <th data-sort-key="assignedpct">Assign %</th>
+                        <th data-sort-key="premium">Premium</th><th data-sort-key="notional">Notional</th>
+                    </tr></thead>
+                    <tbody>${data.by_asset.map(a => `<tr>
+                        <td><span class="token-badge ${shortSymbol(a.symbol).toLowerCase()}">${shortSymbol(a.symbol)}</span></td>
+                        <td data-sort-key="total" data-sort-value="${a.total}">${a.total}</td>
+                        <td data-sort-key="assigned" data-sort-value="${a.assigned}">${a.assigned}</td>
+                        <td data-sort-key="returned" data-sort-value="${a.returned}">${a.returned}</td>
+                        <td data-sort-key="assignedpct" data-sort-value="${a.assigned_pct}">${formatPercentage(a.assigned_pct)}</td>
+                        <td data-sort-key="premium" data-sort-value="${a.total_premium}">${compactCurrency(a.total_premium)}</td>
+                        <td data-sort-key="notional" data-sort-value="${a.total_notional}">${compactCurrency(a.total_notional)}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            `;
+            setupSortableTable('outcomes-asset-table');
+        }
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    } catch (e) {
+        loading.textContent = 'Failed to load outcomes: ' + e.message;
+    }
+}
 
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadOverview(0);
-    loadAssets();
-    loadExpiryExplorer();
-    loadRecent();
+    // Load all sections in parallel
+    Promise.allSettled([
+        loadMarketPulse(),
+        loadOverview(0),
+        loadPnlChart(90),
+        loadRecent(),
+        loadAssets(),
+        loadPutCallRatio(90),
+        loadAssignmentTrend(),
+        loadOutcomes(),
+        loadExpiryExplorer(),
+    ]).then(() => {
+        // Force Plotly to recalculate widths after all charts are visible
+        document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {
+            Plotly.Plots.resize(el);
+        });
+    });
 
     // Overview time period tabs
     document.getElementById('overview-tabs').addEventListener('click', e => {
@@ -661,7 +837,27 @@ document.addEventListener('DOMContentLoaded', () => {
         loadOverview(parseInt(btn.dataset.overviewDays));
     });
 
+    // PnL time tabs
+    document.getElementById('pnl-tabs').addEventListener('click', e => {
+        const btn = e.target.closest('.tab-button');
+        if (!btn) return;
+        loadPnlChart(parseInt(btn.dataset.pnlDays));
+    });
+
+    // Put/Call ratio tabs
+    document.getElementById('pcr-tabs').addEventListener('click', e => {
+        const btn = e.target.closest('.tab-button');
+        if (!btn) return;
+        loadPutCallRatio(parseInt(btn.dataset.pcrDays));
+    });
+
     document.getElementById('detail-close').addEventListener('click', closeAssetDetail);
+
+    // Auto-refresh market pulse and recent activity every 60 seconds
+    setInterval(() => {
+        loadMarketPulse();
+        loadRecent();
+    }, 60000);
 
     // Carousel arrows
     function wireCarousel(trackId, leftId, rightId) {

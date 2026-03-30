@@ -124,13 +124,16 @@ function updateAccountUI(address) {
 function setAccountStatus(message = '', isError = false) {
     if (!accountStatusEl) return;
     accountStatusEl.textContent = message || '';
-    accountStatusEl.style.color = isError ? '#f87171' : '#71717a';
+    accountStatusEl.style.color = isError ? '#ef7070' : '#71717a';
 }
 
 let positionsAssetSummary = [];
 let openPositionsData = [];
 let openPositionsPage = 1;
 const OPEN_POSITIONS_PER_PAGE = 15;
+
+// Simple positions data cache for health/PnL rendering
+const _positions_cache = new Map();
 let selectedAssetSymbol = null;
 let selectedAssetExpiry = '';
 let historyDataCache = null;
@@ -269,6 +272,13 @@ async function loadPositions() {
         openPositionsPage = 1;
         renderOpenPositionsPage();
         setupAssetSummaryHandlers();
+
+        // Cache for portfolio health rendering
+        _positions_cache.set(currentAccount.toLowerCase(), {
+            open_positions: openPositions,
+            summary: summary,
+            asset_summary: assetSummary,
+        });
 
         if (previousAsset && assetSummary.some(a => a.symbol === previousAsset)) {
             showAssetPositions(previousAsset);
@@ -643,7 +653,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         x: points.map(p => p.x),
         y: points.map(p => p.y),
         marker: {
-            color: '#4ade80',
+            color: '#34d399',
             size: sizes,
             opacity: opacities
         },
@@ -658,25 +668,25 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#a1a1aa', family: 'Inter, system-ui, sans-serif' },
+        font: { color: '#71717a', family: 'Inter, system-ui, sans-serif' },
         margin: { l: 60, r: 20, t: 30, b: 60 },
         xaxis: {
             title: 'Date',
             color: '#52525b',
-            gridcolor: '#27272a',
+            gridcolor: 'rgba(255,255,255,0.06)',
             type: 'date'
         },
         yaxis: {
             title: 'APR (%)',
             color: '#52525b',
-            gridcolor: '#27272a'
+            gridcolor: 'rgba(255,255,255,0.06)'
         },
         showlegend: true,
         legend: {
             bgcolor: 'rgba(0,0,0,0)',
-            bordercolor: '#27272a',
+            bordercolor: 'rgba(255,255,255,0.06)',
             borderwidth: 1,
-            font: { color: '#a1a1aa' }
+            font: { color: '#71717a' }
         }
     };
 
@@ -685,7 +695,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         mode: 'lines',
         x: [points[0].x, points[points.length - 1].x],
         y: [avgApr, avgApr],
-        line: { color: '#fb923c', dash: 'dash' },
+        line: { color: '#f59e0b', dash: 'dash' },
         name: `Avg APR ${formatPercentage(avgApr)}`
     }], layout, { displayModeBar: false, responsive: true }).then(() => {
         Plotly.Plots.resize(plot);
@@ -987,6 +997,203 @@ function renderHistoryModalContent(history) {
     body.innerHTML = html;
 }
 
+// ── Portfolio Health ──
+
+function renderPortfolioHealth(positionsData, historyData) {
+    const healthContent = document.getElementById('health-content');
+    const healthGrid = document.getElementById('health-grid');
+    const healthExpiring = document.getElementById('health-expiring');
+    if (!healthContent || !healthGrid) return;
+
+    const summary = positionsData?.summary || {};
+    const openPositions = positionsData?.open_positions || [];
+
+    if (!openPositions.length) {
+        healthContent.style.display = 'none';
+        return;
+    }
+
+    // DTE distribution
+    const now = Date.now() / 1000;
+    let dteUnder3d = 0, dte3to7d = 0, dte7to14d = 0, dteOver14d = 0;
+    const expiringThisWeek = [];
+
+    for (const pos of openPositions) {
+        const dte = pos.days_to_expiry || 0;
+        if (dte <= 3) { dteUnder3d++; }
+        else if (dte <= 7) { dte3to7d++; }
+        else if (dte <= 14) { dte7to14d++; }
+        else { dteOver14d++; }
+
+        if (dte <= 7 && dte > 0) {
+            expiringThisWeek.push(pos);
+        }
+    }
+
+    const total = openPositions.length;
+    const nearTermPct = total > 0 ? Math.round((dteUnder3d + dte3to7d) / total * 100) : 0;
+    const nearTermColor = nearTermPct > 60 ? 'var(--color-error)' : nearTermPct > 40 ? 'var(--color-warning)' : 'var(--accent)';
+
+    healthGrid.innerHTML = `
+        <div class="summary-card">
+            <div class="summary-label">Near-Term Weight</div>
+            <div class="summary-value" style="color: ${nearTermColor};">${nearTermPct}%</div>
+            <div class="summary-subtext">${dteUnder3d + dte3to7d} of ${total} within 7d</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">&lt; 3 Days</div>
+            <div class="summary-value">${dteUnder3d}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">3—7 Days</div>
+            <div class="summary-value">${dte3to7d}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">7—14 Days</div>
+            <div class="summary-value">${dte7to14d}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">&gt; 14 Days</div>
+            <div class="summary-value">${dteOver14d}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Portfolio APR</div>
+            <div class="summary-value">${summary.open_weighted_apr != null ? formatPercentage(summary.open_weighted_apr) : '—'}</div>
+        </div>
+    `;
+
+    // Expiring this week alert
+    if (expiringThisWeek.length > 0) {
+        const totalExpiringNotional = expiringThisWeek.reduce((s, p) => s + (p.notional || 0), 0);
+        const totalExpiringPremium = expiringThisWeek.reduce((s, p) => s + (p.premium || 0), 0);
+        healthExpiring.innerHTML = `
+            <h3 class="subsection-title">Expiring This Week (${expiringThisWeek.length})</h3>
+            <div style="margin-bottom: 8px; font-size: 0.85em; color: var(--text-muted);">
+                ${formatCurrency(totalExpiringNotional, 0)} notional · ${formatCurrency(totalExpiringPremium)} premium at stake
+            </div>
+            <table class="data-table">
+                <thead><tr><th>Asset</th><th>Strategy</th><th>Strike</th><th>Days</th><th>Premium</th><th>APR</th></tr></thead>
+                <tbody>${expiringThisWeek.map(p => `<tr>
+                    <td>${p.symbol || '—'}</td>
+                    <td>${strategyBadge(p)}</td>
+                    <td>${formatStrike(p.strike)}</td>
+                    <td>${formatNumber(p.days_to_expiry, 1)}</td>
+                    <td>${formatCurrency(p.premium || 0)}</td>
+                    <td>${formatPercentage(p.apr)}</td>
+                </tr>`).join('')}</tbody>
+            </table>
+        `;
+    } else {
+        healthExpiring.innerHTML = '<div style="font-size: 0.85em; color: var(--text-muted); margin-top: 8px;">No positions expiring within 7 days.</div>';
+    }
+
+    healthContent.style.display = 'block';
+}
+
+// ── Premium PnL (Account) ──
+
+function renderAccountPnl(historyData) {
+    const pnlContent = document.getElementById('pnl-content');
+    const pnlGrid = document.getElementById('pnl-grid');
+    if (!pnlContent || !pnlGrid) return;
+
+    const summary = historyData?.summary || {};
+    const expired = historyData?.expired_positions || [];
+
+    if (!expired.length) {
+        pnlContent.style.display = 'none';
+        return;
+    }
+
+    const returnedPositions = expired.filter(p => (p.outcome || '').toLowerCase() === 'returned');
+    const assignedPositions = expired.filter(p => (p.outcome || '').toLowerCase() === 'assigned');
+    const returnedPremium = returnedPositions.reduce((s, p) => s + (p.premium || 0), 0);
+    const assignedPremium = assignedPositions.reduce((s, p) => s + (p.premium || 0), 0);
+    const totalPremium = summary.net_premium || 0;
+    const returnRate = expired.length > 0 ? (returnedPositions.length / expired.length * 100) : 0;
+
+    pnlGrid.innerHTML = `
+        <div class="summary-card">
+            <div class="summary-label">Realized Premium</div>
+            <div class="summary-value" style="color: var(--accent);">${formatCurrency(returnedPremium)}</div>
+            <div class="summary-subtext">From ${returnedPositions.length} returned positions</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Total Premium Collected</div>
+            <div class="summary-value">${formatCurrency(totalPremium)}</div>
+            <div class="summary-subtext">${expired.length} expired positions</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Assigned Premium</div>
+            <div class="summary-value" style="color: var(--color-error);">${formatCurrency(assignedPremium)}</div>
+            <div class="summary-subtext">${assignedPositions.length} assigned</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Return Rate</div>
+            <div class="summary-value">${formatPercentage(returnRate)}</div>
+            <div class="summary-subtext">${returnedPositions.length} of ${expired.length}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Assigned Notional</div>
+            <div class="summary-value">${formatCurrency(summary.assigned_notional_total || 0)}</div>
+        </div>
+    `;
+
+    // Build cumulative premium chart from expired positions (sorted by expiry date)
+    const sortedExpired = [...expired].sort((a, b) => {
+        const ta = Date.parse(a.expiry_date || '') || 0;
+        const tb = Date.parse(b.expiry_date || '') || 0;
+        return ta - tb;
+    });
+
+    // Group by expiry date
+    const byDate = {};
+    for (const p of sortedExpired) {
+        const date = p.expiry_date || 'Unknown';
+        if (!byDate[date]) byDate[date] = { premium: 0, returned_premium: 0, count: 0 };
+        byDate[date].premium += p.premium || 0;
+        byDate[date].count += 1;
+        if ((p.outcome || '').toLowerCase() === 'returned') {
+            byDate[date].returned_premium += p.premium || 0;
+        }
+    }
+
+    const dates = Object.keys(byDate).filter(d => d !== 'Unknown').sort();
+    // Show container before rendering so Plotly can measure width
+    pnlContent.style.display = 'block';
+
+    if (dates.length > 1 && typeof Plotly !== 'undefined') {
+        let cumTotal = 0;
+        let cumReturned = 0;
+        const cumTotalArr = [];
+        const cumReturnedArr = [];
+        const dailyPrem = [];
+
+        for (const d of dates) {
+            cumTotal += byDate[d].premium;
+            cumReturned += byDate[d].returned_premium;
+            cumTotalArr.push(cumTotal);
+            cumReturnedArr.push(cumReturned);
+            dailyPrem.push(byDate[d].premium);
+        }
+
+        Plotly.newPlot('pnl-chart-account', [
+            { x: dates, y: dailyPrem, type: 'bar', name: 'Expiry Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
+            { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#34d399', width: 2.5 } },
+            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Cumulative Realized', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+        ], {
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            margin: { l: 60, r: 60, t: 20, b: 60 },
+            xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
+            yaxis: { title: 'Cumulative ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis2: { title: 'Per Expiry ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
+            legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
+            bargap: 0.15,
+        }, { responsive: true, displayModeBar: false });
+    }
+}
+
 async function loadAllData() {
     const tasks = [];
 
@@ -997,12 +1204,22 @@ async function loadAllData() {
     }
 
     setAccountStatus('Loading...');
-    tasks.push(
-        loadPositions(),
-        loadHistory()
-    );
+    tasks.push(loadPositions(), loadHistory());
 
     await Promise.all(tasks);
+
+    // Render new sections after all data is loaded
+    const posData = _positions_cache.get(currentAccount.toLowerCase());
+    if (posData) renderPortfolioHealth(posData, historyDataCache);
+    if (historyDataCache) renderAccountPnl(historyDataCache);
+
+    // Resize any Plotly charts after render (handles cases where container just became visible)
+    requestAnimationFrame(() => {
+        document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {
+            Plotly.Plots.resize(el);
+        });
+    });
+
     setAccountStatus('');
 }
 
@@ -1132,6 +1349,12 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
         if (fromSplash) {
             stopSplashTyping('Loaded. Preparing dashboard...');
             showMainContent();
+            // Force Plotly charts to recalculate width now that main-content is visible
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {
+                    Plotly.Plots.resize(el);
+                });
+            });
         } else {
             setAccountStatus('');
         }
@@ -1465,13 +1688,13 @@ function renderPositionsHeatmap(summary) {
                 other: 'Other'
             };
             const strategyColorMap = {
-                covered_call: '#22d3ee',
-                cash_secured_put: '#fb923c',
+                covered_call: '#38bdf8',
+                cash_secured_put: '#f59e0b',
                 mixed: '#c084fc',
-                other: '#4ade80'
+                other: '#34d399'
             };
             const strategyLabel = strategyLabelMap[dominantStrategy] || 'Other';
-            barColors.push(strategyColorMap[dominantStrategy] || '#4ade80');
+            barColors.push(strategyColorMap[dominantStrategy] || '#34d399');
 
             const strategyNotional = entry.strategy_notional || {};
             const ccNotional = strategyNotional.covered_call || 0;
@@ -1526,7 +1749,7 @@ function renderPositionsHeatmap(summary) {
             y0: 0,
             y1: 1,
             line: {
-                color: '#a1a1aa',
+                color: '#71717a',
                 width: 2,
                 dash: 'dash'
             }
@@ -1540,7 +1763,7 @@ function renderPositionsHeatmap(summary) {
             showarrow: false,
             text: `Spot ${formatCurrency(cp, cpDecimals)}`,
             font: { color: '#fafafa', size: 10, family: 'Inter, system-ui, sans-serif' },
-            bgcolor: '#27272a',
+            bgcolor: 'rgba(255,255,255,0.06)',
             bordercolor: '#52525b',
             borderwidth: 1,
             borderpad: 3
@@ -1550,7 +1773,7 @@ function renderPositionsHeatmap(summary) {
     const layout = {
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#a1a1aa' },
+        font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#71717a' },
         margin: { l: 80, r: 20, t: 20, b: 60 },
         xaxis: {
             title: {
@@ -1558,7 +1781,7 @@ function renderPositionsHeatmap(summary) {
                 font: { color: '#71717a', size: 12 }
             },
             color: '#71717a',
-            gridcolor: '#27272a',
+            gridcolor: 'rgba(255,255,255,0.06)',
             tickangle: xStrikes.length > 5 ? -45 : 0,
             type: 'linear',
             tickmode: 'array',
@@ -1571,13 +1794,13 @@ function renderPositionsHeatmap(summary) {
                 font: { color: '#71717a', size: 12 }
             },
             color: '#71717a',
-            gridcolor: '#27272a',
+            gridcolor: 'rgba(255,255,255,0.06)',
             tickformat: '$,.0f'
         },
         hoverlabel: {
             bgcolor: '#0c0c0e',
             font: { color: '#fafafa', family: 'Inter, system-ui, sans-serif' },
-            bordercolor: '#27272a'
+            bordercolor: 'rgba(255,255,255,0.06)'
         },
         bargap: 0.35, // Gap between bars
         shapes,

@@ -651,3 +651,226 @@ def get_outcome_summary(conn):
             "returned_premium": totals_row["returned_premium"] or 0,
         },
     }
+
+
+def get_put_call_ratio_over_time(conn, days=90, symbol=None):
+    """Weekly put/call ratio trend — shows market sentiment over time."""
+    cutoff = int(time.time()) - days * 86400
+    where_parts = ["created_at >= ?"]
+    params = [cutoff]
+    if symbol:
+        where_parts.append("symbol = ?")
+        params.append(symbol)
+    where = "WHERE " + " AND ".join(where_parts)
+
+    rows = conn.execute(f"""
+        SELECT date(created_at, 'unixepoch', 'weekday 0', '-6 days') as week_start,
+               SUM(CASE WHEN is_put = 1 THEN 1 ELSE 0 END) as put_count,
+               SUM(CASE WHEN is_put = 0 THEN 1 ELSE 0 END) as call_count,
+               SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END) as put_notional,
+               SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END) as call_notional,
+               COUNT(*) as total
+        FROM trades {where}
+        GROUP BY week_start
+        ORDER BY week_start
+    """, params).fetchall()
+
+    data = []
+    for r in rows:
+        total = r["total"]
+        put_count = r["put_count"]
+        call_count = r["call_count"]
+        ratio = round(put_count / call_count, 2) if call_count > 0 else None
+        put_pct = round(put_count / total * 100, 1) if total > 0 else 0
+        data.append({
+            "week": r["week_start"],
+            "put_count": put_count,
+            "call_count": call_count,
+            "put_notional": r["put_notional"],
+            "call_notional": r["call_notional"],
+            "ratio": ratio,
+            "put_pct": put_pct,
+            "total": total,
+        })
+
+    return {"days": days, "data": data}
+
+
+def get_assignment_rate_trend(conn):
+    """Assignment rate per expiry date — shows how outcomes trend over time."""
+    now = int(time.time())
+
+    rows = conn.execute("""
+        SELECT expiry,
+               COUNT(*) as total,
+               SUM(CASE WHEN outcome = 'Assigned' THEN 1 ELSE 0 END) as assigned,
+               SUM(CASE WHEN outcome = 'Returned' THEN 1 ELSE 0 END) as returned,
+               SUM(notional_f) as total_notional,
+               SUM(CASE WHEN outcome = 'Assigned' THEN notional_f ELSE 0 END) as assigned_notional
+        FROM trades
+        WHERE outcome IS NOT NULL AND expiry < ?
+        GROUP BY expiry
+        ORDER BY expiry
+    """, (now,)).fetchall()
+
+    data = []
+    for r in rows:
+        total = r["total"]
+        assigned = r["assigned"] or 0
+        returned = r["returned"] or 0
+        outcome_total = assigned + returned
+        data.append({
+            "expiry": r["expiry"],
+            "total": total,
+            "assigned": assigned,
+            "returned": returned,
+            "assignment_rate": round(assigned / outcome_total * 100, 1) if outcome_total > 0 else None,
+            "return_rate": round(returned / outcome_total * 100, 1) if outcome_total > 0 else None,
+            "total_notional": r["total_notional"],
+            "assigned_notional": r["assigned_notional"],
+        })
+
+    return {"data": data}
+
+
+def get_market_pulse(conn):
+    """What's hot right now: top asset last 24h, popular strikes, avg DTE."""
+    now = int(time.time())
+    day_ago = now - 86400
+    week_ago = now - 604800
+
+    # Top asset by 24h volume
+    top_24h = conn.execute("""
+        SELECT symbol,
+               COUNT(*) as trades,
+               SUM(notional_f) as volume,
+               SUM(premium_f) as premium,
+               AVG(apr_f) as avg_apr
+        FROM trades
+        WHERE created_at >= ? AND symbol != ''
+        GROUP BY symbol
+        ORDER BY volume DESC
+        LIMIT 1
+    """, (day_ago,)).fetchone()
+
+    # Most popular strike range last 7d
+    popular_strikes = conn.execute("""
+        SELECT symbol, strike_f, COUNT(*) as cnt, SUM(notional_f) as volume
+        FROM trades
+        WHERE created_at >= ? AND symbol != ''
+        GROUP BY symbol, strike_f
+        ORDER BY cnt DESC
+        LIMIT 5
+    """, (week_ago,)).fetchall()
+
+    # Average DTE of trades placed in last 7d
+    avg_dte = conn.execute("""
+        SELECT AVG(expiry - created_at) / 86400.0 as avg_dte_days,
+               MIN(expiry - created_at) / 86400.0 as min_dte_days,
+               MAX(expiry - created_at) / 86400.0 as max_dte_days
+        FROM trades
+        WHERE created_at >= ? AND expiry IS NOT NULL
+    """, (week_ago,)).fetchone()
+
+    # 24h vs 7d comparison
+    stats_24h = conn.execute("""
+        SELECT COUNT(*) as trades, COALESCE(SUM(notional_f), 0) as volume,
+               COALESCE(SUM(premium_f), 0) as premium
+        FROM trades WHERE created_at >= ?
+    """, (day_ago,)).fetchone()
+
+    stats_7d = conn.execute("""
+        SELECT COUNT(*) as trades, COALESCE(SUM(notional_f), 0) as volume,
+               COALESCE(SUM(premium_f), 0) as premium
+        FROM trades WHERE created_at >= ?
+    """, (week_ago,)).fetchone()
+
+    daily_avg_volume = (stats_7d["volume"] / 7) if stats_7d["volume"] else 0
+    volume_vs_avg = None
+    if daily_avg_volume > 0:
+        volume_vs_avg = round((stats_24h["volume"] / daily_avg_volume - 1) * 100, 1)
+
+    # Active positions (not yet expired)
+    active = conn.execute("""
+        SELECT COUNT(*) as cnt, COALESCE(SUM(notional_f), 0) as notional,
+               COALESCE(SUM(premium_f), 0) as premium
+        FROM trades WHERE expiry > ? AND outcome IS NULL
+    """, (now,)).fetchone()
+
+    return {
+        "top_asset_24h": {
+            "symbol": top_24h["symbol"] if top_24h else None,
+            "trades": top_24h["trades"] if top_24h else 0,
+            "volume": top_24h["volume"] if top_24h else 0,
+            "premium": top_24h["premium"] if top_24h else 0,
+            "avg_apr": top_24h["avg_apr"] if top_24h else None,
+        } if top_24h else None,
+        "popular_strikes": [
+            {
+                "symbol": r["symbol"],
+                "strike": r["strike_f"],
+                "count": r["cnt"],
+                "volume": r["volume"],
+            }
+            for r in popular_strikes
+        ],
+        "avg_dte": {
+            "avg": round(avg_dte["avg_dte_days"], 1) if avg_dte and avg_dte["avg_dte_days"] else None,
+            "min": round(avg_dte["min_dte_days"], 1) if avg_dte and avg_dte["min_dte_days"] else None,
+            "max": round(avg_dte["max_dte_days"], 1) if avg_dte and avg_dte["max_dte_days"] else None,
+        },
+        "activity": {
+            "trades_24h": stats_24h["trades"],
+            "volume_24h": stats_24h["volume"],
+            "premium_24h": stats_24h["premium"],
+            "trades_7d": stats_7d["trades"],
+            "volume_7d": stats_7d["volume"],
+            "premium_7d": stats_7d["premium"],
+            "volume_vs_daily_avg": volume_vs_avg,
+        },
+        "active_positions": {
+            "count": active["cnt"],
+            "notional": active["notional"],
+            "premium": active["premium"],
+        },
+    }
+
+
+def get_premium_over_time(conn, days=365, symbol=None):
+    """Cumulative premium collected over time for PnL charting."""
+    cutoff = int(time.time()) - days * 86400
+    where_parts = ["created_at >= ?"]
+    params = [cutoff]
+    if symbol:
+        where_parts.append("symbol = ?")
+        params.append(symbol)
+    where = "WHERE " + " AND ".join(where_parts)
+
+    rows = conn.execute(f"""
+        SELECT date(created_at, 'unixepoch') as day,
+               SUM(premium_f) as daily_premium,
+               SUM(notional_f) as daily_notional,
+               COUNT(*) as trade_count,
+               SUM(CASE WHEN outcome = 'Returned' THEN premium_f ELSE 0 END) as returned_premium,
+               SUM(CASE WHEN outcome = 'Assigned' THEN premium_f ELSE 0 END) as assigned_premium
+        FROM trades {where}
+        GROUP BY day
+        ORDER BY day
+    """, params).fetchall()
+
+    cumulative = 0
+    cumulative_returned = 0
+    data = []
+    for r in rows:
+        cumulative += r["daily_premium"]
+        cumulative_returned += r["returned_premium"] or 0
+        data.append({
+            "date": r["day"],
+            "daily_premium": r["daily_premium"],
+            "daily_notional": r["daily_notional"],
+            "trade_count": r["trade_count"],
+            "cumulative_premium": cumulative,
+            "cumulative_returned_premium": cumulative_returned,
+        })
+
+    return {"days": days, "data": data}

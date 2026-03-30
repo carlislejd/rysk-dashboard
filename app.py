@@ -24,6 +24,10 @@ from global_services import (
     get_outcome_summary,
     get_expiry_overview,
     enrich_trades_with_iv,
+    get_put_call_ratio_over_time,
+    get_assignment_rate_trend,
+    get_market_pulse,
+    get_premium_over_time,
 )
 from inventory_services import fetch_inventory
 from scripts.backfill_outcomes import backfill_outcomes
@@ -360,8 +364,10 @@ def api_global_summary():
     try:
         days = request.args.get("days", 0, type=int)
         conn = get_db()
-        data = get_global_summary(conn, days=days)
-        conn.close()
+        try:
+            data = get_global_summary(conn, days=days)
+        finally:
+            conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -376,8 +382,10 @@ def api_global_trades():
         expiry = request.args.get("expiry", None, type=int)
         iv = request.args.get("iv", "").lower() in ("1", "true")
         conn = get_db()
-        data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry)
-        conn.close()
+        try:
+            data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry)
+        finally:
+            conn.close()
         if iv:
             enrich_trades_with_iv(data["trades"])
         return jsonify({"success": True, **data})
@@ -393,8 +401,10 @@ def api_global_volume():
         days = request.args.get("days", 30, type=int)
         expiry = request.args.get("expiry", None, type=int)
         conn = get_db()
-        data = get_global_volume(conn, interval=interval, symbol=symbol, days=days, expiry=expiry)
-        conn.close()
+        try:
+            data = get_global_volume(conn, interval=interval, symbol=symbol, days=days, expiry=expiry)
+        finally:
+            conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -404,8 +414,10 @@ def api_global_assets():
     """Per-asset breakdown"""
     try:
         conn = get_db()
-        data = get_asset_summary(conn)
-        conn.close()
+        try:
+            data = get_asset_summary(conn)
+        finally:
+            conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -416,8 +428,10 @@ def api_global_asset_detail(symbol):
     try:
         expiry = request.args.get("expiry", None, type=int)
         conn = get_db()
-        data = get_asset_detail(conn, symbol, expiry=expiry)
-        conn.close()
+        try:
+            data = get_asset_detail(conn, symbol, expiry=expiry)
+        finally:
+            conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -436,8 +450,10 @@ def api_global_outcomes():
     """Outcome analysis for expired trades"""
     try:
         conn = get_db()
-        data = get_outcome_summary(conn)
-        conn.close()
+        try:
+            data = get_outcome_summary(conn)
+        finally:
+            conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -447,8 +463,66 @@ def api_global_expiries():
     """Rich per-expiry overview stats"""
     try:
         conn = get_db()
-        data = get_expiry_overview(conn)
-        conn.close()
+        try:
+            data = get_expiry_overview(conn)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/global/put-call-ratio')
+def api_global_put_call_ratio():
+    """Put/Call ratio over time for trend analysis"""
+    try:
+        days = request.args.get("days", 90, type=int)
+        symbol = request.args.get("symbol", "").strip() or None
+        conn = get_db()
+        try:
+            data = get_put_call_ratio_over_time(conn, days=days, symbol=symbol)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/global/assignment-trend')
+def api_global_assignment_trend():
+    """Assignment rate trend by expiry date"""
+    try:
+        conn = get_db()
+        try:
+            data = get_assignment_rate_trend(conn)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/global/market-pulse')
+def api_global_market_pulse():
+    """Market pulse: what's hot right now"""
+    try:
+        conn = get_db()
+        try:
+            data = get_market_pulse(conn)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/global/premium-over-time')
+def api_global_premium_over_time():
+    """Cumulative premium collected over time (for global PnL view)"""
+    try:
+        days = request.args.get("days", 365, type=int)
+        symbol = request.args.get("symbol", "").strip() or None
+        conn = get_db()
+        try:
+            data = get_premium_over_time(conn, days=days, symbol=symbol)
+        finally:
+            conn.close()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

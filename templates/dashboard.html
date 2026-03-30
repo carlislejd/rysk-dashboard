@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rysk Options Dashboard</title>
+    <title>Rysk — Account Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
                 <a href="/account" class="active">Account</a>
                 <a href="/docs">Docs</a>
             </nav>
-            <h1>Rysk Options Dashboard</h1>
+            <h1>Account Dashboard</h1>
             <div class="account-bar">
                 <div class="account-display">
                     Wallet: <span id="current-wallet-display">Not set</span>
@@ -44,6 +44,19 @@
                 <span id="account-status" class="account-status"></span>
             </div>
         </header>
+
+        <!-- Portfolio Health — Expiring This Week + DTE Distribution -->
+        <section class="card">
+            <h2 class="collapsible-header expanded" data-section="health">
+                <span class="chevron">▶</span> Portfolio Health
+            </h2>
+            <div class="collapsible-content" data-section="health">
+                <div id="health-content" style="display: none;">
+                    <div class="summary-grid" id="health-grid"></div>
+                    <div id="health-expiring" style="margin-top: 16px;"></div>
+                </div>
+            </div>
+        </section>
 
         <!-- Current Positions Section -->
         <section class="card">
@@ -55,7 +68,20 @@
                 <div id="positions-content" style="display: none;"></div>
                 <div id="positions-error" class="error" style="display: none;"></div>
                 <div id="positions-not-configured" class="warning" style="display: none;">
-                    ⚠️ Positions API not configured. Set POSITIONS_API_URL environment variable.
+                    Positions API not configured. Set POSITIONS_API_URL environment variable.
+                </div>
+            </div>
+        </section>
+
+        <!-- PnL Summary — Premium Profit Tracking -->
+        <section class="card">
+            <h2 class="collapsible-header expanded" data-section="pnl">
+                <span class="chevron">▶</span> Premium PnL
+            </h2>
+            <div class="collapsible-content" data-section="pnl">
+                <div id="pnl-content" style="display: none;">
+                    <div class="summary-grid" id="pnl-grid"></div>
+                    <div id="pnl-chart-account" class="chart-container" style="margin-top: 16px;"></div>
                 </div>
             </div>
         </section>
@@ -68,12 +94,12 @@
             <div class="collapsible-content" data-section="history">
                 <div id="history-loading" class="loading">Loading history...</div>
                 <div class="history-actions">
-                    <button id="history-detail-button" class="terminal-button" disabled>🔍 Deep Dive (Coming Soon)</button>
+                    <button id="history-detail-button" class="terminal-button" disabled>Deep Dive (Coming Soon)</button>
                 </div>
                 <div id="history-content" style="display: none;"></div>
                 <div id="history-error" class="error" style="display: none;"></div>
                 <div id="history-not-configured" class="warning" style="display: none;">
-                    ⚠️ History API not configured. Set HISTORY_API_URL environment variable.
+                    History API not configured. Set HISTORY_API_URL environment variable.
                 </div>
             </div>
         </section>
