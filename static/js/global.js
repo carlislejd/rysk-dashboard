@@ -660,7 +660,7 @@ async function loadPnlChart(days) {
         Plotly.newPlot('pnl-chart', [
             { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Realized (Returned)', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
@@ -702,8 +702,8 @@ async function loadPutCallRatio(days) {
         chart.style.display = 'block';
 
         Plotly.newPlot('pcr-chart', [
-            { x: weeks, y: putPcts, type: 'bar', name: 'Put %', marker: { color: 'rgba(239, 112, 112, 0.6)' } },
-            { x: weeks, y: callPcts, type: 'bar', name: 'Call %', marker: { color: 'rgba(56, 189, 248, 0.6)' } },
+            { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(239, 112, 112, 0.6)' } },
+            { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(56, 189, 248, 0.6)' } },
             { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#f0b940', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             barmode: 'stack',
@@ -711,7 +711,7 @@ async function loadPutCallRatio(days) {
             font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
             margin: { l: 50, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
-            yaxis: { title: 'Share (%)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
+            yaxis: { title: 'Notional Share (%)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
             yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f0b940' } },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,

@@ -677,20 +677,20 @@ def get_put_call_ratio_over_time(conn, days=90, symbol=None):
 
     data = []
     for r in rows:
-        total = r["total"]
-        put_count = r["put_count"]
-        call_count = r["call_count"]
-        ratio = round(put_count / call_count, 2) if call_count > 0 else None
-        put_pct = round(put_count / total * 100, 1) if total > 0 else 0
+        put_notional = r["put_notional"] or 0
+        call_notional = r["call_notional"] or 0
+        total_notional = put_notional + call_notional
+        ratio = round(put_notional / call_notional, 2) if call_notional > 0 else None
+        put_pct = round(put_notional / total_notional * 100, 1) if total_notional > 0 else 0
         data.append({
             "week": r["week_start"],
-            "put_count": put_count,
-            "call_count": call_count,
-            "put_notional": r["put_notional"],
-            "call_notional": r["call_notional"],
+            "put_count": r["put_count"],
+            "call_count": r["call_count"],
+            "put_notional": put_notional,
+            "call_notional": call_notional,
             "ratio": ratio,
             "put_pct": put_pct,
-            "total": total,
+            "total": r["total"],
         })
 
     return {"days": days, "data": data}
