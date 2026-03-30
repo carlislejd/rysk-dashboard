@@ -9,12 +9,28 @@ import time
 
 # Asset name mapping (Rysk names -> Hyperliquid names)
 ASSET_MAPPING = {
+    # Direct matches
     "BTC": "BTC",
     "ETH": "ETH",
-    "HYPE": "HYPE",  # May need to check if this is correct
+    "HYPE": "HYPE",
     "SOL": "SOL",
-    "PUMP": "PUMP",  # May need to check if this is correct
-    "PURR": "PURR",  # May need to check if this is correct
+    "PUMP": "PUMP",
+    "PURR": "PURR",
+    "XRP": "XRP",
+    "ZEC": "ZEC",
+    # Wrapped / prefixed Rysk variants → Hyperliquid underlying
+    "UBTC": "BTC",
+    "UETH": "ETH",
+    "USOL": "SOL",
+    "UPUMP": "PUMP",
+    "WHYPE": "HYPE",
+    "KHYPE": "HYPE",
+    "KHYPE-PT": "HYPE",
+    "KHYPE-PT-19MAR26": "HYPE",
+    "LHYPE": "HYPE",
+    "WSTHYPE": "HYPE",
+    "BZEC": "ZEC",
+    "FXRP": "XRP",
 }
 
 # Cache for API instance
