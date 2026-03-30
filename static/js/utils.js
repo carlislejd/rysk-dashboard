@@ -30,6 +30,14 @@ function formatCurrency(num, decimals = 2) {
     return `${sign}$${formatNumber(absValue, decimals)}`;
 }
 
+function compactCurrency(num) {
+    if (num === null || num === undefined) return '$0';
+    const abs = Math.abs(num);
+    if (abs >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
+    return formatCurrency(num, 0);
+}
+
 function formatPercentage(value, decimals = 2) {
     if (value === null || value === undefined) return '—';
     return `${formatNumber(value, decimals)}%`;

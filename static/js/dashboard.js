@@ -1563,35 +1563,25 @@ function renderAssetDetailFilters(asset, expiryOptions, selectedExpiry) {
     const filters = document.getElementById('positions-detail-filters');
     if (!filters) return;
 
-    const cards = [
-        {
-            value: '',
-            label: 'All Expiries',
-            selected: !selectedExpiry
-        },
-        ...expiryOptions.map(expiry => ({
-            value: expiry,
-            label: expiry,
-            selected: selectedExpiry === expiry
-        }))
+    const tabs = [
+        { value: '', label: 'All', selected: !selectedExpiry },
+        ...expiryOptions.map(expiry => {
+            const isActive = Date.parse(expiry) > Date.now();
+            return {
+                value: expiry,
+                label: expiry + (isActive ? ' *' : ''),
+                selected: selectedExpiry === expiry
+            };
+        })
     ];
 
-    const optionsHtml = cards.map(card => `
-        <button
-            type="button"
-            class="expiry-filter-card ${card.selected ? 'active' : ''}"
-            data-expiry="${card.value}"
-        >
-            ${card.label}
-        </button>
+    const tabsHtml = tabs.map(t => `
+        <button class="tab-button${t.selected ? ' active' : ''}" data-expiry="${t.value}">${t.label}</button>
     `).join('');
 
-    filters.innerHTML = `
-        <span class="summary-label">Expiry Filter</span>
-        <div class="expiry-filter-grid">${optionsHtml}</div>
-    `;
+    filters.innerHTML = `<div class="tabs tab-carousel">${tabsHtml}</div>`;
 
-    filters.querySelectorAll('.expiry-filter-card').forEach(button => {
+    filters.querySelectorAll('.tab-button').forEach(button => {
         button.addEventListener('click', () => {
             selectedAssetExpiry = button.dataset.expiry || '';
             showAssetPositions(asset);
@@ -1614,9 +1604,10 @@ function buildHeatmapSummary(positions, currentPrice = null) {
                 notional_total: 0,
                 apr_sum: 0,
                 apr_count: 0,
-                cc_notional: 0,
-                csp_notional: 0,
-                other_notional: 0
+                put_notional: 0,
+                call_notional: 0,
+                put_count: 0,
+                call_count: 0,
             });
         }
         const entry = strikeMap.get(key);
@@ -1629,49 +1620,28 @@ function buildHeatmapSummary(positions, currentPrice = null) {
             entry.apr_sum += Number(pos.apr);
             entry.apr_count += 1;
         }
-        const strategy = String(pos.strategy || '').toLowerCase();
-        if (strategy === 'covered_call') {
-            entry.cc_notional += notional;
-        } else if (strategy === 'cash_secured_put') {
-            entry.csp_notional += notional;
+        const posType = String(pos.type || '').toLowerCase();
+        if (posType === 'put') {
+            entry.put_notional += notional;
+            entry.put_count += 1;
         } else {
-            entry.other_notional += notional;
+            entry.call_notional += notional;
+            entry.call_count += 1;
         }
     }
 
-    const strikes = Array.from(strikeMap.values()).map(entry => {
-        const strategyValues = {
-            covered_call: entry.cc_notional,
-            cash_secured_put: entry.csp_notional,
-            other: entry.other_notional
-        };
-        let dominant = 'other';
-        let maxValue = -1;
-        let nonZero = 0;
-        Object.entries(strategyValues).forEach(([key, value]) => {
-            if (value > 0) nonZero += 1;
-            if (value > maxValue) {
-                maxValue = value;
-                dominant = key;
-            }
-        });
-        if (nonZero > 1) dominant = 'mixed';
-
-        return {
-            strike: entry.strike,
-            count: entry.count,
-            quantity_total: entry.quantity_total,
-            premium_total: entry.premium_total,
-            notional_total: entry.notional_total,
-            avg_apr: entry.apr_count ? entry.apr_sum / entry.apr_count : null,
-            dominant_strategy: dominant,
-            strategy_notional: {
-                covered_call: entry.cc_notional,
-                cash_secured_put: entry.csp_notional,
-                other: entry.other_notional
-            }
-        };
-    }).sort((a, b) => (a.strike || 0) - (b.strike || 0));
+    const strikes = Array.from(strikeMap.values()).map(entry => ({
+        strike: entry.strike,
+        count: entry.count,
+        quantity_total: entry.quantity_total,
+        premium_total: entry.premium_total,
+        notional_total: entry.notional_total,
+        avg_apr: entry.apr_count ? entry.apr_sum / entry.apr_count : null,
+        put_notional: entry.put_notional,
+        call_notional: entry.call_notional,
+        put_count: entry.put_count,
+        call_count: entry.call_count,
+    })).sort((a, b) => (a.strike || 0) - (b.strike || 0));
 
     return { strikes, current_price: currentPrice };
 }
@@ -1687,160 +1657,126 @@ function renderPositionsHeatmap(summary) {
         return;
     }
 
-    // Sort strikes and prepare data for bar chart
     const sorted = [...strikes].sort((a, b) => (a.strike || 0) - (b.strike || 0));
-    
-    const xStrikes = [];
-    const xLabels = [];
-    const yNotionals = [];
-    const hoverTexts = [];
-    const barColors = [];
+    const strikeValues = sorted.map(s => s.strike);
+    const minStrike = strikeValues[0];
+    const maxStrike = strikeValues[strikeValues.length - 1];
 
-    // Only include strikes that have positions
-    for (const entry of sorted) {
-        const strike = entry.strike || 0;
-        const notional = entry.notional_total || 0;
-        
-        if (notional > 0) {
-            const strikeDecimals = strike > 1000 ? 0 : strike > 1 ? 2 : 6;
-            const display = `$${formatNumber(strike, strikeDecimals)}`;
-            xStrikes.push(strike);
-            xLabels.push(display);
-            yNotionals.push(notional);
-            const dominantStrategy = entry.dominant_strategy || 'other';
-            const strategyLabelMap = {
-                covered_call: 'Covered Call',
-                cash_secured_put: 'Cash-Secured Put',
-                mixed: 'Mixed',
-                other: 'Other'
-            };
-            const strategyColorMap = {
-                covered_call: '#38bdf8',
-                cash_secured_put: '#f59e0b',
-                mixed: '#c084fc',
-                other: '#34d399'
-            };
-            const strategyLabel = strategyLabelMap[dominantStrategy] || 'Other';
-            barColors.push(strategyColorMap[dominantStrategy] || '#34d399');
-
-            const strategyNotional = entry.strategy_notional || {};
-            const ccNotional = strategyNotional.covered_call || 0;
-            const cspNotional = strategyNotional.cash_secured_put || 0;
-            hoverTexts.push(
-                `Strike: ${display}<br>` +
-                `Positions: ${formatNumber(entry.count, 0)}<br>` +
-                `Strategy: ${strategyLabel}<br>` +
-                `Notional: ${formatCurrency(notional)}<br>` +
-                `CC Notional: ${formatCurrency(ccNotional)}<br>` +
-                `CSP Notional: ${formatCurrency(cspNotional)}<br>` +
-                `Premium: ${formatCurrency(entry.premium_total || 0)}<br>` +
-                `Avg APR: ${entry.avg_apr ? formatPercentage(entry.avg_apr) : '—'}`
-            );
-        }
+    // Compute bar width from minimum gap between consecutive strikes
+    let barWidth = (maxStrike - minStrike) / sorted.length;
+    for (let i = 1; i < strikeValues.length; i++) {
+        const gap = strikeValues[i] - strikeValues[i - 1];
+        if (gap > 0 && gap < barWidth) barWidth = gap;
     }
-
-    if (xStrikes.length === 0) {
-        heatmapDiv.innerHTML = '<p class="empty-state">No strike distribution yet.</p>';
-        return;
-    }
-
-    // Create bar chart data
-    const data = [{
-        type: 'bar',
-        x: xStrikes,
-        y: yNotionals,
-        hovertext: hoverTexts,
-        hovertemplate: '%{hovertext}<extra></extra>',
-        marker: {
-            color: barColors,
-            line: {
-                color: 'rgba(255,255,255,0.1)',
-                width: 1
-            },
-            opacity: 0.85
-        },
-        textposition: 'none'
-    }];
+    barWidth *= 0.8;
 
     const shapes = [];
     const annotations = [];
-    if (currentPrice !== null && currentPrice !== undefined && Number.isFinite(Number(currentPrice))) {
-        const cp = Number(currentPrice);
-        const cpDecimals = cp > 1000 ? 0 : cp > 1 ? 2 : 6;
+
+    // Only show ITM zones for a specific active expiry, not "All Expiries"
+    const isActiveExpiry = selectedAssetExpiry && Date.parse(selectedAssetExpiry) > Date.now();
+    const cp = Number(currentPrice);
+    const hasPrice = currentPrice !== null && currentPrice !== undefined && Number.isFinite(cp);
+
+    if (hasPrice && isActiveExpiry) {
+        const xPad = barWidth;
+        const xMin = minStrike - xPad;
+        const xMax = maxStrike + xPad;
+
+        // Count ITM: calls ITM when strike < price, puts ITM when strike > price
+        let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
+        for (const s of sorted) {
+            if (s.strike < cp) { callsItm += s.call_notional > 0 ? 1 : 0; callsItmNotional += s.call_notional; }
+            if (s.strike > cp) { putsItm += s.put_notional > 0 ? 1 : 0; putsItmNotional += s.put_notional; }
+        }
+
+        // ITM Calls zone (left of price)
         shapes.push({
-            type: 'line',
-            xref: 'x',
-            yref: 'paper',
-            x0: cp,
-            x1: cp,
-            y0: 0,
-            y1: 1,
-            line: {
-                color: '#71717a',
-                width: 2,
-                dash: 'dash'
-            }
+            type: 'rect', x0: xMin, x1: cp, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: 'rgba(56, 189, 248, 0.04)', line: { width: 0 }, layer: 'below'
+        });
+        // ITM Puts zone (right of price)
+        shapes.push({
+            type: 'rect', x0: cp, x1: xMax, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: 'rgba(239, 112, 112, 0.04)', line: { width: 0 }, layer: 'below'
+        });
+
+        const callZoneMid = (xMin + cp) / 2;
+        const putZoneMid = (cp + xMax) / 2;
+
+        if (callsItm > 0 || callsItmNotional > 0) {
+            annotations.push({
+                x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
+                showarrow: false,
+                font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+            });
+        }
+        if (putsItm > 0 || putsItmNotional > 0) {
+            annotations.push({
+                x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
+                showarrow: false,
+                font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+            });
+        }
+    }
+
+    // Current price divider line (always show when price available)
+    if (hasPrice) {
+        shapes.push({
+            type: 'line', x0: cp, x1: cp, y0: 0, y1: 1, yref: 'paper',
+            line: { color: isActiveExpiry ? 'rgba(244, 244, 245, 0.35)' : 'rgba(244, 244, 245, 0.15)', width: 1.5, dash: 'dot' }
         });
         annotations.push({
-            x: cp,
-            y: 1,
-            xref: 'x',
-            yref: 'paper',
-            yanchor: 'bottom',
+            x: cp, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
+            text: `<b>Price ${formatStrike(cp)}</b>`,
             showarrow: false,
-            text: `Spot ${formatCurrency(cp, cpDecimals)}`,
-            font: { color: '#fafafa', size: 10, family: 'Inter, system-ui, sans-serif' },
-            bgcolor: 'rgba(255,255,255,0.06)',
-            bordercolor: '#52525b',
-            borderwidth: 1,
-            borderpad: 3
+            font: { size: 10, color: isActiveExpiry ? '#f4f4f5' : '#71717a', family: 'Inter, system-ui, sans-serif' },
+            bgcolor: 'rgba(9,9,11,0.85)', borderpad: 3,
         });
     }
 
+    const data = [
+        {
+            type: 'bar', name: 'Put', x: strikeValues,
+            y: sorted.map(s => s.put_notional),
+            marker: { color: 'rgba(239, 112, 112, 0.7)' },
+            width: barWidth,
+        },
+        {
+            type: 'bar', name: 'Call', x: strikeValues,
+            y: sorted.map(s => s.call_notional),
+            marker: { color: 'rgba(56, 189, 248, 0.7)' },
+            width: barWidth,
+        },
+    ];
+
     const layout = {
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { family: 'Inter, system-ui, sans-serif', size: 11, color: '#71717a' },
-        margin: { l: 80, r: 20, t: 20, b: 60 },
+        barmode: 'stack',
+        plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
+        font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#71717a' },
+        margin: { l: 60, r: 20, t: 40, b: 60 },
         xaxis: {
-            title: {
-                text: 'Strike Price',
-                font: { color: '#71717a', size: 12 }
-            },
-            color: '#71717a',
-            gridcolor: 'rgba(255,255,255,0.06)',
-            tickangle: xStrikes.length > 5 ? -45 : 0,
-            type: 'linear',
-            tickmode: 'array',
-            tickvals: xStrikes,
-            ticktext: xLabels
+            title: 'Strike', showgrid: false, tickfont: { size: 10 },
+            tickprefix: '$', tickangle: -45,
         },
         yaxis: {
-            title: {
-                text: 'Notional Value',
-                font: { color: '#71717a', size: 12 }
-            },
-            color: '#71717a',
-            gridcolor: 'rgba(255,255,255,0.06)',
-            tickformat: '$,.0f'
+            title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickprefix: '$',
         },
+        legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
         hoverlabel: {
             bgcolor: '#0c0c0e',
             font: { color: '#fafafa', family: 'Inter, system-ui, sans-serif' },
             bordercolor: 'rgba(255,255,255,0.06)'
         },
-        bargap: 0.35, // Gap between bars
-        shapes,
-        annotations
-    };
-
-    const config = {
-        displayModeBar: false,
-        responsive: true
+        shapes, annotations,
     };
 
     if (typeof Plotly !== 'undefined') {
-        Plotly.newPlot(heatmapDiv, data, layout, config).then(() => {
+        Plotly.newPlot(heatmapDiv, data, layout, { displayModeBar: false, responsive: true }).then(() => {
             Plotly.Plots.resize(heatmapDiv);
         });
     }

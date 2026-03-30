@@ -21,14 +21,6 @@ function shortSymbol(symbol) {
     return dash > 0 ? symbol.substring(0, dash) : symbol;
 }
 
-function compactCurrency(num) {
-    if (num === null || num === undefined) return '$0';
-    const abs = Math.abs(num);
-    if (abs >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
-    return formatCurrency(num, 0);
-}
-
 function outcomeBadge(outcome) {
     if (outcome === 'Assigned') return '<span class="status-badge" style="background: var(--color-error-dim); color: var(--color-error);">Assigned</span>';
     if (outcome === 'Returned') return '<span class="status-badge" style="background: var(--accent-dim); color: var(--accent);">Returned</span>';
