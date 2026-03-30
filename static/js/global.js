@@ -292,66 +292,71 @@ function renderStrikeChart(detail) {
     const shapes = [];
     const annotations = [];
 
+    // Only show ITM zones for active (unexpired) positions
+    const isActiveView = selectedExpiry === null || selectedExpiry > Date.now() / 1000;
+
     if (currentPrice != null) {
         const cpLabel = formatStrike(currentPrice);
         const xPad = barWidth; // small padding beyond the bar edges
         const xMin = minStrike - xPad;
         const xMax = maxStrike + xPad;
 
-        // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
-        let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
-        for (const s of strikes) {
-            if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
-            if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
+        if (isActiveView) {
+            // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
+            let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
+            for (const s of strikes) {
+                if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
+                if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
+            }
+
+            // --- ITM Calls zone (left of price) ---
+            shapes.push({
+                type: 'rect', x0: xMin, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
+                fillcolor: 'rgba(56, 189, 248, 0.04)', line: { width: 0 }, layer: 'below'
+            });
+            // --- ITM Puts zone (right of price) ---
+            shapes.push({
+                type: 'rect', x0: currentPrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
+                fillcolor: 'rgba(239, 112, 112, 0.04)', line: { width: 0 }, layer: 'below'
+            });
+
+            // Zone labels — positioned inside each zone
+            const callZoneMid = (xMin + currentPrice) / 2;
+            const putZoneMid = (currentPrice + xMax) / 2;
+
+            if (callsItm > 0 || callsItmNotional > 0) {
+                annotations.push({
+                    x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                    text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
+                    showarrow: false,
+                    font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                    bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+                });
+            }
+
+            if (putsItm > 0 || putsItmNotional > 0) {
+                annotations.push({
+                    x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                    text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
+                    showarrow: false,
+                    font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                    bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+                });
+            }
         }
 
-        // --- ITM Calls zone (left of price) ---
-        shapes.push({
-            type: 'rect', x0: xMin, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
-            fillcolor: 'rgba(56, 189, 248, 0.04)', line: { width: 0 }, layer: 'below'
-        });
-        // --- ITM Puts zone (right of price) ---
-        shapes.push({
-            type: 'rect', x0: currentPrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
-            fillcolor: 'rgba(239, 112, 112, 0.04)', line: { width: 0 }, layer: 'below'
-        });
-
-        // Current price divider line
+        // Current price divider line (always show for reference)
         shapes.push({
             type: 'line', x0: currentPrice, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
-            line: { color: 'rgba(244, 244, 245, 0.35)', width: 1.5, dash: 'dot' }
+            line: { color: isActiveView ? 'rgba(244, 244, 245, 0.35)' : 'rgba(244, 244, 245, 0.15)', width: 1.5, dash: 'dot' }
         });
 
-        // Zone labels — positioned inside each zone
-        const callZoneMid = (xMin + currentPrice) / 2;
-        const putZoneMid = (currentPrice + xMax) / 2;
-
-        if (callsItm > 0 || callsItmNotional > 0) {
-            annotations.push({
-                x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${callsItm} Call${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
-                showarrow: false,
-                font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
-                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
-            });
-        }
-
-        if (putsItm > 0 || putsItmNotional > 0) {
-            annotations.push({
-                x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${putsItm} Put${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
-                showarrow: false,
-                font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
-                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
-            });
-        }
-
-        // Current price label (centered on line)
+        // Current price label
         annotations.push({
             x: currentPrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
             text: `<b>Price ${cpLabel}</b>`,
             showarrow: false,
-            font: { size: 10, color: '#f4f4f5', family: 'Inter, system-ui, sans-serif' },
+            font: { size: 10, color: isActiveView ? '#f4f4f5' : '#71717a', family: 'Inter, system-ui, sans-serif' },
             bgcolor: 'rgba(9,9,11,0.85)', borderpad: 3,
         });
     }
