@@ -293,7 +293,7 @@ function renderStrikeChart(detail) {
     const annotations = [];
 
     // Only show ITM zones for active (unexpired) positions
-    const isActiveView = selectedExpiry === null || selectedExpiry > Date.now() / 1000;
+    const isActiveView = selectedExpiry !== null && selectedExpiry > Date.now() / 1000;
 
     if (currentPrice != null) {
         const cpLabel = formatStrike(currentPrice);
