@@ -1068,13 +1068,15 @@ function renderPortfolioHealth(positionsData, historyData) {
         const assetSummary = positionsData?.asset_summary || [];
         const priceMap = {};
         for (const a of assetSummary) {
-            if (a.symbol && a.current_price != null) priceMap[a.symbol] = a.current_price;
+            if (a.symbol && a.current_price != null) {
+                priceMap[String(a.symbol).toUpperCase()] = a.current_price;
+            }
         }
 
         const totalExpiringNotional = expiringThisWeek.reduce((s, p) => s + (p.notional || 0), 0);
         const totalExpiringPremium = expiringThisWeek.reduce((s, p) => s + (p.premium || 0), 0);
         const itmCount = expiringThisWeek.filter(p => {
-            const cp = priceMap[p.symbol];
+            const cp = priceMap[String(p.symbol || '').toUpperCase()];
             if (cp == null || !p.strike) return false;
             const isPut = (p.type || '').toLowerCase() === 'put';
             return isPut ? cp < p.strike : cp > p.strike;
@@ -1088,7 +1090,7 @@ function renderPortfolioHealth(positionsData, historyData) {
             <table class="data-table">
                 <thead><tr><th>Asset</th><th>Strategy</th><th>Strike</th><th>Days</th><th>Premium</th><th>APR</th><th>Status</th></tr></thead>
                 <tbody>${expiringThisWeek.map(p => {
-                    const cp = priceMap[p.symbol];
+                    const cp = priceMap[String(p.symbol || '').toUpperCase()];
                     const isPut = (p.type || '').toLowerCase() === 'put';
                     const hasPrice = cp != null && p.strike;
                     const itm = hasPrice && (isPut ? cp < p.strike : cp > p.strike);
