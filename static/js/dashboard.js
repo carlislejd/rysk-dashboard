@@ -341,14 +341,9 @@ async function loadHistory() {
         historyDataCache = history;
         historyDataTimestamp = new Date();
 
+        // Deep dive is now rendered inline — no button needed
         if (detailButton) {
-            const totalExpired = summary.expired_count || expiredPositions.length || 0;
-            detailButton.disabled = totalExpired === 0;
-            if (totalExpired > 0) {
-                detailButton.textContent = `🔍 Deep Dive (${formatNumber(totalExpired, 0)} positions)`;
-            } else {
-                detailButton.textContent = '🔍 Deep Dive (No history yet)';
-            }
+            detailButton.style.display = 'none';
         }
 
         let html = '';
@@ -420,6 +415,7 @@ async function loadHistory() {
         renderExpiredSection(expiredPositions, summary);
         renderAprChart(expiredPositions, null);
         setupOutcomeFilters(expiredPositions, summary);
+        renderDeepDiveInline(history);
     } catch (err) {
         loading.style.display = 'none';
         error.textContent = 'Error loading history: ' + err.message;
@@ -664,29 +660,30 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
 
     const avgApr = points.reduce((sum, p) => sum + p.y, 0) / points.length;
 
+    const theme = getPlotlyTheme();
     const layout = {
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: '#71717a', family: 'Inter, system-ui, sans-serif' },
+        font: { color: theme.fontColor, family: 'Inter, system-ui, sans-serif' },
         margin: { l: 60, r: 20, t: 30, b: 60 },
         xaxis: {
             title: 'Date',
             color: '#52525b',
-            gridcolor: 'rgba(255,255,255,0.06)',
+            gridcolor: theme.gridColor,
             type: 'date'
         },
         yaxis: {
             title: 'APR (%)',
             color: '#52525b',
-            gridcolor: 'rgba(255,255,255,0.06)'
+            gridcolor: theme.gridColor
         },
         showlegend: true,
         legend: {
             bgcolor: 'rgba(0,0,0,0)',
-            bordercolor: 'rgba(255,255,255,0.06)',
+            bordercolor: theme.gridColor,
             borderwidth: 1,
-            font: { color: '#71717a' }
+            font: { color: theme.fontColor }
         }
     };
 
@@ -997,6 +994,170 @@ function renderHistoryModalContent(history) {
     body.innerHTML = html;
 }
 
+function renderDeepDiveInline(history) {
+    const parent = document.getElementById('history-content');
+    if (!parent) return;
+
+    // Remove existing inline deep dive if re-rendering
+    const existing = document.getElementById('deep-dive-inline');
+    if (existing) existing.remove();
+
+    const summary = history.summary || {};
+    const expiredPositions = history.expired_positions || [];
+    const assetOutcomes = summary.asset_outcomes || [];
+    const totalPositions = summary.expired_count || expiredPositions.length || 0;
+    const assignedCount = summary.assigned_count || 0;
+    const returnedCount = summary.returned_count || 0;
+    const assignmentRate = totalPositions ? (assignedCount / totalPositions) * 100 : 0;
+    const returnRate = totalPositions ? (returnedCount / totalPositions) * 100 : 0;
+    const avgPremiumPerPosition = totalPositions ? (summary.net_premium || 0) / totalPositions : 0;
+
+    const aprValues = expiredPositions
+        .map(p => (p.apr !== null && p.apr !== undefined) ? Number(p.apr) : null)
+        .filter(v => v !== null && !Number.isNaN(v));
+    const avgApr = aprValues.length ? aprValues.reduce((acc, val) => acc + val, 0) / aprValues.length : null;
+    const maxApr = aprValues.length ? Math.max(...aprValues) : null;
+    const minApr = aprValues.length ? Math.min(...aprValues) : null;
+
+    const premiumValues = expiredPositions.map(p => Number(p.premium || 0));
+    const maxPremium = premiumValues.length ? Math.max(...premiumValues) : 0;
+    const totalPremium = summary.net_premium != null
+        ? Number(summary.net_premium)
+        : premiumValues.reduce((acc, val) => acc + val, 0);
+
+    const assignedNotional = summary.assigned_notional_total || 0;
+    const avgAssignmentNotional = assignedCount ? assignedNotional / assignedCount : 0;
+
+    if (totalPositions === 0) return;
+
+    const div = document.createElement('div');
+    div.id = 'deep-dive-inline';
+
+    let html = '';
+
+    // Performance overview grid
+    html += '<h3 class="subsection-title" style="margin-top: 24px;">Deep Dive — Performance Overview</h3>';
+    html += '<div class="summary-grid">';
+    html += `<div class="summary-card"><span class="summary-label">Assignment Rate</span><span class="summary-value">${formatPercentage(assignmentRate, 2)}</span><span class="summary-subtext">${formatNumber(assignedCount, 0)} assigned legs</span></div>`;
+    html += `<div class="summary-card"><span class="summary-label">Return Rate</span><span class="summary-value">${formatPercentage(returnRate, 2)}</span><span class="summary-subtext">${formatNumber(returnedCount, 0)} returned legs</span></div>`;
+    html += `<div class="summary-card"><span class="summary-label">Premium Collected</span><span class="summary-value">${formatCurrency(totalPremium)}</span><span class="summary-subtext">Avg ${formatCurrency(avgPremiumPerPosition)}</span></div>`;
+    html += `<div class="summary-card"><span class="summary-label">Avg APR</span><span class="summary-value">${avgApr !== null ? formatPercentage(avgApr) : '—'}</span><span class="summary-subtext">Low ${minApr !== null ? formatPercentage(minApr) : '—'} · High ${maxApr !== null ? formatPercentage(maxApr) : '—'}</span></div>`;
+    html += `<div class="summary-card"><span class="summary-label">Largest Premium</span><span class="summary-value">${formatCurrency(maxPremium)}</span></div>`;
+    html += `<div class="summary-card"><span class="summary-label">Assigned Notional</span><span class="summary-value">${formatCurrency(assignedNotional)}</span><span class="summary-subtext">Avg ${formatCurrency(avgAssignmentNotional || 0)}</span></div>`;
+    html += '</div>';
+
+    // By Asset table
+    if (assetOutcomes.length > 0) {
+        html += '<h3 class="subsection-title">Deep Dive — By Asset</h3>';
+        html += '<div style="overflow-x: auto;">';
+        html += '<table class="data-table">';
+        html += '<thead><tr><th>Asset</th><th>Expired</th><th>Assigned</th><th>Returned</th><th>Assignment Rate</th><th>Premium</th><th>Total Notional</th><th>Assigned Notional</th></tr></thead>';
+        html += '<tbody>';
+        for (const outcome of assetOutcomes) {
+            const assetTotal = outcome.total_positions || 0;
+            const assetAssigned = outcome.assigned_count || 0;
+            const assetReturned = outcome.returned_count || 0;
+            const assetAssignmentRate = assetTotal ? (assetAssigned / assetTotal) * 100 : 0;
+            const premiumTotal = outcome.premium_total || 0;
+            const totalNotional = outcome.total_notional || 0;
+            const assetAssignedNotional = outcome.assigned_notional || 0;
+
+            html += '<tr>';
+            html += `<td><span class="token-badge ${getTokenClass(outcome.symbol)}">${outcome.symbol}</span></td>`;
+            html += `<td>${formatNumber(assetTotal, 0)}</td>`;
+            html += `<td>${formatNumber(assetAssigned, 0)}</td>`;
+            html += `<td>${formatNumber(assetReturned, 0)}</td>`;
+            html += `<td>${formatPercentage(assetAssignmentRate)}</td>`;
+            html += `<td>${formatCurrency(premiumTotal)}</td>`;
+            html += `<td>${formatCurrency(totalNotional)}</td>`;
+            html += `<td>${formatCurrency(assetAssignedNotional)}</td>`;
+            html += '</tr>';
+        }
+        html += '</tbody></table></div>';
+    }
+
+    // By Expiry table
+    const expiryMap = new Map();
+    expiredPositions.forEach((position) => {
+        const expiryKey = position.expiry_date || 'Unknown';
+        const outcome = (position.outcome || 'Unknown');
+        const entry = expiryMap.get(expiryKey) || {
+            expiry: expiryKey, total: 0, assigned: 0, returned: 0,
+            premiumTotal: 0, aprSum: 0, aprCount: 0, strikeSum: 0, strikeCount: 0
+        };
+        entry.total += 1;
+        entry.premiumTotal += Number(position.premium || 0);
+        if (outcome === 'Assigned') entry.assigned += 1;
+        else if (outcome === 'Returned') entry.returned += 1;
+        if (position.apr !== null && position.apr !== undefined) {
+            entry.aprSum += Number(position.apr);
+            entry.aprCount += 1;
+        }
+        if (position.strike !== null && position.strike !== undefined) {
+            entry.strikeSum += Number(position.strike);
+            entry.strikeCount += 1;
+        }
+        expiryMap.set(expiryKey, entry);
+    });
+
+    const expirySummary = Array.from(expiryMap.values()).sort((a, b) => {
+        return (Date.parse(b.expiry) || 0) - (Date.parse(a.expiry) || 0);
+    });
+
+    if (expirySummary.length > 0) {
+        html += '<h3 class="subsection-title">Deep Dive — By Expiry</h3>';
+        html += '<div style="overflow-x: auto;">';
+        html += '<table class="data-table">';
+        html += '<thead><tr><th>Expiry</th><th>Positions</th><th>Assigned</th><th>Returned</th><th>Assignment Rate</th><th>Premium</th><th>Avg APR</th></tr></thead>';
+        html += '<tbody>';
+        for (const entry of expirySummary) {
+            const rate = entry.total ? (entry.assigned / entry.total) * 100 : 0;
+            const avgAprEntry = entry.aprCount ? entry.aprSum / entry.aprCount : null;
+            html += '<tr>';
+            html += `<td>${entry.expiry}</td>`;
+            html += `<td>${formatNumber(entry.total, 0)}</td>`;
+            html += `<td>${formatNumber(entry.assigned, 0)}</td>`;
+            html += `<td>${formatNumber(entry.returned, 0)}</td>`;
+            html += `<td>${formatPercentage(rate)}</td>`;
+            html += `<td>${formatCurrency(entry.premiumTotal)}</td>`;
+            html += `<td>${avgAprEntry !== null ? formatPercentage(avgAprEntry) : '—'}</td>`;
+            html += '</tr>';
+        }
+        html += '</tbody></table></div>';
+    }
+
+    // Top premium & APR tables
+    const topPremiumPositions = [...expiredPositions]
+        .sort((a, b) => (Number(b.premium || 0) - Number(a.premium || 0)))
+        .slice(0, 10);
+
+    const topAprPositions = [...expiredPositions]
+        .filter(p => p.apr !== null && p.apr !== undefined)
+        .sort((a, b) => Number(b.apr) - Number(a.apr))
+        .slice(0, 10);
+
+    if (topPremiumPositions.length > 0) {
+        html += '<h3 class="subsection-title">Top Premium Harvests</h3>';
+        html += '<div style="overflow-x: auto;"><table class="data-table"><thead><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Outcome</th><th>Strike</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead><tbody>';
+        for (const pos of topPremiumPositions) {
+            html += `<tr><td>${formatDateLabel(pos.created_at)}</td><td>${pos.symbol || '—'}</td><td>${strategyBadge(pos)}</td><td>${formatPositionOutcome(pos)}</td><td>${formatStrike(pos.strike)}</td><td>${formatCurrency(pos.premium || 0)}</td><td>${formatPercentage(pos.apr)}</td><td>${formatDateLabel(pos.expiry_date)}</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+    }
+
+    if (topAprPositions.length > 0) {
+        html += '<h3 class="subsection-title">Highest APR Captured</h3>';
+        html += '<div style="overflow-x: auto;"><table class="data-table"><thead><tr><th>Date</th><th>Symbol</th><th>Strategy</th><th>Outcome</th><th>Strike</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead><tbody>';
+        for (const pos of topAprPositions) {
+            html += `<tr><td>${formatDateLabel(pos.created_at)}</td><td>${pos.symbol || '—'}</td><td>${strategyBadge(pos)}</td><td>${formatPositionOutcome(pos)}</td><td>${formatStrike(pos.strike)}</td><td>${formatCurrency(pos.premium || 0)}</td><td>${formatPercentage(pos.apr)}</td><td>${formatDateLabel(pos.expiry_date)}</td></tr>`;
+        }
+        html += '</tbody></table></div>';
+    }
+
+    div.innerHTML = html;
+    parent.appendChild(div);
+}
+
 // ── Portfolio Health ──
 
 function renderPortfolioHealth(positionsData, historyData) {
@@ -1203,16 +1364,17 @@ function renderAccountPnl(historyData) {
             dailyPrem.push(byDate[d].premium);
         }
 
+        const theme = getPlotlyTheme();
         Plotly.newPlot('pnl-chart-account', [
             { x: dates, y: dailyPrem, type: 'bar', name: 'Expiry Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#34d399', width: 2.5 } },
             { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 60 },
             xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
-            yaxis: { title: 'Cumulative ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
             yaxis2: { title: 'Per Expiry ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
             bargap: 0.15,

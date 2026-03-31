@@ -91,15 +91,16 @@ async function loadOverview(days) {
         const volumes = volumeData.data.map(d => d.volume);
         const premiums = volumeData.data.map(d => d.premium);
 
+        const theme = getPlotlyTheme();
         Plotly.newPlot('volume-chart', [
             { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(52, 211, 153, 0.6)' } },
             { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#f59e0b', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
-            yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
             yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f59e0b' }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
@@ -144,6 +145,11 @@ async function loadAssets() {
 
         loading.style.display = 'none';
         content.style.display = 'block';
+
+        // Auto-select first asset so users see the detail panel immediately
+        if (data.assets.length > 0) {
+            showAssetDetail(data.assets[0].symbol);
+        }
     } catch (e) {
         loading.textContent = 'Failed to load assets: ' + e.message;
     }
@@ -283,9 +289,7 @@ function renderStrikeChart(detail) {
 
     const shapes = [];
     const annotations = [];
-
-    // Only show ITM zones for active (unexpired) positions
-    const isActiveView = selectedExpiry !== null && selectedExpiry > Date.now() / 1000;
+    const theme = getPlotlyTheme();
 
     if (currentPrice != null) {
         const cpLabel = formatStrike(currentPrice);
@@ -293,54 +297,52 @@ function renderStrikeChart(detail) {
         const xMin = minStrike - xPad;
         const xMax = maxStrike + xPad;
 
-        if (isActiveView) {
-            // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
-            let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
-            for (const s of strikes) {
-                if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
-                if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
-            }
-
-            // --- ITM Calls zone (left of price) ---
-            shapes.push({
-                type: 'rect', x0: xMin, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
-                fillcolor: 'rgba(56, 189, 248, 0.04)', line: { width: 0 }, layer: 'below'
-            });
-            // --- ITM Puts zone (right of price) ---
-            shapes.push({
-                type: 'rect', x0: currentPrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
-                fillcolor: 'rgba(239, 112, 112, 0.04)', line: { width: 0 }, layer: 'below'
-            });
-
-            // Zone labels — positioned inside each zone
-            const callZoneMid = (xMin + currentPrice) / 2;
-            const putZoneMid = (currentPrice + xMax) / 2;
-
-            if (callsItm > 0 || callsItmNotional > 0) {
-                annotations.push({
-                    x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                    text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
-                    showarrow: false,
-                    font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
-                    bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
-                });
-            }
-
-            if (putsItm > 0 || putsItmNotional > 0) {
-                annotations.push({
-                    x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                    text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
-                    showarrow: false,
-                    font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
-                    bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
-                });
-            }
+        // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
+        let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
+        for (const s of strikes) {
+            if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
+            if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
         }
 
-        // Current price divider line (always show for reference)
+        // --- ITM Calls zone (left of price) ---
+        shapes.push({
+            type: 'rect', x0: xMin, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: theme.zoneCallBg, line: { width: 0 }, layer: 'below'
+        });
+        // --- ITM Puts zone (right of price) ---
+        shapes.push({
+            type: 'rect', x0: currentPrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
+            fillcolor: theme.zonePutBg, line: { width: 0 }, layer: 'below'
+        });
+
+        // Zone labels — positioned inside each zone
+        const callZoneMid = (xMin + currentPrice) / 2;
+        const putZoneMid = (currentPrice + xMax) / 2;
+
+        if (callsItm > 0 || callsItmNotional > 0) {
+            annotations.push({
+                x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
+                showarrow: false,
+                font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                bgcolor: theme.annotationBg, borderpad: 4,
+            });
+        }
+
+        if (putsItm > 0 || putsItmNotional > 0) {
+            annotations.push({
+                x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
+                showarrow: false,
+                font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                bgcolor: theme.annotationBg, borderpad: 4,
+            });
+        }
+
+        // Current price divider line
         shapes.push({
             type: 'line', x0: currentPrice, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
-            line: { color: isActiveView ? 'rgba(244, 244, 245, 0.35)' : 'rgba(244, 244, 245, 0.15)', width: 1.5, dash: 'dot' }
+            line: { color: 'rgba(244, 244, 245, 0.35)', width: 1.5, dash: 'dot' }
         });
 
         // Current price label
@@ -348,8 +350,8 @@ function renderStrikeChart(detail) {
             x: currentPrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
             text: `<b>Price ${cpLabel}</b>`,
             showarrow: false,
-            font: { size: 10, color: isActiveView ? '#f4f4f5' : '#71717a', family: 'Inter, system-ui, sans-serif' },
-            bgcolor: 'rgba(9,9,11,0.85)', borderpad: 3,
+            font: { size: 10, color: theme.annotationColor, family: 'Inter, system-ui, sans-serif' },
+            bgcolor: theme.annotationBg, borderpad: 3,
         });
     }
 
@@ -358,10 +360,10 @@ function renderStrikeChart(detail) {
         { x: strikeValues, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' }, width: barWidth },
     ], {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+        font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
         margin: { l: 60, r: 20, t: 40, b: 60 },
         xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickprefix: '$', tickangle: -45 },
-        yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickprefix: '$' },
+        yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickprefix: '$' },
         legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
         shapes, annotations,
     }, { responsive: true, displayModeBar: false });
@@ -405,15 +407,16 @@ function renderExpiryBreakdown(detail) {
 }
 
 function renderDetailVolumeChart(vol) {
+    const theme = getPlotlyTheme();
     Plotly.newPlot('detail-volume-chart', [
         { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(52, 211, 153, 0.6)' } },
         { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#f59e0b', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
     ], {
         paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+        font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
         margin: { l: 60, r: 60, t: 20, b: 40 },
         xaxis: { showgrid: false, tickfont: { size: 11 } },
-        yaxis: { title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+        yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
         yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f59e0b' }, tickprefix: '$' },
         legend: { orientation: 'h', y: -0.08, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
@@ -736,16 +739,17 @@ async function loadPnlChart(days) {
         loading.style.display = 'none';
         chart.style.display = 'block';
 
+        const theme = getPlotlyTheme();
         Plotly.newPlot('pnl-chart', [
             { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#34d399', width: 2.5 } },
             { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
-            yaxis: { title: 'Cumulative ($)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
             yaxis2: { title: 'Daily ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
@@ -780,6 +784,7 @@ async function loadPutCallRatio(days) {
         loading.style.display = 'none';
         chart.style.display = 'block';
 
+        const theme = getPlotlyTheme();
         Plotly.newPlot('pcr-chart', [
             { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(239, 112, 112, 0.6)' } },
             { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(56, 189, 248, 0.6)' } },
@@ -787,10 +792,10 @@ async function loadPutCallRatio(days) {
         ], {
             barmode: 'stack',
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: '#71717a', size: 12 },
+            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 50, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
-            yaxis: { title: 'Notional Share (%)', gridcolor: 'rgba(255,255,255,0.06)', tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
+            yaxis: { title: 'Notional Share (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
             yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f0b940' } },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,

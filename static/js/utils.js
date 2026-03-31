@@ -1,5 +1,66 @@
 // Shared utility functions for Rysk dashboards
 
+// ── Theme Toggle (Day/Night) ──
+
+function initTheme() {
+    const saved = localStorage.getItem('rysk-theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', saved);
+    updateToggleIcons(saved);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('rysk-theme', next);
+    updateToggleIcons(next);
+    // Re-render any visible Plotly charts with new theme colors
+    replotAllCharts();
+}
+
+function updateToggleIcons(theme) {
+    // ☾ for dark (click to go light), ☀ for light (click to go dark)
+    const icon = theme === 'dark' ? '\u263E' : '\u2600';
+    document.querySelectorAll('.theme-toggle').forEach(btn => {
+        btn.innerHTML = icon;
+    });
+}
+
+function replotAllCharts() {
+    if (typeof Plotly === 'undefined') return;
+    document.querySelectorAll('.js-plotly-plot').forEach(el => {
+        const theme = getPlotlyTheme();
+        Plotly.relayout(el, {
+            'font.color': theme.fontColor,
+            'xaxis.gridcolor': theme.gridColor,
+            'yaxis.gridcolor': theme.gridColor,
+        });
+    });
+}
+
+function getPlotlyTheme() {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    return {
+        fontColor: isLight ? '#78716c' : '#71717a',
+        gridColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)',
+        annotationBg: isLight ? 'rgba(250,248,244,0.92)' : 'rgba(9,9,11,0.85)',
+        annotationColor: isLight ? '#57534E' : '#71717a',
+        zoneCallBg: isLight ? 'rgba(2,132,199,0.06)' : 'rgba(56,189,248,0.04)',
+        zonePutBg: isLight ? 'rgba(220,38,38,0.06)' : 'rgba(239,112,112,0.04)',
+        // Marker colors stay consistent across themes (the accent/semantic colors handle contrast)
+    };
+}
+
+// Apply theme on load
+initTheme();
+
+// Wire up all toggle buttons after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.theme-toggle').forEach(btn => {
+        btn.addEventListener('click', toggleTheme);
+    });
+});
+
 function smartDecimals(value) {
     if (value === null || value === undefined || value === 0) return 2;
     const abs = Math.abs(value);
