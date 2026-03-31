@@ -147,8 +147,9 @@ async function loadAssets() {
         content.style.display = 'block';
 
         // Auto-select first asset so users see the detail panel immediately
+        // Skip scroll so the page stays at the top on initial load
         if (data.assets.length > 0) {
-            showAssetDetail(data.assets[0].symbol);
+            showAssetDetail(data.assets[0].symbol, { scroll: false });
         }
     } catch (e) {
         loading.textContent = 'Failed to load assets: ' + e.message;
@@ -160,7 +161,7 @@ async function loadAssets() {
 let detailExpiries = []; // cached expiry list for the current asset
 let selectedExpiry = null; // null = All
 
-async function showAssetDetail(symbol) {
+async function showAssetDetail(symbol, { scroll = true } = {}) {
     selectedAsset = symbol;
     selectedExpiry = null;
     const panel = document.getElementById('asset-detail');
@@ -172,7 +173,7 @@ async function showAssetDetail(symbol) {
 
     document.getElementById('detail-asset-name').textContent = `${symbol}`;
     panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (scroll) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     // First fetch detail to get expiry list, then load the rest
     const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
