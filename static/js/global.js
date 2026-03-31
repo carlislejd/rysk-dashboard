@@ -291,38 +291,63 @@ function renderStrikeChart(detail) {
     const annotations = [];
     const theme = getPlotlyTheme();
 
-    if (currentPrice != null) {
-        const cpLabel = formatStrike(currentPrice);
-        const xPad = barWidth; // small padding beyond the bar edges
+    // Determine which price to use for ITM zones:
+    // - Active expiry selected → current market price
+    // - Expired expiry selected → settlement/expiry price (historical view)
+    // - "All" view → no zones (mixed context)
+    const now = Date.now() / 1000;
+    const isSpecificExpiry = selectedExpiry !== null;
+    const isActiveView = isSpecificExpiry && selectedExpiry > now;
+    const isExpiredView = isSpecificExpiry && selectedExpiry <= now;
+
+    let referencePrice = null;
+    let priceLabel = '';
+
+    if (isActiveView && currentPrice != null) {
+        referencePrice = currentPrice;
+        priceLabel = `Price ${formatStrike(currentPrice)}`;
+    } else if (isExpiredView) {
+        // Look up settlement price from the expiries data
+        const expiries = detail.expiries || [];
+        const matchedExpiry = expiries.find(e => e.expiry === selectedExpiry);
+        if (matchedExpiry && matchedExpiry.expiry_price != null) {
+            referencePrice = matchedExpiry.expiry_price;
+            priceLabel = `Settlement ${formatStrike(referencePrice)}`;
+        }
+    }
+
+    if (referencePrice != null) {
+        const xPad = barWidth;
         const xMin = minStrike - xPad;
         const xMax = maxStrike + xPad;
 
         // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
         let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
         for (const s of strikes) {
-            if (s.strike < currentPrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
-            if (s.strike > currentPrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
+            if (s.strike < referencePrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
+            if (s.strike > referencePrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
         }
 
         // --- ITM Calls zone (left of price) ---
         shapes.push({
-            type: 'rect', x0: xMin, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
+            type: 'rect', x0: xMin, x1: referencePrice, y0: 0, y1: 1, yref: 'paper',
             fillcolor: theme.zoneCallBg, line: { width: 0 }, layer: 'below'
         });
         // --- ITM Puts zone (right of price) ---
         shapes.push({
-            type: 'rect', x0: currentPrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
+            type: 'rect', x0: referencePrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
             fillcolor: theme.zonePutBg, line: { width: 0 }, layer: 'below'
         });
 
-        // Zone labels — positioned inside each zone
-        const callZoneMid = (xMin + currentPrice) / 2;
-        const putZoneMid = (currentPrice + xMax) / 2;
+        // Zone labels
+        const callZoneMid = (xMin + referencePrice) / 2;
+        const putZoneMid = (referencePrice + xMax) / 2;
+        const itmSuffix = isExpiredView ? ' were ITM' : ' ITM';
 
         if (callsItm > 0 || callsItmNotional > 0) {
             annotations.push({
                 x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
+                text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''}${itmSuffix}</b><br>${compactCurrency(callsItmNotional)}`,
                 showarrow: false,
                 font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
                 bgcolor: theme.annotationBg, borderpad: 4,
@@ -332,23 +357,23 @@ function renderStrikeChart(detail) {
         if (putsItm > 0 || putsItmNotional > 0) {
             annotations.push({
                 x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
+                text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''}${itmSuffix}</b><br>${compactCurrency(putsItmNotional)}`,
                 showarrow: false,
                 font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
                 bgcolor: theme.annotationBg, borderpad: 4,
             });
         }
 
-        // Current price divider line
+        // Price divider line
         shapes.push({
-            type: 'line', x0: currentPrice, x1: currentPrice, y0: 0, y1: 1, yref: 'paper',
-            line: { color: 'rgba(244, 244, 245, 0.35)', width: 1.5, dash: 'dot' }
+            type: 'line', x0: referencePrice, x1: referencePrice, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(244, 244, 245, 0.35)', width: 1.5, dash: isExpiredView ? 'solid' : 'dot' }
         });
 
-        // Current price label
+        // Price label
         annotations.push({
-            x: currentPrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
-            text: `<b>Price ${cpLabel}</b>`,
+            x: referencePrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
+            text: `<b>${priceLabel}</b>`,
             showarrow: false,
             font: { size: 10, color: theme.annotationColor, family: 'Inter, system-ui, sans-serif' },
             bgcolor: theme.annotationBg, borderpad: 3,
