@@ -81,6 +81,22 @@
             </h2>
             <div class="collapsible-content" data-section="pnl">
                 <div id="pnl-content" style="display: none;">
+                    <!-- View & Basis Controls -->
+                    <div class="pnl-controls">
+                        <div class="pnl-controls-row">
+                            <div class="tabs pnl-view-tabs" id="pnl-view-tabs">
+                                <button class="tab-button active" data-pnl-view="total">Total</button>
+                                <button class="tab-button" data-pnl-view="monthly">Monthly</button>
+                            </div>
+                            <div class="tabs pnl-basis-tabs" id="pnl-basis-tabs">
+                                <button class="tab-button active" data-pnl-basis="accrual">Accrual Basis</button>
+                                <button class="tab-button" data-pnl-basis="cash">Cash Basis</button>
+                            </div>
+                        </div>
+                        <div class="pnl-basis-hint" id="pnl-basis-hint">Premium attributed to option expiry month</div>
+                    </div>
+                    <!-- Month Tabs (visible only in Monthly view) -->
+                    <div class="tabs tab-carousel pnl-month-tabs" id="pnl-month-tabs" style="display: none;"></div>
                     <div class="summary-grid" id="pnl-grid"></div>
                     <div id="pnl-chart-account" class="chart-container" style="margin-top: 16px;"></div>
                 </div>

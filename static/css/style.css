@@ -551,6 +551,34 @@ header h1 {
 }
 
 /* --- Summary Grid — soft cards with subtle fills --- */
+/* --- PnL Controls --- */
+.pnl-controls {
+    margin-bottom: var(--space-md);
+}
+
+.pnl-controls-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.pnl-view-tabs,
+.pnl-basis-tabs {
+    margin-bottom: 0;
+}
+
+.pnl-basis-hint {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    margin-top: 6px;
+    font-style: italic;
+}
+
+.pnl-month-tabs {
+    margin-bottom: var(--space-md) !important;
+}
+
 .summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

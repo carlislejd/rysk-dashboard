@@ -1279,12 +1279,74 @@ function renderPortfolioHealth(positionsData, historyData) {
 
 // ── Premium PnL (Account) ──
 
+// PnL state
+let _pnlView = 'total';       // 'total' | 'monthly'
+let _pnlBasis = 'accrual';    // 'accrual' | 'cash'
+let _pnlSelectedMonth = null;  // 'YYYY-MM' or null (= latest)
+let _pnlHistoryCache = null;
+
+function _initPnlControls() {
+    // View toggle (Total / Monthly)
+    document.querySelectorAll('#pnl-view-tabs .tab-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#pnl-view-tabs .tab-button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _pnlView = btn.dataset.pnlView;
+            _pnlSelectedMonth = null; // reset month on view change
+            _renderPnlFromCache();
+        });
+    });
+
+    // Basis toggle (Accrual / Cash)
+    document.querySelectorAll('#pnl-basis-tabs .tab-button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#pnl-basis-tabs .tab-button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _pnlBasis = btn.dataset.pnlBasis;
+            _pnlSelectedMonth = null; // reset month on basis change
+            _renderPnlFromCache();
+        });
+    });
+}
+
+/** Get the date key for a position depending on the accounting basis */
+function _pnlDateKey(position) {
+    if (_pnlBasis === 'cash') {
+        // Cash basis: use the trade/created date
+        const iso = position.created_at_iso;
+        return iso ? iso.slice(0, 10) : 'Unknown';
+    }
+    // Accrual basis: use the expiry date
+    return position.expiry_date || 'Unknown';
+}
+
+/** Extract YYYY-MM from a date string */
+function _toMonth(dateStr) {
+    if (!dateStr || dateStr === 'Unknown') return 'Unknown';
+    return dateStr.slice(0, 7); // 'YYYY-MM'
+}
+
+/** Format YYYY-MM as 'Mar 2026' */
+function _formatMonth(ym) {
+    if (!ym || ym === 'Unknown') return 'Unknown';
+    const [y, m] = ym.split('-');
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${monthNames[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function _renderPnlFromCache() {
+    if (_pnlHistoryCache) renderAccountPnl(_pnlHistoryCache);
+}
+
 function renderAccountPnl(historyData) {
+    _pnlHistoryCache = historyData;
+
     const pnlContent = document.getElementById('pnl-content');
     const pnlGrid = document.getElementById('pnl-grid');
+    const monthTabsContainer = document.getElementById('pnl-month-tabs');
+    const basisHint = document.getElementById('pnl-basis-hint');
     if (!pnlContent || !pnlGrid) return;
 
-    const summary = historyData?.summary || {};
     const expired = historyData?.expired_positions || [];
 
     if (!expired.length) {
@@ -1292,51 +1354,109 @@ function renderAccountPnl(historyData) {
         return;
     }
 
-    const returnedPositions = expired.filter(p => (p.outcome || '').toLowerCase() === 'returned');
-    const assignedPositions = expired.filter(p => (p.outcome || '').toLowerCase() === 'assigned');
+    // Update basis hint
+    if (basisHint) {
+        basisHint.textContent = _pnlBasis === 'accrual'
+            ? 'Premium attributed to option expiry month'
+            : 'Premium attributed to trade execution date';
+    }
+
+    // --- Determine available months based on current basis ---
+    const allMonths = new Set();
+    for (const p of expired) {
+        const dateKey = _pnlDateKey(p);
+        const m = _toMonth(dateKey);
+        if (m !== 'Unknown') allMonths.add(m);
+    }
+    const sortedMonths = [...allMonths].sort();
+
+    // --- Show/hide month tabs ---
+    if (_pnlView === 'monthly' && monthTabsContainer) {
+        if (!_pnlSelectedMonth && sortedMonths.length) {
+            _pnlSelectedMonth = sortedMonths[sortedMonths.length - 1]; // default to latest
+        }
+        monthTabsContainer.style.display = 'flex';
+        monthTabsContainer.innerHTML = sortedMonths.map(m =>
+            `<button class="tab-button ${m === _pnlSelectedMonth ? 'active' : ''}" data-pnl-month="${m}">${_formatMonth(m)}</button>`
+        ).join('');
+
+        // Bind month tab clicks
+        monthTabsContainer.querySelectorAll('.tab-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                _pnlSelectedMonth = btn.dataset.pnlMonth;
+                _renderPnlFromCache();
+            });
+        });
+
+        // Scroll selected month into view
+        const activeTab = monthTabsContainer.querySelector('.tab-button.active');
+        if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    } else if (monthTabsContainer) {
+        monthTabsContainer.style.display = 'none';
+    }
+
+    // --- Filter positions for current view ---
+    let filtered = expired;
+    if (_pnlView === 'monthly' && _pnlSelectedMonth) {
+        filtered = expired.filter(p => {
+            const dateKey = _pnlDateKey(p);
+            return _toMonth(dateKey) === _pnlSelectedMonth;
+        });
+    }
+
+    // --- Compute stats from filtered positions ---
+    const returnedPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'returned');
+    const assignedPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'assigned');
     const returnedPremium = returnedPositions.reduce((s, p) => s + (p.premium || 0), 0);
     const assignedPremium = assignedPositions.reduce((s, p) => s + (p.premium || 0), 0);
-    const totalPremium = summary.net_premium || 0;
-    const returnRate = expired.length > 0 ? (returnedPositions.length / expired.length * 100) : 0;
+    const totalPremium = returnedPremium + assignedPremium;
+    const assignedNotional = assignedPositions.reduce((s, p) => s + (p.notional || 0), 0);
+    const returnRate = filtered.length > 0 ? (returnedPositions.length / filtered.length * 100) : 0;
+
+    const viewLabel = _pnlView === 'monthly' && _pnlSelectedMonth
+        ? _formatMonth(_pnlSelectedMonth)
+        : 'All Time';
 
     pnlGrid.innerHTML = `
         <div class="summary-card">
-            <div class="summary-label">Returned Position Premium</div>
-            <div class="summary-value" style="color: var(--accent);">${formatCurrency(returnedPremium)}</div>
-            <div class="summary-subtext">Kept from ${returnedPositions.length} returned positions</div>
-        </div>
-        <div class="summary-card">
             <div class="summary-label">Total Premium Collected</div>
             <div class="summary-value">${formatCurrency(totalPremium)}</div>
-            <div class="summary-subtext">${expired.length} expired positions</div>
+            <div class="summary-subtext">${filtered.length} expired positions</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Returned Premium</div>
+            <div class="summary-value">${formatCurrency(returnedPremium)}</div>
+            <div class="summary-subtext">${returnedPositions.length} returned positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Assigned Premium</div>
-            <div class="summary-value" style="color: var(--color-error);">${formatCurrency(assignedPremium)}</div>
-            <div class="summary-subtext">${assignedPositions.length} assigned</div>
+            <div class="summary-value">${formatCurrency(assignedPremium)}</div>
+            <div class="summary-subtext">${assignedPositions.length} assigned positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Return Rate</div>
             <div class="summary-value">${formatPercentage(returnRate)}</div>
-            <div class="summary-subtext">${returnedPositions.length} of ${expired.length}</div>
+            <div class="summary-subtext">${returnedPositions.length} of ${filtered.length}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Assigned Notional</div>
-            <div class="summary-value">${formatCurrency(summary.assigned_notional_total || 0)}</div>
+            <div class="summary-value">${formatCurrency(assignedNotional)}</div>
         </div>
     `;
 
-    // Build cumulative premium chart from expired positions (sorted by expiry date)
-    const sortedExpired = [...expired].sort((a, b) => {
-        const ta = Date.parse(a.expiry_date || '') || 0;
-        const tb = Date.parse(b.expiry_date || '') || 0;
-        return ta - tb;
+    // --- Build chart ---
+    // Sort filtered positions by the relevant date key
+    const sortedFiltered = [...filtered].sort((a, b) => {
+        const da = _pnlDateKey(a);
+        const db = _pnlDateKey(b);
+        return da.localeCompare(db);
     });
 
-    // Group by expiry date
+    // Group by date
     const byDate = {};
-    for (const p of sortedExpired) {
-        const date = p.expiry_date || 'Unknown';
+    for (const p of sortedFiltered) {
+        const date = _pnlDateKey(p);
+        if (date === 'Unknown') continue;
         if (!byDate[date]) byDate[date] = { premium: 0, returned_premium: 0, count: 0 };
         byDate[date].premium += p.premium || 0;
         byDate[date].count += 1;
@@ -1345,10 +1465,10 @@ function renderAccountPnl(historyData) {
         }
     }
 
-    const dates = Object.keys(byDate).filter(d => d !== 'Unknown').sort();
-    // Show container before rendering so Plotly can measure width
+    const dates = Object.keys(byDate).sort();
     pnlContent.style.display = 'block';
 
+    const chartEl = document.getElementById('pnl-chart-account');
     if (dates.length > 1 && typeof Plotly !== 'undefined') {
         let cumTotal = 0;
         let cumReturned = 0;
@@ -1364,9 +1484,10 @@ function renderAccountPnl(historyData) {
             dailyPrem.push(byDate[d].premium);
         }
 
+        const dateLabel = _pnlBasis === 'cash' ? 'Trade Date' : 'Expiry Date';
         const theme = getPlotlyTheme();
         Plotly.newPlot('pnl-chart-account', [
-            { x: dates, y: dailyPrem, type: 'bar', name: 'Expiry Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
+            { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#34d399', width: 2.5 } },
             { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
@@ -1375,10 +1496,13 @@ function renderAccountPnl(historyData) {
             margin: { l: 60, r: 60, t: 20, b: 60 },
             xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
             yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
-            yaxis2: { title: 'Per Expiry ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
+            yaxis2: { title: `Per ${dateLabel} ($)`, overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
+    } else if (chartEl) {
+        // Not enough data for chart, or single bar — clear it
+        chartEl.innerHTML = '';
     }
 }
 
@@ -2098,6 +2222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initCollapsibleSections();
     initHistoryModal();
+    _initPnlControls();
 
     setAccountStatus('Enter a wallet address');
 
