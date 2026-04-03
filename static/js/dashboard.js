@@ -1424,14 +1424,14 @@ function renderAccountPnl(historyData) {
             <div class="summary-subtext">${filtered.length} expired positions</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Returned Premium</div>
+            <div class="summary-label">Premium Expired OTM</div>
             <div class="summary-value">${formatCurrency(returnedPremium)}</div>
-            <div class="summary-subtext">${returnedPositions.length} returned positions</div>
+            <div class="summary-subtext">${returnedPositions.length} positions</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Assigned Premium</div>
+            <div class="summary-label">Premium Expired ITM</div>
             <div class="summary-value">${formatCurrency(assignedPremium)}</div>
-            <div class="summary-subtext">${assignedPositions.length} assigned positions</div>
+            <div class="summary-subtext">${assignedPositions.length} positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Return Rate</div>
@@ -1489,7 +1489,7 @@ function renderAccountPnl(historyData) {
         Plotly.newPlot('pnl-chart-account', [
             { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
             { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Expired OTM Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
