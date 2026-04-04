@@ -1284,6 +1284,7 @@ let _pnlView = 'total';       // 'total' | 'monthly'
 let _pnlBasis = 'accrual';    // 'accrual' | 'cash'
 let _pnlSelectedMonth = null;  // 'YYYY-MM' or null (= latest)
 let _pnlHistoryCache = null;
+let _pnlOpenPositionsCache = [];
 
 function _initPnlControls() {
     // View toggle (Total / Monthly)
@@ -1335,11 +1336,12 @@ function _formatMonth(ym) {
 }
 
 function _renderPnlFromCache() {
-    if (_pnlHistoryCache) renderAccountPnl(_pnlHistoryCache);
+    if (_pnlHistoryCache) renderAccountPnl(_pnlHistoryCache, _pnlOpenPositionsCache);
 }
 
-function renderAccountPnl(historyData) {
+function renderAccountPnl(historyData, openPositions) {
     _pnlHistoryCache = historyData;
+    _pnlOpenPositionsCache = openPositions || [];
 
     const pnlContent = document.getElementById('pnl-content');
     const pnlGrid = document.getElementById('pnl-grid');
@@ -1349,7 +1351,16 @@ function renderAccountPnl(historyData) {
 
     const expired = historyData?.expired_positions || [];
 
-    if (!expired.length) {
+    // Include active (open) positions — premium is received upfront on
+    // European options, so it counts on both bases (trade date or expiry month)
+    const activePositionsTagged = (_pnlOpenPositionsCache || []).map(p => ({
+        ...p,
+        outcome: 'active',  // mark so we can distinguish from settled
+    }));
+
+    const allPositions = [...expired, ...activePositionsTagged];
+
+    if (!allPositions.length) {
         pnlContent.style.display = 'none';
         return;
     }
@@ -1363,7 +1374,7 @@ function renderAccountPnl(historyData) {
 
     // --- Determine available months based on current basis ---
     const allMonths = new Set();
-    for (const p of expired) {
+    for (const p of allPositions) {
         const dateKey = _pnlDateKey(p);
         const m = _toMonth(dateKey);
         if (m !== 'Unknown') allMonths.add(m);
@@ -1396,47 +1407,55 @@ function renderAccountPnl(historyData) {
     }
 
     // --- Filter positions for current view ---
-    let filtered = expired;
+    let filtered = allPositions;
     if (_pnlView === 'monthly' && _pnlSelectedMonth) {
-        filtered = expired.filter(p => {
+        filtered = allPositions.filter(p => {
             const dateKey = _pnlDateKey(p);
             return _toMonth(dateKey) === _pnlSelectedMonth;
         });
     }
 
     // --- Compute stats from filtered positions ---
-    const returnedPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'returned');
-    const assignedPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'assigned');
-    const returnedPremium = returnedPositions.reduce((s, p) => s + (p.premium || 0), 0);
-    const assignedPremium = assignedPositions.reduce((s, p) => s + (p.premium || 0), 0);
-    const totalPremium = returnedPremium + assignedPremium;
-    const assignedNotional = assignedPositions.reduce((s, p) => s + (p.notional || 0), 0);
-    const returnRate = filtered.length > 0 ? (returnedPositions.length / filtered.length * 100) : 0;
+    const otmPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'returned');
+    const itmPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'assigned');
+    const activePositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'active');
+    const otmPremium = otmPositions.reduce((s, p) => s + (p.premium || 0), 0);
+    const itmPremium = itmPositions.reduce((s, p) => s + (p.premium || 0), 0);
+    const activePremium = activePositions.reduce((s, p) => s + (p.premium || 0), 0);
+    const totalPremium = otmPremium + itmPremium + activePremium;
+    const assignedNotional = itmPositions.reduce((s, p) => s + (p.notional || 0), 0);
+    // Return rate only counts settled positions
+    const settledCount = otmPositions.length + itmPositions.length;
+    const returnRate = settledCount > 0 ? (otmPositions.length / settledCount * 100) : 0;
 
     const viewLabel = _pnlView === 'monthly' && _pnlSelectedMonth
         ? _formatMonth(_pnlSelectedMonth)
         : 'All Time';
 
+    const activeLabel = activePositions.length > 0
+        ? ` · ${activePositions.length} active`
+        : '';
+
     pnlGrid.innerHTML = `
         <div class="summary-card">
             <div class="summary-label">Total Premium Collected</div>
             <div class="summary-value">${formatCurrency(totalPremium)}</div>
-            <div class="summary-subtext">${filtered.length} expired positions</div>
+            <div class="summary-subtext">${filtered.length} positions${activeLabel}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired OTM</div>
-            <div class="summary-value">${formatCurrency(returnedPremium)}</div>
-            <div class="summary-subtext">${returnedPositions.length} positions</div>
+            <div class="summary-value">${formatCurrency(otmPremium)}</div>
+            <div class="summary-subtext">${otmPositions.length} positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired ITM</div>
-            <div class="summary-value">${formatCurrency(assignedPremium)}</div>
-            <div class="summary-subtext">${assignedPositions.length} positions</div>
+            <div class="summary-value">${formatCurrency(itmPremium)}</div>
+            <div class="summary-subtext">${itmPositions.length} positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Return Rate</div>
-            <div class="summary-value">${formatPercentage(returnRate)}</div>
-            <div class="summary-subtext">${returnedPositions.length} of ${filtered.length}</div>
+            <div class="summary-value">${settledCount > 0 ? formatPercentage(returnRate) : '—'}</div>
+            <div class="summary-subtext">${settledCount > 0 ? `${otmPositions.length} of ${settledCount} settled` : 'No settled positions'}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Assigned Notional</div>
@@ -1523,7 +1542,7 @@ async function loadAllData() {
     // Render new sections after all data is loaded
     const posData = _positions_cache.get(currentAccount.toLowerCase());
     if (posData) renderPortfolioHealth(posData, historyDataCache);
-    if (historyDataCache) renderAccountPnl(historyDataCache);
+    if (historyDataCache) renderAccountPnl(historyDataCache, posData?.open_positions || []);
 
     // Resize any Plotly charts after render (handles cases where container just became visible)
     setTimeout(() => {
