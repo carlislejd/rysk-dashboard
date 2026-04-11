@@ -733,6 +733,63 @@ def get_assignment_rate_trend(conn):
     return {"data": data}
 
 
+def get_next_expiry_top_positions(conn, limit=5):
+    """Top positions by total notional for the next upcoming expiry, grouped by asset+strike."""
+    now = int(time.time())
+
+    # Find the next expiry timestamp
+    next_exp = conn.execute("""
+        SELECT MIN(expiry) as next_expiry
+        FROM trades
+        WHERE expiry > ? AND symbol != ''
+    """, (now,)).fetchone()
+
+    if not next_exp or not next_exp["next_expiry"]:
+        return {"next_expiry": None, "positions": []}
+
+    expiry_ts = next_exp["next_expiry"]
+
+    rows = conn.execute("""
+        SELECT symbol,
+               strike_f,
+               COUNT(*) as order_count,
+               SUM(quantity_f) as total_quantity,
+               SUM(notional_f) as total_notional,
+               SUM(premium_f) as total_premium,
+               AVG(apr_f) as avg_apr,
+               SUM(CASE WHEN is_put = 1 THEN 1 ELSE 0 END) as put_count,
+               SUM(CASE WHEN is_put = 0 THEN 1 ELSE 0 END) as call_count
+        FROM trades
+        WHERE expiry = ? AND symbol != ''
+        GROUP BY symbol, strike_f
+        ORDER BY total_notional DESC
+        LIMIT ?
+    """, (expiry_ts, limit)).fetchall()
+
+    positions = []
+    for r in rows:
+        put_count = r["put_count"] or 0
+        call_count = r["call_count"] or 0
+        dominant_type = "Put" if put_count > call_count else "Call" if call_count > put_count else "Mixed"
+        positions.append({
+            "symbol": r["symbol"],
+            "strike": r["strike_f"],
+            "order_count": r["order_count"],
+            "total_quantity": r["total_quantity"],
+            "total_notional": r["total_notional"],
+            "total_premium": r["total_premium"],
+            "avg_apr": r["avg_apr"],
+            "dominant_type": dominant_type,
+            "put_count": put_count,
+            "call_count": call_count,
+        })
+
+    return {
+        "next_expiry": expiry_ts,
+        "positions": positions,
+    }
+
+
 def get_market_pulse(conn):
     """What's hot right now: top asset last 24h, popular strikes, avg DTE."""
     now = int(time.time())

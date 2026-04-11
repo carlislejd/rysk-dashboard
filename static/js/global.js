@@ -883,11 +883,63 @@ async function loadOutcomes() {
     }
 }
 
+// ── Top Positions for Next Expiry ──
+
+async function loadNextExpiryPositions() {
+    const loading = document.getElementById('next-expiry-loading');
+    const content = document.getElementById('next-expiry-content');
+    try {
+        const resp = await fetch('/api/global/next-expiry-positions?limit=5');
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        if (!data.next_expiry || !data.positions.length) {
+            loading.textContent = 'No upcoming expiries found.';
+            return;
+        }
+
+        const expiryDate = formatUnixDate(data.next_expiry);
+        const totalNotional = data.positions.reduce((s, p) => s + (p.total_notional || 0), 0);
+        const totalPremium = data.positions.reduce((s, p) => s + (p.total_premium || 0), 0);
+
+        document.getElementById('next-expiry-header').innerHTML = `
+            <div class="summary-card">
+                <div class="summary-label">Next Expiry</div>
+                <div class="summary-value">${expiryDate}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Total Notional</div>
+                <div class="summary-value">${compactCurrency(totalNotional)}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Total Premium</div>
+                <div class="summary-value">${compactCurrency(totalPremium)}</div>
+            </div>
+        `;
+
+        document.getElementById('next-expiry-body').innerHTML = data.positions.map(p => `<tr>
+            <td><span class="token-badge ${shortSymbol(p.symbol).toLowerCase()}">${shortSymbol(p.symbol)}</span></td>
+            <td>${formatStrike(p.strike)}</td>
+            <td>${p.dominant_type}</td>
+            <td>${p.order_count}</td>
+            <td>${compactCurrency(p.total_notional)}</td>
+            <td>${compactCurrency(p.total_premium)}</td>
+            <td>${p.avg_apr != null ? formatPercentage(p.avg_apr) : '—'}</td>
+        </tr>`).join('');
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+    } catch (e) {
+        loading.textContent = 'Failed to load next expiry positions: ' + e.message;
+    }
+}
+
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
     // Load all sections in parallel
     Promise.allSettled([
+        loadNextExpiryPositions(),
         loadMarketPulse(),
         loadOverview(0),
         loadPnlChart(90),

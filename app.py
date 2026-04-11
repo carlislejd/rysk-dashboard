@@ -28,6 +28,7 @@ from global_services import (
     get_assignment_rate_trend,
     get_market_pulse,
     get_premium_over_time,
+    get_next_expiry_top_positions,
 )
 from inventory_services import fetch_inventory
 from hyperliquid_client import get_current_price
@@ -498,6 +499,20 @@ def api_global_assignment_trend():
         conn = get_db()
         try:
             data = get_assignment_rate_trend(conn)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/global/next-expiry-positions')
+def api_global_next_expiry_positions():
+    """Top positions by notional for the next upcoming expiry"""
+    try:
+        limit = request.args.get("limit", 5, type=int)
+        conn = get_db()
+        try:
+            data = get_next_expiry_top_positions(conn, limit=limit)
         finally:
             conn.close()
         return jsonify({"success": True, **data})

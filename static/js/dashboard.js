@@ -1423,10 +1423,48 @@ function renderAccountPnl(historyData, openPositions) {
     const itmPremium = itmPositions.reduce((s, p) => s + (p.premium || 0), 0);
     const activePremium = activePositions.reduce((s, p) => s + (p.premium || 0), 0);
     const totalPremium = otmPremium + itmPremium + activePremium;
-    const assignedNotional = itmPositions.reduce((s, p) => s + (p.notional || 0), 0);
+    const totalNotional = filtered.reduce((s, p) => s + (p.notional || 0), 0);
     // Return rate only counts settled positions
     const settledCount = otmPositions.length + itmPositions.length;
     const returnRate = settledCount > 0 ? (otmPositions.length / settledCount * 100) : 0;
+
+    // Avg APR — use position apr field where available
+    const aprs = filtered.map(p => p.apr).filter(a => a != null && a > 0);
+    const avgApr = aprs.length > 0 ? aprs.reduce((s, a) => s + a, 0) / aprs.length : null;
+
+    // Avg DTE — for active positions use days_to_expiry, for expired use original DTE at entry
+    const dtes = filtered.map(p => {
+        if (p.days_to_expiry != null && p.days_to_expiry > 0) return p.days_to_expiry;
+        // For expired positions, compute original DTE from expiry - created_at
+        if (p.expiry && p.created_at_iso) {
+            const createdTs = new Date(p.created_at_iso).getTime() / 1000;
+            if (createdTs > 0 && p.expiry > createdTs) {
+                return (p.expiry - createdTs) / 86400;
+            }
+        }
+        return null;
+    }).filter(d => d != null);
+    const avgDte = dtes.length > 0 ? dtes.reduce((s, d) => s + d, 0) / dtes.length : null;
+
+    // Ending Notional (True PnL) — premium collected minus assignment losses
+    // OTM: full premium kept, no assignment cost → net = premium
+    // ITM: premium kept but assigned. Loss = |expiry_price - strike| * quantity
+    //   Put assigned: bought at strike, worth expiry_price → loss = (strike - expiry_price) * qty
+    //   Call assigned: sold at strike, asset went to expiry_price → loss = (expiry_price - strike) * qty
+    // Active: no realized loss yet → counted as premium only
+    let totalAssignmentLoss = 0;
+    for (const p of itmPositions) {
+        if (p.expiry_price != null && p.strike != null && p.quantity != null) {
+            const qty = Math.abs(p.quantity);
+            const isPut = (p.type || '').toLowerCase() === 'put';
+            if (isPut) {
+                totalAssignmentLoss += Math.max(0, (p.strike - p.expiry_price) * qty);
+            } else {
+                totalAssignmentLoss += Math.max(0, (p.expiry_price - p.strike) * qty);
+            }
+        }
+    }
+    const endingPnl = totalPremium - totalAssignmentLoss;
 
     const viewLabel = _pnlView === 'monthly' && _pnlSelectedMonth
         ? _formatMonth(_pnlSelectedMonth)
@@ -1435,6 +1473,11 @@ function renderAccountPnl(historyData, openPositions) {
     const activeLabel = activePositions.length > 0
         ? ` · ${activePositions.length} active`
         : '';
+
+    const endingPnlColor = endingPnl >= 0 ? 'var(--accent)' : 'var(--color-error)';
+    const assignmentNote = totalAssignmentLoss > 0
+        ? `${formatCurrency(totalAssignmentLoss)} assignment loss`
+        : 'No assignment losses';
 
     pnlGrid.innerHTML = `
         <div class="summary-card">
@@ -1458,8 +1501,22 @@ function renderAccountPnl(historyData, openPositions) {
             <div class="summary-subtext">${settledCount > 0 ? `${otmPositions.length} of ${settledCount} settled` : 'No settled positions'}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Assigned Notional</div>
-            <div class="summary-value">${formatCurrency(assignedNotional)}</div>
+            <div class="summary-label">Total Notional</div>
+            <div class="summary-value">${formatCurrency(totalNotional)}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Avg APR</div>
+            <div class="summary-value">${avgApr != null ? formatPercentage(avgApr) : '—'}</div>
+            <div class="summary-subtext">${aprs.length} positions with APR</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Avg DTE at Entry</div>
+            <div class="summary-value">${avgDte != null ? formatNumber(avgDte, 1) + 'd' : '—'}</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-label">Net PnL</div>
+            <div class="summary-value" style="color: ${endingPnlColor};">${formatCurrency(endingPnl)}</div>
+            <div class="summary-subtext">${assignmentNote}</div>
         </div>
     `;
 

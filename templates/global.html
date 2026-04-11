@@ -31,6 +31,29 @@
             </div>
         </section>
 
+        <!-- 1b. Top Positions for Next Expiry -->
+        <section class="card">
+            <h2>Top Positions — Next Expiry</h2>
+            <div id="next-expiry-loading" class="loading">Loading...</div>
+            <div id="next-expiry-content" style="display: none;">
+                <div class="summary-grid" id="next-expiry-header"></div>
+                <table class="data-table" id="next-expiry-table">
+                    <thead>
+                        <tr>
+                            <th>Asset</th>
+                            <th>Strike</th>
+                            <th>Type</th>
+                            <th>Orders</th>
+                            <th>Total Notional</th>
+                            <th>Premium</th>
+                            <th>Avg APR</th>
+                        </tr>
+                    </thead>
+                    <tbody id="next-expiry-body"></tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- 2. Protocol Overview + Volume -->
         <section class="card">
             <h2>Protocol Overview</h2>
