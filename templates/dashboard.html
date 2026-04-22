@@ -46,88 +46,121 @@
             </div>
         </header>
 
+        <!-- Hero KPI strip — your numbers, at a glance -->
+        <section class="hero-kpis" id="hero-kpis">
+            <div class="hero-kpi" data-slot="primary">
+                <div class="hero-kpi-label">Net PnL (Lifetime)</div>
+                <div class="hero-kpi-value" id="hero-net-pnl">—</div>
+                <div class="hero-kpi-sub" id="hero-net-pnl-sub">&nbsp;</div>
+            </div>
+            <div class="hero-kpi">
+                <div class="hero-kpi-label">Open Notional</div>
+                <div class="hero-kpi-value" id="hero-open-notional">—</div>
+                <div class="hero-kpi-sub" id="hero-open-notional-sub">&nbsp;</div>
+            </div>
+            <div class="hero-kpi">
+                <div class="hero-kpi-label">Open Premium</div>
+                <div class="hero-kpi-value" id="hero-open-premium">—</div>
+                <div class="hero-kpi-sub" id="hero-open-premium-sub">&nbsp;</div>
+            </div>
+            <div class="hero-kpi">
+                <div class="hero-kpi-label">Portfolio APR</div>
+                <div class="hero-kpi-value" id="hero-portfolio-apr">—</div>
+                <div class="hero-kpi-sub" id="hero-portfolio-apr-sub">&nbsp;</div>
+            </div>
+            <div class="hero-kpi">
+                <div class="hero-kpi-label">Next Expiry</div>
+                <div class="hero-kpi-value" id="hero-account-next-expiry">—</div>
+                <div class="hero-kpi-sub" id="hero-account-next-expiry-sub">&nbsp;</div>
+            </div>
+        </section>
+
+        <!-- Act sub-nav — sticky anchor links -->
+        <nav class="act-nav" id="act-nav">
+            <a href="#act-now" data-act="act-now" class="active">Right Now</a>
+            <a href="#act-performance" data-act="act-performance">Performance</a>
+        </nav>
+
+        <!-- ════════════════════════════════════════════════════════════════
+             ACT 1 — RIGHT NOW
+             What you currently hold and what's about to expire
+             ════════════════════════════════════════════════════════════════ -->
+        <div class="act-divider" id="act-now">
+            <div class="act-eyebrow">Act 1</div>
+            <div class="act-title">Right Now</div>
+            <div class="act-subtitle">What you hold and what's about to settle</div>
+        </div>
+
         <!-- Portfolio Health — Expiring This Week + DTE Distribution -->
         <section class="card">
-            <h2 class="collapsible-header expanded" data-section="health">
-                <span class="chevron">▶</span> Portfolio Health
-            </h2>
-            <div class="collapsible-content" data-section="health">
-                <div id="health-content" style="display: none;">
-                    <div class="summary-grid" id="health-grid"></div>
-                    <div id="health-expiring" style="margin-top: 16px;"></div>
-                </div>
+            <h2>Portfolio Health</h2>
+            <div id="health-content" style="display: none;">
+                <div class="summary-grid" id="health-grid"></div>
+                <div id="health-expiring" style="margin-top: 16px;"></div>
             </div>
         </section>
 
         <!-- Current Positions Section -->
         <section class="card">
-            <h2 class="collapsible-header" data-section="positions">
-                <span class="chevron">▶</span> Current Open Positions
-            </h2>
-            <div class="collapsible-content" data-section="positions">
-                <div id="positions-loading" class="loading">Loading positions...</div>
-                <div id="positions-content" style="display: none;"></div>
-                <div id="positions-error" class="error" style="display: none;"></div>
-                <div id="positions-not-configured" class="warning" style="display: none;">
-                    Positions API not configured. Set POSITIONS_API_URL environment variable.
-                </div>
+            <h2>Current Open Positions</h2>
+            <div id="positions-loading" class="loading">Loading positions...</div>
+            <div id="positions-content" style="display: none;"></div>
+            <div id="positions-error" class="error" style="display: none;"></div>
+            <div id="positions-not-configured" class="warning" style="display: none;">
+                Positions API not configured. Set POSITIONS_API_URL environment variable.
             </div>
         </section>
 
+        <!-- ════════════════════════════════════════════════════════════════
+             ACT 2 — PERFORMANCE
+             How you've done over time
+             ════════════════════════════════════════════════════════════════ -->
+        <div class="act-divider" id="act-performance">
+            <div class="act-eyebrow">Act 2</div>
+            <div class="act-title">Performance</div>
+            <div class="act-subtitle">Premium collected and historical outcomes</div>
+        </div>
+
         <!-- PnL Summary — Premium Profit Tracking -->
         <section class="card">
-            <h2 class="collapsible-header expanded" data-section="pnl">
-                <span class="chevron">▶</span> Premium PnL
-            </h2>
-            <div class="collapsible-content" data-section="pnl">
-                <div id="pnl-content" style="display: none;">
-                    <!-- View & Basis Controls -->
-                    <div class="pnl-controls">
-                        <div class="pnl-controls-row">
-                            <div class="tabs pnl-view-tabs" id="pnl-view-tabs">
-                                <button class="tab-button active" data-pnl-view="total">Total</button>
-                                <button class="tab-button" data-pnl-view="monthly">Monthly</button>
-                            </div>
-                            <div class="tabs pnl-basis-tabs" id="pnl-basis-tabs">
-                                <button class="tab-button active" data-pnl-basis="accrual">Accrual Basis</button>
-                                <button class="tab-button" data-pnl-basis="cash">Cash Basis</button>
-                            </div>
+            <h2>Premium PnL</h2>
+            <div id="pnl-content" style="display: none;">
+                <!-- View & Basis Controls -->
+                <div class="pnl-controls">
+                    <div class="pnl-controls-row">
+                        <div class="tabs pnl-view-tabs" id="pnl-view-tabs">
+                            <button class="tab-button active" data-pnl-view="total">Total</button>
+                            <button class="tab-button" data-pnl-view="monthly">Monthly</button>
                         </div>
-                        <div class="pnl-basis-hint" id="pnl-basis-hint">Premium attributed to option expiry month</div>
+                        <div class="tabs pnl-basis-tabs" id="pnl-basis-tabs">
+                            <button class="tab-button active" data-pnl-basis="accrual">Accrual Basis</button>
+                            <button class="tab-button" data-pnl-basis="cash">Cash Basis</button>
+                        </div>
                     </div>
-                    <!-- Month Tabs (visible only in Monthly view) -->
-                    <div class="tabs tab-carousel pnl-month-tabs" id="pnl-month-tabs" style="display: none;"></div>
-                    <div class="summary-grid" id="pnl-grid"></div>
-                    <div id="pnl-chart-account" class="chart-container" style="margin-top: 16px;"></div>
+                    <div class="pnl-basis-hint" id="pnl-basis-hint">Premium attributed to option expiry month</div>
                 </div>
+                <!-- Month Tabs (visible only in Monthly view) -->
+                <div class="tabs tab-carousel pnl-month-tabs" id="pnl-month-tabs" style="display: none;"></div>
+                <div class="summary-grid" id="pnl-grid"></div>
+                <div id="pnl-chart-account" class="chart-container" style="margin-top: 16px;"></div>
             </div>
         </section>
 
         <!-- Historical Performance Section -->
         <section class="card">
-            <h2 class="collapsible-header" data-section="history">
-                <span class="chevron">▶</span> Historical Performance
-            </h2>
-            <div class="collapsible-content" data-section="history">
-                <div id="history-loading" class="loading">Loading history...</div>
-                <div class="history-actions">
-                    <button id="history-detail-button" class="terminal-button" disabled>Deep Dive (Coming Soon)</button>
-                </div>
-                <div id="history-content" style="display: none;"></div>
-                <div id="history-error" class="error" style="display: none;"></div>
-                <div id="history-not-configured" class="warning" style="display: none;">
-                    History API not configured. Set HISTORY_API_URL environment variable.
-                </div>
+            <h2>Historical Performance</h2>
+            <div id="history-loading" class="loading">Loading history...</div>
+            <div id="history-content" style="display: none;"></div>
+            <div id="history-error" class="error" style="display: none;"></div>
+            <div id="history-not-configured" class="warning" style="display: none;">
+                History API not configured. Set HISTORY_API_URL environment variable.
             </div>
         </section>
     </div>
     </div>
-
-    <!-- Deep dive is now rendered inline in the Historical Performance section -->
 
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 </body>
 </html>
-

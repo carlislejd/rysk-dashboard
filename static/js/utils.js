@@ -3,14 +3,14 @@
 // ── Theme Toggle (Day/Night) ──
 
 function initTheme() {
-    const saved = localStorage.getItem('rysk-theme') || 'dark';
+    const saved = localStorage.getItem('rysk-theme') || 'light';
     document.documentElement.setAttribute('data-theme', saved);
     updateToggleIcons(saved);
 }
 
 function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme') || 'dark';
-    const next = current === 'dark' ? 'light' : 'dark';
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('rysk-theme', next);
     updateToggleIcons(next);

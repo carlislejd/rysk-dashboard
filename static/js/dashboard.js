@@ -1600,6 +1600,7 @@ async function loadAllData() {
     const posData = _positions_cache.get(currentAccount.toLowerCase());
     if (posData) renderPortfolioHealth(posData, historyDataCache);
     if (historyDataCache) renderAccountPnl(historyDataCache, posData?.open_positions || []);
+    populateAccountHero(posData, historyDataCache);
 
     // Resize any Plotly charts after render (handles cases where container just became visible)
     setTimeout(() => {
@@ -1609,6 +1610,120 @@ async function loadAllData() {
     });
 
     setAccountStatus('');
+}
+
+// ── Hero KPI population (account) ──
+
+function _setAccountHero(id, value, sub, valueClass) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = value;
+        el.classList.remove('pos', 'neg');
+        if (valueClass) el.classList.add(valueClass);
+    }
+    if (sub !== undefined) {
+        const subEl = document.getElementById(id + '-sub');
+        if (subEl) subEl.innerHTML = sub || '&nbsp;';
+    }
+}
+
+function populateAccountHero(positionsData, historyData) {
+    const summary = positionsData?.summary || {};
+    const openPositions = positionsData?.open_positions || [];
+    const expired = historyData?.expired_positions || [];
+
+    // Net PnL (lifetime): premium collected - realized assignment losses
+    // Mirror calc in renderAccountPnl, computed across all expired + open positions
+    let totalPremium = 0;
+    let assignmentLoss = 0;
+    for (const p of expired) {
+        totalPremium += (p.premium || 0);
+        if ((p.outcome || '').toLowerCase() === 'assigned'
+            && p.expiry_price != null && p.strike != null && p.quantity != null) {
+            const qty = Math.abs(p.quantity);
+            const isPut = (p.type || '').toLowerCase() === 'put';
+            const loss = isPut
+                ? Math.max(0, (p.strike - p.expiry_price) * qty)
+                : Math.max(0, (p.expiry_price - p.strike) * qty);
+            assignmentLoss += loss;
+        }
+    }
+    for (const p of openPositions) {
+        totalPremium += (p.premium || 0);
+    }
+    const netPnl = totalPremium - assignmentLoss;
+    const pnlClass = netPnl >= 0 ? 'pos' : 'neg';
+    const pnlSub = assignmentLoss > 0
+        ? `${formatCurrency(totalPremium)} premium · ${formatCurrency(assignmentLoss)} assigned loss`
+        : `${formatCurrency(totalPremium)} premium · no assigned losses`;
+    _setAccountHero('hero-net-pnl', formatCurrency(netPnl), pnlSub, pnlClass);
+
+    // Open Notional
+    _setAccountHero('hero-open-notional',
+        formatCurrency(summary.open_notional_total || 0),
+        `${formatNumber(summary.open_count || openPositions.length || 0, 0)} open positions`);
+
+    // Open Premium
+    _setAccountHero('hero-open-premium',
+        formatCurrency(summary.open_premium_total || 0),
+        'Premium received on open legs');
+
+    // Portfolio APR
+    const apr = summary.open_weighted_apr;
+    _setAccountHero('hero-portfolio-apr',
+        apr != null ? formatPercentage(apr) : '—',
+        'Notional-weighted across open legs');
+
+    // Next expiry — soonest expiring open position
+    const dtes = openPositions
+        .map(p => p.days_to_expiry)
+        .filter(d => d != null && d > 0);
+    if (dtes.length) {
+        const minDte = Math.min(...dtes);
+        const days = Math.round(minDte);
+        const dayLabel = days === 0 ? 'today' : days === 1 ? '1 day' : `${days} days`;
+        const expiringSoon = openPositions.filter(p => (p.days_to_expiry || 0) <= 7 && (p.days_to_expiry || 0) > 0).length;
+        const sub = expiringSoon > 0
+            ? `${expiringSoon} expiring within 7d`
+            : `Soonest open leg`;
+        _setAccountHero('hero-account-next-expiry', dayLabel, sub);
+    } else {
+        _setAccountHero('hero-account-next-expiry', '—', 'No open legs');
+    }
+}
+
+// ── Scroll-spy for sticky act-nav (account) ──
+
+function initActNavScrollSpy() {
+    const navLinks = document.querySelectorAll('.act-nav a[data-act]');
+    if (!navLinks.length) return;
+    const targets = Array.from(navLinks)
+        .map(a => document.getElementById(a.dataset.act))
+        .filter(Boolean);
+    if (!targets.length) return;
+
+    const setActive = (id) => {
+        navLinks.forEach(a => a.classList.toggle('active', a.dataset.act === id));
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        const visible = entries
+            .filter(e => e.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) setActive(visible[0].target.id);
+    }, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+
+    targets.forEach(t => observer.observe(t));
+
+    navLinks.forEach(a => {
+        a.addEventListener('click', (e) => {
+            const target = document.getElementById(a.dataset.act);
+            if (!target) return;
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', '#' + a.dataset.act);
+        });
+    });
 }
 
 function refreshAllData() {
@@ -2299,6 +2414,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initCollapsibleSections();
     initHistoryModal();
     _initPnlControls();
+    initActNavScrollSpy();
 
     setAccountStatus('Enter a wallet address');
 

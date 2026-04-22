@@ -1579,3 +1579,171 @@ code {
     background: none;
     padding: 0;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   HERO KPI STRIP — five at-a-glance numbers, big and quiet
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.hero-kpis {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin: var(--space-lg) 0 var(--space-md);
+}
+
+.hero-kpi {
+    background: var(--bg-raised);
+    padding: var(--space-lg) var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+}
+
+.hero-kpi-label {
+    font-size: 0.7em;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.hero-kpi-value {
+    font-family: var(--font-mono);
+    font-size: 1.8em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    line-height: 1.1;
+}
+
+.hero-kpi-sub {
+    font-size: 0.78em;
+    color: var(--text-muted);
+    min-height: 1em;
+}
+
+.hero-kpi-value.pos { color: var(--accent); }
+.hero-kpi-value.neg { color: var(--color-error); }
+
+@media (max-width: 900px) {
+    .hero-kpis { grid-template-columns: repeat(2, 1fr); }
+    .hero-kpi:last-child:nth-child(odd) { grid-column: span 2; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ACT NAV — sticky sub-nav between hero and the first act
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.act-nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    gap: var(--space-xs);
+    padding: 10px 0;
+    margin-bottom: 0;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+}
+
+.act-nav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 0.78em;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6px 14px;
+    border-radius: var(--radius-full);
+    transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.act-nav a:hover {
+    color: var(--text-secondary);
+    background: var(--bg-hover);
+}
+
+.act-nav a.active {
+    color: var(--text-primary);
+    background: var(--accent-dim);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ACT DIVIDER — visible chapter break between sections of the page
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.act-divider {
+    margin-top: var(--space-2xl);
+    padding-top: var(--space-lg);
+    padding-bottom: var(--space-md);
+    border-top: 1px solid var(--border-strong);
+    scroll-margin-top: 60px;
+}
+
+.act-divider:first-of-type {
+    margin-top: var(--space-xl);
+}
+
+.act-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.7em;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.act-title {
+    font-family: var(--font-sans);
+    font-size: 1.6em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.act-subtitle {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-bottom: var(--space-md);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TIME RANGE CONTROL — single selector inside the Protocol act divider
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.time-range-control {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-top: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.time-range-label {
+    font-size: 0.72em;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+
+.time-range-tabs {
+    margin-bottom: 0 !important;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CARD SUBTITLE — quiet clarifier under a card heading
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.card-subtitle {
+    font-size: 0.82em;
+    color: var(--text-muted);
+    margin-top: 6px;
+    margin-bottom: var(--space-md);
+}

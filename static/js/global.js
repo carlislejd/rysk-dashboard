@@ -27,18 +27,13 @@ function outcomeBadge(outcome) {
     return '<span class="status-badge status-default">Unknown</span>';
 }
 
-// ── Protocol Overview (summary + volume chart, driven by time tabs) ──
+// ── Protocol Overview (summary + volume chart, driven by unified time-range selector) ──
 
-let overviewDays = 0; // 0 = all time
+let overviewDays = 90; // default — unified selector starts at 90d
 async function loadOverview(days) {
     overviewDays = days;
     const loading = document.getElementById('summary-loading');
     const content = document.getElementById('summary-content');
-
-    // Update active tab
-    document.querySelectorAll('#overview-tabs .tab-button').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.overviewDays) === days);
-    });
 
     // Fetch summary + volume in parallel
     const summaryParams = days > 0 ? `?days=${days}` : '';
@@ -163,7 +158,8 @@ let selectedExpiry = null; // null = All
 
 async function showAssetDetail(symbol, { scroll = true } = {}) {
     selectedAsset = symbol;
-    selectedExpiry = null;
+    // Note: selectedExpiry is preserved across asset switches below — dropped only
+    // if the newly selected asset doesn't trade that expiry date
     const panel = document.getElementById('asset-detail');
     const base = shortSymbol(symbol);
 
@@ -175,28 +171,50 @@ async function showAssetDetail(symbol, { scroll = true } = {}) {
     panel.style.display = 'block';
     if (scroll) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    // First fetch detail to get expiry list, then load the rest
+    // First fetch unfiltered to get full expiry list for this asset
     const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
     const detail = await detailResp.json();
 
     if (detail.success) {
         detailExpiries = detail.expiries || [];
+
+        // Preserve expiry across asset switches if the new asset trades that date;
+        // otherwise fall back to All
+        if (selectedExpiry !== null && !detailExpiries.some(e => e.expiry === selectedExpiry)) {
+            selectedExpiry = null;
+        }
+
         renderExpiryTabs(symbol);
-        renderDetailSummary(detail);
-        renderExpiryBreakdown(detail);
+
+        if (selectedExpiry !== null) {
+            // Re-fetch summary data filtered by the preserved expiry
+            const filteredResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}?expiry=${selectedExpiry}`);
+            const filtered = await filteredResp.json();
+            if (filtered.success) {
+                renderDetailSummary(filtered);
+                document.getElementById('detail-expiry-content').style.display = 'none';
+            }
+        } else {
+            renderDetailSummary(detail);
+            renderExpiryBreakdown(detail);
+        }
     }
 
-    // Load volume + trades in parallel (unfiltered initially)
-    loadDetailData(symbol, null);
+    loadDetailData(symbol, selectedExpiry);
 }
 
 function renderExpiryTabs(symbol) {
     const tabs = document.getElementById('detail-expiry-tabs');
     const sorted = [...detailExpiries].sort((a, b) => b.expiry - a.expiry);
-    tabs.innerHTML = `<button class="tab-button active" data-detail-expiry="all">All</button>` +
+    const allActive = selectedExpiry === null;
+    tabs.innerHTML = `<button class="tab-button${allActive ? ' active' : ''}" data-detail-expiry="all">All</button>` +
         sorted.map(e =>
-            `<button class="tab-button" data-detail-expiry="${e.expiry}">${formatUnixDate(e.expiry)}</button>`
+            `<button class="tab-button${e.expiry === selectedExpiry ? ' active' : ''}" data-detail-expiry="${e.expiry}">${formatUnixDate(e.expiry)}</button>`
         ).join('');
+
+    // If a specific expiry is active (not "All"), scroll it into view in the carousel
+    const activeBtn = tabs.querySelector('.tab-button.active:not([data-detail-expiry="all"])');
+    if (activeBtn) activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 
     tabs.onclick = async (ev) => {
         const btn = ev.target.closest('.tab-button');
@@ -684,6 +702,9 @@ async function loadMarketPulse() {
             : '—';
         const volColor = act.volume_vs_daily_avg > 0 ? 'var(--accent)' : (act.volume_vs_daily_avg < 0 ? 'var(--color-error)' : 'var(--text-muted)');
 
+        // Populate hero KPIs (4 of 5 — next-expiry comes from loadNextExpiryPositions)
+        populateGlobalHero({ act, top, active, dte, volIndicator, volColor });
+
         document.getElementById('pulse-grid').innerHTML = `
             <div class="summary-card">
                 <div class="summary-label">Hottest Asset (24h)</div>
@@ -748,12 +769,11 @@ async function loadPnlChart(days) {
     const loading = document.getElementById('pnl-loading');
     const chart = document.getElementById('pnl-chart');
 
-    document.querySelectorAll('#pnl-tabs .tab-button').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.pnlDays) === days);
-    });
+    // Premium-over-time API treats 0 as "all" via large lookback
+    const fetchDays = days > 0 ? days : 365;
 
     try {
-        const resp = await fetch(`/api/global/premium-over-time?days=${days}`);
+        const resp = await fetch(`/api/global/premium-over-time?days=${fetchDays}`);
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -793,12 +813,10 @@ async function loadPutCallRatio(days) {
     const loading = document.getElementById('pcr-loading');
     const chart = document.getElementById('pcr-chart');
 
-    document.querySelectorAll('#pcr-tabs .tab-button').forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.pcrDays) === days);
-    });
+    const fetchDays = days > 0 ? days : 365;
 
     try {
-        const resp = await fetch(`/api/global/put-call-ratio?days=${days}`);
+        const resp = await fetch(`/api/global/put-call-ratio?days=${fetchDays}`);
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -902,6 +920,9 @@ async function loadNextExpiryPositions() {
         const totalNotional = data.positions.reduce((s, p) => s + (p.total_notional || 0), 0);
         const totalPremium = data.positions.reduce((s, p) => s + (p.total_premium || 0), 0);
 
+        // Populate hero next-expiry KPI
+        populateGlobalHeroNextExpiry(data.next_expiry, data.positions.length);
+
         document.getElementById('next-expiry-header').innerHTML = `
             <div class="summary-card">
                 <div class="summary-label">Next Expiry</div>
@@ -934,14 +955,96 @@ async function loadNextExpiryPositions() {
     }
 }
 
+// ── Hero KPI population ──
+
+function setHero(id, value, sub) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+    if (sub !== undefined) {
+        const subEl = document.getElementById(id + '-sub');
+        if (subEl) subEl.innerHTML = sub || '&nbsp;';
+    }
+}
+
+function populateGlobalHero({ act, top, active, volIndicator, volColor }) {
+    setHero('hero-volume-24h', compactCurrency(act.volume_24h),
+        `<span style="color: ${volColor};">${volIndicator}</span> vs 7d avg`);
+    setHero('hero-premium-24h', compactCurrency(act.premium_24h),
+        `${formatNumber(act.trades_24h, 0)} trades`);
+    setHero('hero-active', formatNumber(active.count, 0),
+        `${compactCurrency(active.notional)} notional`);
+    if (top) {
+        setHero('hero-hot', shortSymbol(top.symbol),
+            `${formatNumber(top.trades, 0)} trades · ${compactCurrency(top.volume)}`);
+    } else {
+        setHero('hero-hot', '—', 'No 24h activity');
+    }
+}
+
+function populateGlobalHeroNextExpiry(expiryTs, positionCount) {
+    if (!expiryTs) return;
+    const days = Math.max(0, Math.round((expiryTs * 1000 - Date.now()) / (1000 * 60 * 60 * 24)));
+    const dayLabel = days === 0 ? 'today' : days === 1 ? '1 day' : `${days} days`;
+    setHero('hero-next-expiry', dayLabel,
+        `${formatUnixDate(expiryTs)} · ${positionCount} positions`);
+}
+
+// ── Unified time-range selector ──
+
+function setTimeRange(days) {
+    document.querySelectorAll('#time-range-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.rangeDays) === days);
+    });
+    // Cascade to all three historical sections
+    loadOverview(days);
+    loadPnlChart(days);
+    loadPutCallRatio(days);
+}
+
+// ── Scroll-spy for sticky act-nav ──
+
+function initActNavScrollSpy() {
+    const navLinks = document.querySelectorAll('.act-nav a[data-act]');
+    if (!navLinks.length) return;
+    const targets = Array.from(navLinks)
+        .map(a => document.getElementById(a.dataset.act))
+        .filter(Boolean);
+    if (!targets.length) return;
+
+    const setActive = (id) => {
+        navLinks.forEach(a => a.classList.toggle('active', a.dataset.act === id));
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        // Pick the entry closest to the top that's currently intersecting
+        const visible = entries
+            .filter(e => e.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible.length) setActive(visible[0].target.id);
+    }, { rootMargin: '-80px 0px -60% 0px', threshold: 0 });
+
+    targets.forEach(t => observer.observe(t));
+
+    // Also handle smooth scroll behavior so anchor jumps account for sticky nav
+    navLinks.forEach(a => {
+        a.addEventListener('click', (e) => {
+            const target = document.getElementById(a.dataset.act);
+            if (!target) return;
+            e.preventDefault();
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            history.replaceState(null, '', '#' + a.dataset.act);
+        });
+    });
+}
+
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Load all sections in parallel
+    // Load all sections in parallel — historical charts default to 90d (matches selector)
     Promise.allSettled([
         loadNextExpiryPositions(),
         loadMarketPulse(),
-        loadOverview(0),
+        loadOverview(90),
         loadPnlChart(90),
         loadRecent(),
         loadAssets(),
@@ -955,26 +1058,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Overview time period tabs
-    document.getElementById('overview-tabs').addEventListener('click', e => {
-        const btn = e.target.closest('.tab-button');
-        if (!btn) return;
-        loadOverview(parseInt(btn.dataset.overviewDays));
-    });
+    // Unified time-range selector — cascades to Overview, PnL, Put/Call
+    const timeRangeTabs = document.getElementById('time-range-tabs');
+    if (timeRangeTabs) {
+        timeRangeTabs.addEventListener('click', e => {
+            const btn = e.target.closest('.tab-button');
+            if (!btn) return;
+            setTimeRange(parseInt(btn.dataset.rangeDays));
+        });
+    }
 
-    // PnL time tabs
-    document.getElementById('pnl-tabs').addEventListener('click', e => {
-        const btn = e.target.closest('.tab-button');
-        if (!btn) return;
-        loadPnlChart(parseInt(btn.dataset.pnlDays));
-    });
-
-    // Put/Call ratio tabs
-    document.getElementById('pcr-tabs').addEventListener('click', e => {
-        const btn = e.target.closest('.tab-button');
-        if (!btn) return;
-        loadPutCallRatio(parseInt(btn.dataset.pcrDays));
-    });
+    initActNavScrollSpy();
 
     document.getElementById('detail-close').addEventListener('click', closeAssetDetail);
 
