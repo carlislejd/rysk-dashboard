@@ -749,6 +749,13 @@ def get_next_expiry_top_positions(conn, limit=5):
 
     expiry_ts = next_exp["next_expiry"]
 
+    totals = conn.execute("""
+        SELECT COUNT(*) as total_orders,
+               COUNT(DISTINCT symbol || '|' || strike_f) as total_strikes
+        FROM trades
+        WHERE expiry = ? AND symbol != ''
+    """, (expiry_ts,)).fetchone()
+
     rows = conn.execute("""
         SELECT symbol,
                strike_f,
@@ -787,6 +794,8 @@ def get_next_expiry_top_positions(conn, limit=5):
     return {
         "next_expiry": expiry_ts,
         "positions": positions,
+        "total_orders": totals["total_orders"] if totals else 0,
+        "total_strikes": totals["total_strikes"] if totals else 0,
     }
 
 

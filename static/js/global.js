@@ -924,7 +924,7 @@ async function loadNextExpiryPositions() {
         const totalPremium = data.positions.reduce((s, p) => s + (p.total_premium || 0), 0);
 
         // Populate hero next-expiry KPI
-        populateGlobalHeroNextExpiry(data.next_expiry, data.positions.length);
+        populateGlobalHeroNextExpiry(data.next_expiry, data.total_orders);
 
         document.getElementById('next-expiry-header').innerHTML = `
             <div class="summary-card">
@@ -991,7 +991,7 @@ function populateGlobalHeroNextExpiry(expiryTs, positionCount) {
     const days = Math.max(0, Math.round((expiryTs * 1000 - Date.now()) / (1000 * 60 * 60 * 24)));
     const dayLabel = days === 0 ? 'today' : days === 1 ? '1 day' : `${days} days`;
     setHero('hero-next-expiry', dayLabel,
-        `${formatUnixDate(expiryTs)} · ${positionCount} positions`);
+        `${formatUnixDate(expiryTs)} · ${formatNumber(positionCount, 0)} positions`);
 }
 
 // ── Unified time-range selector ──
