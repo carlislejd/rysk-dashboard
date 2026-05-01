@@ -812,7 +812,12 @@ def get_market_pulse(conn):
 
     # Most popular strike range last 7d
     popular_strikes = conn.execute("""
-        SELECT symbol, strike_f, COUNT(*) as cnt, SUM(notional_f) as volume
+        SELECT symbol, strike_f,
+               COUNT(*) as cnt,
+               SUM(notional_f) as volume,
+               AVG(apr_f) as avg_apr,
+               SUM(CASE WHEN is_put = 1 THEN 1 ELSE 0 END) as put_count,
+               SUM(CASE WHEN is_put = 0 THEN 1 ELSE 0 END) as call_count
         FROM trades
         WHERE created_at >= ? AND symbol != ''
         GROUP BY symbol, strike_f
@@ -868,6 +873,14 @@ def get_market_pulse(conn):
                 "strike": r["strike_f"],
                 "count": r["cnt"],
                 "volume": r["volume"],
+                "avg_apr": r["avg_apr"],
+                "put_count": r["put_count"],
+                "call_count": r["call_count"],
+                "dominant_type": (
+                    "Put" if r["put_count"] and not r["call_count"]
+                    else "Call" if r["call_count"] and not r["put_count"]
+                    else "Mixed"
+                ),
             }
             for r in popular_strikes
         ],

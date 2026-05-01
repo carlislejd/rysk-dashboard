@@ -670,6 +670,7 @@ async function loadRecent() {
             <td><span class="token-badge ${shortSymbol(t.symbol).toLowerCase()}">${shortSymbol(t.symbol)}</span></td>
             <td>${t.type}</td>
             <td>${formatStrike(t.strike)}</td>
+            <td>${formatUnixDate(t.expiry)}</td>
             <td>${formatCurrency(t.premium)}</td>
             <td>${formatCurrency(t.notional, 0)}</td>
             <td>${formatPercentage(t.apr)}</td>
@@ -743,12 +744,14 @@ async function loadMarketPulse() {
             document.getElementById('pulse-strikes').innerHTML = `
                 <h3 class="subsection-title">Trending Strikes (7d)</h3>
                 <table class="data-table">
-                    <thead><tr><th>Asset</th><th>Strike</th><th>Trades</th><th>Notional</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Strike</th><th>Type</th><th>Trades</th><th>Notional</th><th>Avg APR</th></tr></thead>
                     <tbody>${data.popular_strikes.map(s => `<tr>
                         <td><span class="token-badge ${shortSymbol(s.symbol).toLowerCase()}">${shortSymbol(s.symbol)}</span></td>
                         <td>${formatStrike(s.strike)}</td>
+                        <td>${s.dominant_type || '—'}</td>
                         <td>${s.count}</td>
                         <td>${compactCurrency(s.volume)}</td>
+                        <td>${s.avg_apr != null ? formatPercentage(s.avg_apr) : '—'}</td>
                     </tr>`).join('')}</tbody>
                 </table>
             `;
@@ -967,6 +970,8 @@ function setHero(id, value, sub) {
 }
 
 function populateGlobalHero({ act, top, active, volIndicator, volColor }) {
+    setHero('hero-tvl', compactCurrency(active.notional),
+        `${formatNumber(active.count, 0)} open positions`);
     setHero('hero-volume-24h', compactCurrency(act.volume_24h),
         `<span style="color: ${volColor};">${volIndicator}</span> vs 7d avg`);
     setHero('hero-premium-24h', compactCurrency(act.premium_24h),
