@@ -141,11 +141,7 @@ async function loadAssets() {
         loading.style.display = 'none';
         content.style.display = 'block';
 
-        // Auto-select first asset so users see the detail panel immediately
-        // Skip scroll so the page stays at the top on initial load
-        if (data.assets.length > 0) {
-            showAssetDetail(data.assets[0].symbol, { scroll: false });
-        }
+        selectedAsset = null;
     } catch (e) {
         loading.textContent = 'Failed to load assets: ' + e.message;
     }
@@ -169,7 +165,10 @@ async function showAssetDetail(symbol, { scroll = true } = {}) {
 
     document.getElementById('detail-asset-name').textContent = `${symbol}`;
     panel.style.display = 'block';
-    if (scroll) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    requestAnimationFrame(() => {
+        panel.classList.add('is-open');
+        document.body.classList.add('sidepanel-open');
+    });
 
     // First fetch unfiltered to get full expiry list for this asset
     const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
@@ -260,6 +259,11 @@ async function loadDetailData(symbol, expiry) {
     if (detail.success) renderStrikeChart(detail);
 
     if (trades.success) renderDetailTrades(trades, symbol, expiry);
+    setTimeout(() => {
+        document.querySelectorAll('#asset-detail .js-plotly-plot').forEach(el => {
+            Plotly.Plots.resize(el);
+        });
+    }, 220);
 }
 
 function renderDetailSummary(detail) {
@@ -511,7 +515,16 @@ async function loadDetailTrades(symbol, page, expiry) {
 }
 
 function closeAssetDetail() {
-    document.getElementById('asset-detail').style.display = 'none';
+    const panel = document.getElementById('asset-detail');
+    if (panel) {
+        panel.classList.remove('is-open');
+        setTimeout(() => {
+            if (!panel.classList.contains('is-open')) {
+                panel.style.display = 'none';
+            }
+        }, 220);
+    }
+    document.body.classList.remove('sidepanel-open');
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('selected'));
     selectedAsset = null;
     selectedExpiry = null;
@@ -1076,6 +1089,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initActNavScrollSpy();
 
     document.getElementById('detail-close').addEventListener('click', closeAssetDetail);
+    const sidepanelBackdrop = document.getElementById('sidepanel-backdrop');
+    if (sidepanelBackdrop) {
+        sidepanelBackdrop.addEventListener('click', closeAssetDetail);
+    }
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && document.body.classList.contains('sidepanel-open')) {
+            closeAssetDetail();
+        }
+    });
 
     // Auto-refresh market pulse and recent activity every 60 seconds
     setInterval(() => {

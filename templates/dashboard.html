@@ -10,26 +10,36 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body data-default-account="{{ account_address }}">
-    <div id="splash-screen" class="splash-screen">
-        <div class="splash-card">
-            <nav class="dashboard-nav" style="justify-content: center; margin-bottom: 24px;">
-                <a href="/">Global</a>
-                <a href="/account" class="active">Account</a>
-                <a href="/docs">Docs</a>
-            </nav>
-            <div class="splash-title">RYSK IT ALL!</div>
-            <p class="splash-subtitle">Arm the dashboard with your wallet to load balances, positions, and history.</p>
-            <div class="splash-input-row">
-                <input id="splash-account-input" class="account-input splash-input" type="text" value="" placeholder="0x0000..." spellcheck="false" autocomplete="off">
-                <button id="splash-launch" class="terminal-button splash-button">Enter</button>
+    <div id="main-content">
+    <div class="app-shell">
+        <aside class="side-nav" aria-label="Dashboard workflow">
+            <a class="side-brand" href="/">
+                <span class="side-brand-mark">R</span>
+                <span>
+                    <strong>Rysk</strong>
+                    <small>Options Dashboard</small>
+                </span>
+            </a>
+            <div class="side-nav-group">
+                <div class="side-nav-label">Workflows</div>
+                <a href="/" class="side-nav-item">Global</a>
+                <a href="/account" class="side-nav-item active">Account</a>
+                <a href="/docs" class="side-nav-item">Docs</a>
             </div>
-            <div id="splash-error" class="error" style="display: none;"></div>
-            <div id="splash-typing" class="splash-typing">Ready when you are.</div>
+            <div class="side-nav-group page-jump-list">
+                <div class="side-nav-label">Account</div>
+                <a href="#act-now" class="side-nav-item compact">Right Now</a>
+                <a href="#act-performance" class="side-nav-item compact">Performance</a>
+            </div>
+            <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
+        </aside>
+    <main class="container app-main">
+        <div id="account-main-loading" class="main-loading-overlay" style="display: none;">
+            <div class="main-loading-card">
+                <div class="loading-spinner"></div>
+                <div id="account-loading-text">Loading account data...</div>
+            </div>
         </div>
-    </div>
-
-    <div id="main-content" style="display: none;">
-    <div class="container">
         <header>
             <nav class="dashboard-nav">
                 <a href="/">Global</a>
@@ -42,6 +52,7 @@
                 <div class="account-display">
                     Wallet: <span id="current-wallet-display">Not set</span>
                 </div>
+                <button id="account-change" class="terminal-button account-change-button" type="button">Change</button>
                 <span id="account-status" class="account-status"></span>
             </div>
         </header>
@@ -86,7 +97,6 @@
              What you currently hold and what's about to expire
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-now">
-            <div class="act-eyebrow">Act 1</div>
             <div class="act-title">Right Now</div>
             <div class="act-subtitle">What you hold and what's about to settle</div>
         </div>
@@ -116,7 +126,6 @@
              How you've done over time
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-performance">
-            <div class="act-eyebrow">Act 2</div>
             <div class="act-title">Performance</div>
             <div class="act-subtitle">Premium collected and historical outcomes</div>
         </div>
@@ -156,6 +165,24 @@
                 History API not configured. Set HISTORY_API_URL environment variable.
             </div>
         </section>
+    </main>
+    </div>
+    <div class="sidepanel-backdrop" id="sidepanel-backdrop" aria-hidden="true"></div>
+    <div id="account-entry-modal" class="account-entry-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="account-entry-title">
+        <div class="account-entry-card">
+            <div class="account-entry-header">
+                <div>
+                    <div class="sidepanel-eyebrow">Account</div>
+                    <h2 id="account-entry-title">Enter wallet address</h2>
+                </div>
+            </div>
+            <div class="splash-input-row account-entry-row">
+                <input id="splash-account-input" class="account-input splash-input" type="text" value="" placeholder="0x0000..." spellcheck="false" autocomplete="off">
+                <button id="splash-launch" class="terminal-button splash-button" type="button">Load</button>
+            </div>
+            <div id="splash-error" class="error" style="display: none;"></div>
+            <div id="splash-typing" class="account-entry-hint">Choose any wallet to inspect positions, health, and history.</div>
+        </div>
     </div>
     </div>
 

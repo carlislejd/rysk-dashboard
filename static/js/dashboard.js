@@ -91,6 +91,8 @@ let splashLaunchEl = null;
 let splashTypingEl = null;
 let splashErrorEl = null;
 let splashTypingTimer = null;
+let mainLoadingEl = null;
+let accountChangeEl = null;
 
 function buildUrl(path, params = {}) {
     const searchParams = new URLSearchParams();
@@ -115,6 +117,10 @@ function updateAccountUI(address) {
     const display = address ? address : 'Not set';
     if (accountDisplayEl) {
         accountDisplayEl.textContent = display;
+    }
+    const accountBar = document.querySelector('.account-bar');
+    if (accountBar) {
+        accountBar.classList.toggle('needs-wallet', !address);
     }
     if (accountInputEl && document.activeElement !== accountInputEl) {
         accountInputEl.value = address || '';
@@ -249,15 +255,20 @@ async function loadPositions() {
         }
 
         html += `
-            <div id="positions-detail" class="positions-detail" style="display:none;">
+            <div id="positions-detail" class="positions-detail sidepanel" style="display:none;" aria-label="Account position detail panel">
                 <div class="positions-detail-header">
-                    <h3 id="positions-detail-title">Asset Detail</h3>
+                    <div>
+                        <div class="sidepanel-eyebrow">Account Asset</div>
+                        <h3 id="positions-detail-title">Asset Detail</h3>
+                    </div>
                     <button id="positions-detail-close" class="detail-close">Close</button>
                 </div>
+                <div class="sidepanel-body">
                 <div id="positions-detail-filters" class="positions-detail-filters"></div>
                 <div id="positions-detail-summary" class="positions-detail-summary"></div>
                 <div id="positions-heatmap" class="positions-heatmap"></div>
                 <div id="positions-detail-table" class="positions-detail-table"></div>
+                </div>
             </div>
         `;
 
@@ -286,7 +297,11 @@ async function loadPositions() {
             selectedAssetSymbol = null;
             selectedAssetExpiry = '';
             const detail = document.getElementById('positions-detail');
-            if (detail) detail.style.display = 'none';
+            if (detail) {
+                detail.classList.remove('is-open');
+                detail.style.display = 'none';
+            }
+            document.body.classList.remove('sidepanel-open');
         }
     } catch (err) {
         loading.style.display = 'none';
@@ -1779,6 +1794,41 @@ function showMainContent() {
     }
 }
 
+function showAccountEntry() {
+    if (!splashScreenEl) return;
+    splashScreenEl.style.display = 'flex';
+    if (splashErrorEl) splashErrorEl.style.display = 'none';
+    if (splashTypingEl) {
+        splashTypingEl.textContent = currentAccount
+            ? 'Swap to another wallet without leaving the account workflow.'
+            : 'Choose any wallet to inspect positions, health, and history.';
+    }
+    if (splashAccountInputEl) {
+        splashAccountInputEl.value = currentAccount || splashAccountInputEl.value || '';
+        setTimeout(() => splashAccountInputEl.focus(), 0);
+    }
+}
+
+function hideAccountEntry() {
+    stopSplashTyping();
+    if (splashScreenEl) {
+        splashScreenEl.style.display = 'none';
+    }
+}
+
+function setMainLoading(isLoading, message = 'Loading account data...') {
+    if (mainLoadingEl) {
+        mainLoadingEl.style.display = isLoading ? 'flex' : 'none';
+    }
+    if (splashTypingEl && isLoading) {
+        splashTypingEl.textContent = message;
+    }
+    const mainText = document.getElementById('account-loading-text');
+    if (mainText) {
+        mainText.textContent = message;
+    }
+}
+
 async function launchDashboard(addressInput, { fromSplash = false } = {}) {
     let normalized = (addressInput || '').trim();
     if (!normalized && defaultAccount) {
@@ -1825,6 +1875,7 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
     }
     const positionsDetail = document.getElementById('positions-detail');
     if (positionsDetail) {
+        positionsDetail.classList.remove('is-open');
         positionsDetail.style.display = 'none';
     }
     positionsAssetSummary = [];
@@ -1838,22 +1889,13 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
             splashLaunchEl.disabled = true;
             splashLaunchEl.textContent = 'Loading...';
         }
-        startSplashTyping([
-            'RYSKing it all...',
-            'Pulling balances...',
-            'Pulling positions...',
-            'Pulling history...',
-            'Hang tight — arming dashboard...'
-        ]);
+        hideAccountEntry();
     }
+    setMainLoading(true, 'Loading account data...');
 
     try {
         await loadAllData();
         if (fromSplash) {
-            stopSplashTyping('Loaded. Preparing dashboard...');
-            showMainContent();
-            // Force Plotly charts to recalculate width now that main-content is visible
-            // Use setTimeout to ensure layout has fully settled after display change
             setTimeout(() => {
                 document.querySelectorAll('.js-plotly-plot').forEach(el => {
                     Plotly.Plots.resize(el);
@@ -1868,15 +1910,17 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
             stopSplashTyping();
         }
         if (fromSplash && splashErrorEl) {
+            showAccountEntry();
             splashErrorEl.textContent = message;
             splashErrorEl.style.display = 'block';
         } else {
             setAccountStatus(message, true);
         }
     } finally {
+        setMainLoading(false);
         if (fromSplash && splashLaunchEl) {
             splashLaunchEl.disabled = false;
-            splashLaunchEl.textContent = 'Enter';
+            splashLaunchEl.textContent = 'Load';
         }
     }
 }
@@ -1917,6 +1961,7 @@ function applyAccountChange(addressInput) {
     }
     const positionsDetail = document.getElementById('positions-detail');
     if (positionsDetail) {
+        positionsDetail.classList.remove('is-open');
         positionsDetail.style.display = 'none';
     }
     positionsAssetSummary = [];
@@ -1930,13 +1975,7 @@ function applyAccountChange(addressInput) {
 function setupAssetSummaryHandlers() {
     const detailClose = document.getElementById('positions-detail-close');
     if (detailClose) {
-        detailClose.addEventListener('click', () => {
-            const detail = document.getElementById('positions-detail');
-            if (detail) detail.style.display = 'none';
-            selectedAssetSymbol = null;
-            selectedAssetExpiry = '';
-            document.querySelectorAll('.asset-card').forEach(card => card.classList.remove('selected'));
-        });
+        detailClose.addEventListener('click', closePositionsDetailPanel);
     }
 
     document.querySelectorAll('.asset-card').forEach(card => {
@@ -2034,6 +2073,31 @@ function showAssetPositions(asset) {
     renderPositionsDetailTable(positions);
 
     detail.style.display = 'block';
+    requestAnimationFrame(() => {
+        detail.classList.add('is-open');
+        document.body.classList.add('sidepanel-open');
+        setTimeout(() => {
+            detail.querySelectorAll('.js-plotly-plot').forEach(el => {
+                Plotly.Plots.resize(el);
+            });
+        }, 220);
+    });
+}
+
+function closePositionsDetailPanel() {
+    const detail = document.getElementById('positions-detail');
+    if (detail) {
+        detail.classList.remove('is-open');
+        setTimeout(() => {
+            if (!detail.classList.contains('is-open')) {
+                detail.style.display = 'none';
+            }
+        }, 220);
+    }
+    document.body.classList.remove('sidepanel-open');
+    selectedAssetSymbol = null;
+    selectedAssetExpiry = '';
+    document.querySelectorAll('.asset-card').forEach(card => card.classList.remove('selected'));
 }
 
 function renderAssetDetailFilters(asset, expiryOptions, selectedExpiry) {
@@ -2366,6 +2430,8 @@ document.addEventListener('DOMContentLoaded', () => {
     splashLaunchEl = document.getElementById('splash-launch');
     splashTypingEl = document.getElementById('splash-typing');
     splashErrorEl = document.getElementById('splash-error');
+    mainLoadingEl = document.getElementById('account-main-loading');
+    accountChangeEl = document.getElementById('account-change');
     const applyButton = document.getElementById('account-apply');
 
     let savedAccount = '';
@@ -2376,7 +2442,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const initialAccount = savedAccount || '';
     currentAccount = '';
-    // No dashboard input; splash handles entry. Keep display in sync.
     if (splashAccountInputEl) {
         splashAccountInputEl.value = initialAccount;
     }
@@ -2410,13 +2475,31 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+    if (accountChangeEl) {
+        accountChangeEl.addEventListener('click', showAccountEntry);
+    }
 
     initCollapsibleSections();
     initHistoryModal();
     _initPnlControls();
     initActNavScrollSpy();
 
-    setAccountStatus('Enter a wallet address');
+    const sidepanelBackdrop = document.getElementById('sidepanel-backdrop');
+    if (sidepanelBackdrop) {
+        sidepanelBackdrop.addEventListener('click', closePositionsDetailPanel);
+    }
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && document.body.classList.contains('sidepanel-open')) {
+            closePositionsDetailPanel();
+        }
+    });
+
+    if (initialAccount) {
+        launchDashboard(initialAccount, { fromSplash: true });
+    } else {
+        setAccountStatus('Enter a wallet address');
+        showAccountEntry();
+    }
 
     // Auto-refresh every 3 minutes
     setInterval(() => {
@@ -2425,7 +2508,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 180000);
 });
-
-
-
-

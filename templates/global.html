@@ -10,7 +10,30 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container">
+    <div class="app-shell">
+        <aside class="side-nav" aria-label="Dashboard workflow">
+            <a class="side-brand" href="/">
+                <span class="side-brand-mark">R</span>
+                <span>
+                    <strong>Rysk</strong>
+                    <small>Options Dashboard</small>
+                </span>
+            </a>
+            <div class="side-nav-group">
+                <div class="side-nav-label">Workflows</div>
+                <a href="/" class="side-nav-item active">Global</a>
+                <a href="/account" class="side-nav-item">Account</a>
+                <a href="/docs" class="side-nav-item">Docs</a>
+            </div>
+            <div class="side-nav-group page-jump-list">
+                <div class="side-nav-label">Global</div>
+                <a href="#act-now" class="side-nav-item compact">Right Now</a>
+                <a href="#act-protocol" class="side-nav-item compact">The Protocol</a>
+                <a href="#act-explore" class="side-nav-item compact">Explore</a>
+            </div>
+            <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
+        </aside>
+    <main class="container app-main">
         <header>
             <nav class="dashboard-nav">
                 <a href="/" class="active">Global</a>
@@ -67,7 +90,6 @@
              What's happening this minute / this week
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-now">
-            <div class="act-eyebrow">Act 1</div>
             <div class="act-title">Right Now</div>
             <div class="act-subtitle">Live activity, the next expiry, the most recent trades</div>
         </div>
@@ -134,7 +156,6 @@
              How the protocol has performed over time
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-protocol">
-            <div class="act-eyebrow">Act 2</div>
             <div class="act-title">The Protocol</div>
             <div class="act-subtitle">Historical performance — change the time window once, the charts follow</div>
             <!-- Unified time-range selector — cascades to Overview, PnL, Put/Call -->
@@ -190,7 +211,6 @@
              Drill down by asset or expiry
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-explore">
-            <div class="act-eyebrow">Act 3</div>
             <div class="act-title">Explore</div>
             <div class="act-subtitle">Click any card to drill into a single asset or expiry</div>
         </div>
@@ -209,11 +229,15 @@
         </section>
 
         <!-- Asset Detail Panel (appears when card clicked) -->
-        <section id="asset-detail" class="card" style="display: none;">
-            <h2>
-                <span id="detail-asset-name"></span>
-                <span id="detail-close" style="float: right; cursor: pointer; color: var(--text-muted); font-size: 0.75em; font-weight: 400;">&times;</span>
-            </h2>
+        <section id="asset-detail" class="sidepanel" style="display: none;" aria-label="Asset detail panel">
+            <div class="sidepanel-header">
+                <div>
+                    <div class="sidepanel-eyebrow">Global Asset</div>
+                    <h2 id="detail-asset-name"></h2>
+                </div>
+                <button id="detail-close" class="detail-close" type="button">Close</button>
+            </div>
+            <div class="sidepanel-body">
             <div class="asset-carousel" style="margin-top: 0;">
                 <button class="carousel-arrow left" id="expiry-carousel-left">&#8249;</button>
                 <div class="tabs tab-carousel" id="detail-expiry-tabs"></div>
@@ -228,6 +252,7 @@
             <h3 class="subsection-title">Trades</h3>
             <div id="detail-trades-content"></div>
             <div class="pager" id="detail-trades-pager"></div>
+            </div>
         </section>
 
         <!-- Expiry Explorer -->
@@ -245,7 +270,9 @@
             </div>
         </section>
 
+    </main>
     </div>
+    <div class="sidepanel-backdrop" id="sidepanel-backdrop" aria-hidden="true"></div>
 
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
