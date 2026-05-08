@@ -2072,7 +2072,7 @@ function showAssetPositions(asset) {
     renderPositionsHeatmap(buildHeatmapSummary(positions, summary?.current_price));
     renderPositionsDetailTable(positions);
 
-    detail.style.display = 'block';
+    detail.style.display = 'flex';
     requestAnimationFrame(() => {
         detail.classList.add('is-open');
         document.body.classList.add('sidepanel-open');

@@ -164,7 +164,7 @@ async function showAssetDetail(symbol, { scroll = true } = {}) {
     if (card) card.classList.add('selected');
 
     document.getElementById('detail-asset-name').textContent = `${symbol}`;
-    panel.style.display = 'block';
+    panel.style.display = 'flex';
     requestAnimationFrame(() => {
         panel.classList.add('is-open');
         document.body.classList.add('sidepanel-open');

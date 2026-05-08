@@ -1507,6 +1507,7 @@ body.sidepanel-open .sidepanel-backdrop {
 
 .sidepanel-body {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: var(--space-lg);
 }
@@ -1555,7 +1556,10 @@ body.sidepanel-open .sidepanel-backdrop {
 }
 
 .positions-detail.sidepanel {
+    background: var(--bg);
+    border-left: 1px solid var(--border-strong);
     border-top: none;
+    padding: 0;
     margin-top: 0;
 }
 
