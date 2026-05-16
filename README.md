@@ -4,7 +4,6 @@ Web dashboard and agent-friendly CLI for managing Rysk option positions.
 
 ## Features
 
-- **Token Balances**: View balances for BTC, ETH, HYPE, SOL, PUMP, PURR
 - **Open Positions**: Track current positions with strategy tagging (CC/CSP)
 - **Historical Performance**: View expired outcomes and deep-dive analytics
 - **CLI**: Query account, open positions, strike distributions, and history in table or JSON mode

@@ -76,6 +76,31 @@ function formatStrike(value) {
     return '$' + formatNumber(value, decimals);
 }
 
+function getStrikeBarWidth(strikeValues) {
+    const values = (strikeValues || [])
+        .map(Number)
+        .filter(Number.isFinite)
+        .sort((a, b) => a - b);
+
+    if (values.length <= 1) {
+        const strike = Math.abs(values[0] || 1);
+        return Math.max(strike * 0.04, 1);
+    }
+
+    let minGap = Infinity;
+    for (let i = 1; i < values.length; i++) {
+        const gap = values[i] - values[i - 1];
+        if (gap > 0 && gap < minGap) minGap = gap;
+    }
+
+    if (!Number.isFinite(minGap)) {
+        const strike = Math.abs(values[0] || 1);
+        return Math.max(strike * 0.04, 1);
+    }
+
+    return minGap * 0.8;
+}
+
 function formatNumber(num, decimals = 2) {
     if (num === null || num === undefined) return '0.00';
     return parseFloat(num).toLocaleString('en-US', {

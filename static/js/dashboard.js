@@ -2203,13 +2203,7 @@ function renderPositionsHeatmap(summary) {
     const minStrike = strikeValues[0];
     const maxStrike = strikeValues[strikeValues.length - 1];
 
-    // Compute bar width from minimum gap between consecutive strikes
-    let barWidth = (maxStrike - minStrike) / sorted.length;
-    for (let i = 1; i < strikeValues.length; i++) {
-        const gap = strikeValues[i] - strikeValues[i - 1];
-        if (gap > 0 && gap < barWidth) barWidth = gap;
-    }
-    barWidth *= 0.8;
+    const barWidth = getStrikeBarWidth(strikeValues);
 
     const shapes = [];
     const annotations = [];
