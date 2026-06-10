@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from backtest_services import build_assignment_backtest
 from positions_api import fetch_history, fetch_positions
 
 

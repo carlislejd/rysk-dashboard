@@ -5,6 +5,7 @@ Flask application for Rysk Options Dashboard.
 from flask import Flask, render_template, jsonify, request
 import os
 from dashboard_services import (
+    build_assignment_backtest,
     build_history_expiry_prices,
     build_history_deep_dive,
     build_positions_expiring,
@@ -32,7 +33,9 @@ from global_services import (
 )
 from inventory_services import fetch_inventory
 from hyperliquid_client import get_current_price
+from risk_gate_services import build_clearance_board
 from scripts.backfill_outcomes import backfill_outcomes
+from volatility_services import get_asset_volatility, get_hype_volatility
 
 app = Flask(__name__)
 
@@ -359,6 +362,93 @@ def api_cli_history_deep_dive():
             "success": False,
             "error": str(e)
         }), 500
+
+
+@app.route('/api/cli/history/assignment-backtest')
+def api_cli_history_assignment_backtest():
+    """CLI-shaped endpoint for assignment-avoidance backtesting."""
+    try:
+        account_address = resolve_account_address()
+        symbol = request.args.get("symbol", "").strip() or None
+        strategy = request.args.get("strategy", "").strip() or None
+        min_premium_retained = request.args.get("min_premium_retained", 70.0, type=float)
+        include_hype_vol = request.args.get("include_hype_vol", "").lower() in ("1", "true", "yes")
+        hype_vol_days = request.args.get("hype_vol_days", 730, type=int)
+
+        payload = get_history_payload(account_address)
+        volatility_points = None
+        if include_hype_vol:
+            volatility_points = get_hype_volatility(days=hype_vol_days).get("series") or []
+        backtest = build_assignment_backtest(
+            payload["history"],
+            symbol=symbol,
+            strategy=strategy,
+            min_premium_retained_pct=min_premium_retained,
+            volatility_points=volatility_points,
+        )
+        return jsonify({
+            "success": True,
+            "account": account_address,
+            "symbol": symbol,
+            "strategy": strategy,
+            "assignment_backtest": backtest,
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/global/hype-volatility')
+def api_global_hype_volatility():
+    """HYPE realized volatility index from daily Hyperliquid candles."""
+    try:
+        days = request.args.get("days", 365, type=int)
+        data = get_hype_volatility(days=days)
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/global/volatility')
+def api_global_volatility():
+    """Realized volatility index for a Hyperliquid asset."""
+    try:
+        asset = request.args.get("asset", "HYPE").strip().upper() or "HYPE"
+        days = request.args.get("days", 365, type=int)
+        data = get_asset_volatility(asset=asset, days=days)
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/strategy/clearance')
+def api_strategy_clearance():
+    """Pre-trade clearance board for CC/CSP entries."""
+    try:
+        assets_raw = request.args.get("assets", "HYPE,BTC")
+        assets = [a.strip().upper() for a in assets_raw.split(",") if a.strip()]
+        strategy = request.args.get("strategy", "").strip().lower() or None
+        strategies = [strategy] if strategy else None
+        target_dte = request.args.get("target_dte", None, type=float)
+        days = request.args.get("days", 180, type=int)
+        data = build_clearance_board(
+            assets=assets or ["HYPE", "BTC"],
+            strategies=strategies,
+            target_dte=target_dte,
+            days=days,
+        )
+        return jsonify({"success": True, **data})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/global/summary')
 def api_global_summary():

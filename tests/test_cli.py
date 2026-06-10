@@ -205,6 +205,188 @@ class TestCli(unittest.TestCase):
         self.assertEqual(ubtc["positions_with_price"], 2)
         self.assertEqual(ubtc["expiry_price"], 67000.0)
 
+    @patch("rysk_cli.get_history_payload")
+    def test_history_assignment_backtest_json_schema(self, mock_history):
+        mock_history.return_value = {
+            "account": TEST_ADDRESS,
+            "history": {
+                "expired_positions": [
+                    {
+                        "symbol": "kHYPE",
+                        "strategy": "covered_call",
+                        "outcome": "Assigned",
+                        "premium": 500.0,
+                        "notional": 20000.0,
+                        "apr": 42.0,
+                        "created_at_iso": "2026-03-01T00:00:00+00:00",
+                        "expiry": 1773388800,
+                        "type": "Call",
+                        "strike": 40.0,
+                        "expiry_price": 45.0,
+                    },
+                    {
+                        "symbol": "UBTC",
+                        "strategy": "cash_secured_put",
+                        "outcome": "Returned",
+                        "premium": 700.0,
+                        "notional": 70000.0,
+                        "apr": 30.0,
+                        "created_at_iso": "2026-03-05T00:00:00+00:00",
+                        "expiry": 1773388800,
+                        "type": "Put",
+                        "strike": 70000.0,
+                        "expiry_price": 72000.0,
+                    },
+                ],
+            },
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rysk_cli.main(
+                [
+                    "history",
+                    "assignment-backtest",
+                    "--address",
+                    TEST_ADDRESS,
+                    "--min-premium-retained",
+                    "40",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertIn("assignment_backtest", payload)
+        self.assertEqual(payload["assignment_backtest"]["baseline"]["count"], 2)
+        self.assertIn("recommended_rules", payload["assignment_backtest"])
+
+    @patch("rysk_cli.get_hype_volatility")
+    @patch("rysk_cli.get_history_payload")
+    def test_history_assignment_backtest_can_include_hype_vol(self, mock_history, mock_vol):
+        mock_history.return_value = {
+            "account": TEST_ADDRESS,
+            "history": {
+                "expired_positions": [
+                    {
+                        "symbol": "kHYPE",
+                        "strategy": "covered_call",
+                        "outcome": "Assigned",
+                        "premium": 500.0,
+                        "notional": 20000.0,
+                        "apr": 42.0,
+                        "created_at_iso": "2026-03-02T00:00:00+00:00",
+                        "expiry": 1773388800,
+                        "type": "Call",
+                        "strike": 40.0,
+                        "expiry_price": 45.0,
+                    },
+                    {
+                        "symbol": "UBTC",
+                        "strategy": "cash_secured_put",
+                        "outcome": "Returned",
+                        "premium": 700.0,
+                        "notional": 70000.0,
+                        "apr": 30.0,
+                        "created_at_iso": "2026-03-03T00:00:00+00:00",
+                        "expiry": 1773388800,
+                        "type": "Put",
+                        "strike": 70000.0,
+                        "expiry_price": 72000.0,
+                    },
+                ],
+            },
+        }
+        mock_vol.return_value = {
+            "series": [
+                {"date": "2026-03-02", "rv_3d": 150.0, "rv_7d": 160.0, "rv_30d": 170.0},
+            ]
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rysk_cli.main(
+                [
+                    "history",
+                    "assignment-backtest",
+                    "--address",
+                    TEST_ADDRESS,
+                    "--include-hype-vol",
+                    "--min-premium-retained",
+                    "40",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        rule_ids = [r["rule_id"] for r in payload["assignment_backtest"]["top_rules"]]
+        self.assertTrue(any(rule_id.startswith("max_hype_rv_") for rule_id in rule_ids))
+
+    @patch("rysk_cli.build_clearance_board")
+    def test_market_clearance_json_schema(self, mock_clearance):
+        mock_clearance.return_value = {
+            "assets": ["HYPE", "BTC"],
+            "strategies": ["covered_call", "cash_secured_put"],
+            "target_dte": None,
+            "entries": [
+                {
+                    "asset": "HYPE",
+                    "strategy": "covered_call",
+                    "strategy_label": "Covered Call",
+                    "overall": "block",
+                    "clear_to_sell": False,
+                    "as_of_date": "2026-06-10",
+                    "close": 55.0,
+                    "gates": [],
+                    "latest": {},
+                }
+            ],
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rysk_cli.main(["market", "clearance", "--assets", "HYPE,BTC", "--json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertIn("entries", payload)
+        self.assertEqual(payload["entries"][0]["overall"], "block")
+
+    @patch("rysk_cli.build_clearance_board")
+    def test_market_check_json_schema(self, mock_clearance):
+        mock_clearance.return_value = {
+            "assets": ["HYPE"],
+            "strategies": ["cc"],
+            "target_dte": 21.0,
+            "entries": [
+                {
+                    "asset": "HYPE",
+                    "strategy": "covered_call",
+                    "strategy_label": "Covered Call",
+                    "overall": "block",
+                    "clear_to_sell": False,
+                    "recommendation": "Do not sell this HYPE Covered Call today.",
+                    "as_of_date": "2026-06-10",
+                    "close": 55.0,
+                    "metrics": {"return_1d_pct": 3.0, "rv_7d": 120.0},
+                    "gates": [],
+                    "latest": {},
+                }
+            ],
+        }
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = rysk_cli.main([
+                "market",
+                "check",
+                "--asset",
+                "HYPE",
+                "--strategy",
+                "cc",
+                "--target-dte",
+                "21",
+                "--json",
+            ])
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertEqual(payload["assets"], ["HYPE"])
+        self.assertEqual(payload["entries"][0]["metrics"]["rv_7d"], 120.0)
+
 
 if __name__ == "__main__":
     unittest.main()

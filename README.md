@@ -76,6 +76,18 @@ poetry run rysk history expired --address 0x... --outcome assigned --json
 # Deep-dive analytics (top premium / APR slices)
 poetry run rysk history deep-dive --address 0x... --symbol WHYPE --json
 
+# Assignment-avoidance rule backtest
+poetry run rysk history assignment-backtest --address 0x... --min-premium-retained 80 --json
+
+# Assignment backtest with HYPE realized-volatility veto rules
+poetry run rysk history assignment-backtest --address 0x... --include-hype-vol --min-premium-retained 80 --json
+
+# Pre-trade clearance gates for CC/CSP entries
+poetry run rysk market clearance --assets HYPE,BTC --target-dte 21 --json
+
+# Single action check for an agent: "is today good for a HYPE covered call?"
+poetry run rysk market check --asset HYPE --strategy cc --target-dte 21 --json
+
 # Realized expiry prices grouped by asset + expiry date
 poetry run rysk history expiry-prices --address 0x... --json
 ```
@@ -124,6 +136,8 @@ Token addresses are pre-configured in `rpc_client.py`:
 
 - Rysk positions/history APIs (v12)
 - Hyperliquid APIs/RPC for spot and oracle-derived analytics
+- Hyperliquid daily candles for realized-volatility indices (`/api/global/hype-volatility`, `/api/global/volatility`)
+- Strategy clearance gates (`/api/strategy/clearance`) for CC/CSP pre-trade checks
 
 ## Outcome Automation
 

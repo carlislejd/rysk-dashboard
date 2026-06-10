@@ -11,6 +11,7 @@ import time
 from typing import Any, Dict, Iterable, List
 
 from dashboard_services import (
+    build_assignment_backtest,
     build_history_expiry_prices,
     build_history_deep_dive,
     build_positions_expiring,
@@ -20,6 +21,8 @@ from dashboard_services import (
     get_positions_payload,
     validate_account_address,
 )
+from risk_gate_services import build_clearance_board
+from volatility_services import get_hype_volatility
 
 
 EXIT_OK = 0
@@ -340,6 +343,123 @@ def cmd_history_expiry_prices(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_history_assignment_backtest(args: argparse.Namespace) -> int:
+    account = validate_account_address(args.address)
+    payload = _call_with_retries(
+        lambda: get_history_payload(account),
+        retries=args.retries,
+        retry_delay_s=args.retry_delay,
+    )
+    volatility_points = None
+    if args.include_hype_vol:
+        vol = _call_with_retries(
+            lambda: get_hype_volatility(days=args.hype_vol_days),
+            retries=args.retries,
+            retry_delay_s=args.retry_delay,
+        )
+        volatility_points = vol.get("series") or []
+    backtest = build_assignment_backtest(
+        payload["history"],
+        symbol=args.symbol,
+        strategy=args.strategy,
+        min_premium_retained_pct=args.min_premium_retained,
+        volatility_points=volatility_points,
+    )
+    result = {
+        "account": account,
+        "symbol": args.symbol,
+        "strategy": args.strategy,
+        "assignment_backtest": backtest,
+    }
+
+    if args.json:
+        _print_json(result)
+    else:
+        baseline = backtest["baseline"]
+        print("Assignment Backtest")
+        print(f"Positions considered: {baseline['count']}")
+        print(f"Assigned: {baseline['assigned_count']} ({baseline['assignment_rate'] * 100:.1f}%)")
+        print(f"Premium: {_fmt(baseline['premium'], 2)}")
+        print(f"Notional: {_fmt(baseline['notional'], 2)}")
+        rows = []
+        for rule in backtest.get("recommended_rules") or []:
+            kept = rule["kept"]
+            rows.append(
+                {
+                    "rule": rule["name"],
+                    "premium_kept": f"{rule['premium_retained_pct']:.1f}%",
+                    "assigned_avoided": f"{rule['assigned_count_avoided_pct']:.1f}%",
+                    "assigned_notional_avoided": f"{rule['assigned_notional_avoided_pct']:.1f}%",
+                    "kept_apr": _fmt(kept.get("notional_weighted_apr"), 2),
+                }
+            )
+        _print_table(
+            rows,
+            ["rule", "premium_kept", "assigned_avoided", "assigned_notional_avoided", "kept_apr"],
+        )
+    return EXIT_OK
+
+
+def cmd_market_clearance(args: argparse.Namespace) -> int:
+    asset_arg = getattr(args, "asset", None)
+    assets_value = asset_arg or getattr(args, "assets", None) or "HYPE,BTC"
+    assets = [a.strip().upper() for a in assets_value.split(",") if a.strip()]
+    strategies = [args.strategy] if args.strategy else None
+    board = _call_with_retries(
+        lambda: build_clearance_board(
+            assets=assets,
+            strategies=strategies,
+            target_dte=args.target_dte,
+            days=args.days,
+        ),
+        retries=args.retries,
+        retry_delay_s=args.retry_delay,
+    )
+
+    if args.json:
+        _print_json(board)
+    else:
+        if len(board.get("entries") or []) == 1:
+            entry = board["entries"][0]
+            metrics = entry.get("metrics") or {}
+            print(entry.get("recommendation"))
+            print(f"Status: {entry.get('overall')}")
+            print(f"As of: {entry.get('as_of_date')}")
+            print(f"Close: {_fmt(metrics.get('close'), 2)}")
+            print(f"1d move: {_fmt(metrics.get('return_1d_pct'), 2)}%")
+            print(f"3d move: {_fmt(metrics.get('return_3d_pct'), 2)}%")
+            print(f"7d realized vol: {_fmt(metrics.get('rv_7d'), 2)}%")
+            gate_rows = [
+                {
+                    "gate": g.get("name"),
+                    "status": g.get("status"),
+                    "value": _fmt(g.get("value"), 2),
+                    "threshold": g.get("threshold"),
+                }
+                for g in entry.get("gates") or []
+            ]
+            _print_table(gate_rows, ["gate", "status", "value", "threshold"])
+            return EXIT_OK
+
+        rows = []
+        for entry in board.get("entries") or []:
+            blockers = [g["name"] for g in entry.get("gates") or [] if g.get("status") == "block"]
+            warnings = [g["name"] for g in entry.get("gates") or [] if g.get("status") == "warn"]
+            rows.append(
+                {
+                    "asset": entry.get("asset"),
+                    "strategy": entry.get("strategy_label"),
+                    "status": entry.get("overall"),
+                    "close": _fmt(entry.get("close"), 2),
+                    "date": entry.get("as_of_date"),
+                    "blockers": ", ".join(blockers) if blockers else "-",
+                    "warnings": ", ".join(warnings) if warnings else "-",
+                }
+            )
+        _print_table(rows, ["asset", "strategy", "status", "close", "date", "blockers", "warnings"])
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="rysk", description="Rysk dashboard CLI for agents and operators")
     sub = parser.add_subparsers(dest="group", required=True)
@@ -418,6 +538,63 @@ def build_parser() -> argparse.ArgumentParser:
     hist_expiry_prices.add_argument("--retry-delay", type=float, default=0.5)
     hist_expiry_prices.add_argument("--json", action="store_true")
     hist_expiry_prices.set_defaults(func=cmd_history_expiry_prices)
+
+    hist_assignment_backtest = history_sub.add_parser(
+        "assignment-backtest",
+        help="Backtest assignment-avoidance veto rules against expired wallet history",
+    )
+    hist_assignment_backtest.add_argument("--address", required=True)
+    hist_assignment_backtest.add_argument("--symbol")
+    hist_assignment_backtest.add_argument("--strategy", choices=["csp", "cc", "cash_secured_put", "covered_call"])
+    hist_assignment_backtest.add_argument(
+        "--min-premium-retained",
+        type=float,
+        default=70.0,
+        help="Only recommend rules that keep at least this percent of baseline premium",
+    )
+    hist_assignment_backtest.add_argument("--retries", type=int, default=1)
+    hist_assignment_backtest.add_argument("--retry-delay", type=float, default=0.5)
+    hist_assignment_backtest.add_argument(
+        "--include-hype-vol",
+        action="store_true",
+        help="Fetch HYPE daily realized volatility and test volatility veto rules",
+    )
+    hist_assignment_backtest.add_argument(
+        "--hype-vol-days",
+        type=int,
+        default=730,
+        help="Daily HYPE price window used when --include-hype-vol is set",
+    )
+    hist_assignment_backtest.add_argument("--json", action="store_true")
+    hist_assignment_backtest.set_defaults(func=cmd_history_assignment_backtest)
+
+    market = sub.add_parser("market", help="Market risk and pre-trade clearance")
+    market_sub = market.add_subparsers(dest="market_cmd", required=True)
+    market_clearance = market_sub.add_parser(
+        "clearance",
+        help="Show CC/CSP pre-trade clearance gates for HYPE/BTC",
+    )
+    market_clearance.add_argument("--assets", default="HYPE,BTC", help="Comma-separated assets, e.g. HYPE,BTC")
+    market_clearance.add_argument("--strategy", choices=["cc", "covered_call", "csp", "cash_secured_put"])
+    market_clearance.add_argument("--target-dte", type=float, help="Optional target DTE for the contemplated trade")
+    market_clearance.add_argument("--days", type=int, default=180)
+    market_clearance.add_argument("--retries", type=int, default=1)
+    market_clearance.add_argument("--retry-delay", type=float, default=0.5)
+    market_clearance.add_argument("--json", action="store_true")
+    market_clearance.set_defaults(func=cmd_market_clearance)
+
+    market_check = market_sub.add_parser(
+        "check",
+        help="Check whether a specific CC/CSP action is clear today",
+    )
+    market_check.add_argument("--asset", required=True, help="Asset to check, e.g. HYPE or BTC")
+    market_check.add_argument("--strategy", required=True, choices=["cc", "covered_call", "csp", "cash_secured_put"])
+    market_check.add_argument("--target-dte", type=float, help="Optional target DTE for the contemplated trade")
+    market_check.add_argument("--days", type=int, default=180)
+    market_check.add_argument("--retries", type=int, default=1)
+    market_check.add_argument("--retry-delay", type=float, default=0.5)
+    market_check.add_argument("--json", action="store_true")
+    market_check.set_defaults(func=cmd_market_clearance)
 
     return parser
 

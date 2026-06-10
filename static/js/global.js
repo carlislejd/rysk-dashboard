@@ -859,7 +859,73 @@ async function loadPutCallRatio(days) {
     }
 }
 
-// ── Assignment Rate Trend ──
+// ── HYPE Volatility Index ──
+
+async function loadHypeVolatility(days = 365) {
+    const loading = document.getElementById('hype-vol-loading');
+    const content = document.getElementById('hype-vol-content');
+    if (!loading || !content) return;
+
+    try {
+        const resp = await fetch(`/api/global/hype-volatility?days=${days}`);
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+
+        const latest = data.latest || {};
+        document.getElementById('hype-vol-summary').innerHTML = `
+            <div class="summary-card">
+                <div class="summary-label">HYPE Close</div>
+                <div class="summary-value">${latest.close != null ? formatCurrency(latest.close) : '—'}</div>
+                <div class="summary-subtext">${latest.date || '—'}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">3d RV</div>
+                <div class="summary-value">${latest.rv_3d != null ? formatPercentage(latest.rv_3d) : '—'}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">7d RV</div>
+                <div class="summary-value">${latest.rv_7d != null ? formatPercentage(latest.rv_7d) : '—'}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">30d RV</div>
+                <div class="summary-value">${latest.rv_30d != null ? formatPercentage(latest.rv_30d) : '—'}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">1d Move</div>
+                <div class="summary-value">${latest.return_1d_pct != null ? formatPercentage(latest.return_1d_pct) : '—'}</div>
+            </div>
+        `;
+
+        const series = data.series || [];
+        const dates = series.map(d => d.date);
+        const rv3 = series.map(d => d.rv_3d);
+        const rv7 = series.map(d => d.rv_7d);
+        const rv30 = series.map(d => d.rv_30d);
+        const close = series.map(d => d.close);
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+
+        const theme = getPlotlyTheme();
+        Plotly.newPlot('hype-vol-chart', [
+            { x: dates, y: rv3, type: 'scatter', mode: 'lines', name: '3d RV', line: { color: '#ef7070', width: 1.5 } },
+            { x: dates, y: rv7, type: 'scatter', mode: 'lines', name: '7d RV', line: { color: '#f0b940', width: 2 } },
+            { x: dates, y: rv30, type: 'scatter', mode: 'lines', name: '30d RV', line: { color: '#34d399', width: 2.5 } },
+            { x: dates, y: close, type: 'scatter', mode: 'lines', name: 'HYPE Close', line: { color: 'rgba(148, 163, 184, 0.55)', width: 1.5 }, yaxis: 'y2' },
+        ], {
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent',
+            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+            margin: { l: 60, r: 60, t: 20, b: 40 },
+            xaxis: { showgrid: false, tickfont: { size: 11 } },
+            yaxis: { title: 'Realized Vol (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%' },
+            yaxis2: { title: 'Close ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
+            legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
+        }, { responsive: true, displayModeBar: false });
+    } catch (e) {
+        loading.textContent = 'Failed to load HYPE volatility: ' + e.message;
+    }
+}
 
 // ── Outcomes Breakdown ──
 
@@ -1011,6 +1077,7 @@ function setTimeRange(days) {
     loadOverview(days);
     loadPnlChart(days);
     loadPutCallRatio(days);
+    loadHypeVolatility(days > 0 ? days : 365);
 }
 
 // ── Scroll-spy for sticky act-nav ──
@@ -1061,6 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadRecent(),
         loadAssets(),
         loadPutCallRatio(90),
+        loadHypeVolatility(90),
         loadOutcomes(),
         loadExpiryExplorer(),
     ]).then(() => {

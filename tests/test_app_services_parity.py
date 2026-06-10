@@ -111,6 +111,113 @@ class TestAppServiceParity(unittest.TestCase):
         self.assertIn("deep_dive", deep_dive_resp.get_json())
 
     @patch("app.get_history_payload")
+    def test_api_cli_history_assignment_backtest_shape(self, mock_get_history):
+        mock_get_history.return_value = {
+            "account": TEST_ADDRESS,
+            "history": {
+                "expired_positions": [
+                    {
+                        "symbol": "kHYPE",
+                        "strategy": "covered_call",
+                        "outcome": "Assigned",
+                        "premium": 500.0,
+                        "notional": 20000.0,
+                        "apr": 42.0,
+                        "created_at_iso": "2026-03-01T00:00:00+00:00",
+                        "expiry": 1773388800,
+                        "type": "Call",
+                        "strike": 40.0,
+                        "expiry_price": 45.0,
+                    },
+                    {
+                        "symbol": "UBTC",
+                        "strategy": "cash_secured_put",
+                        "outcome": "Returned",
+                        "premium": 700.0,
+                        "notional": 70000.0,
+                        "apr": 30.0,
+                        "created_at_iso": "2026-03-05T00:00:00+00:00",
+                        "expiry": 1773388800,
+                        "type": "Put",
+                        "strike": 70000.0,
+                        "expiry_price": 72000.0,
+                    },
+                ],
+            },
+        }
+        client = app.test_client()
+        resp = client.get(
+            f"/api/cli/history/assignment-backtest?address={TEST_ADDRESS}&min_premium_retained=40"
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["success"])
+        self.assertIn("assignment_backtest", payload)
+        self.assertEqual(payload["assignment_backtest"]["baseline"]["count"], 2)
+
+    @patch("app.get_hype_volatility")
+    def test_api_global_hype_volatility_shape(self, mock_vol):
+        mock_vol.return_value = {
+            "asset": "HYPE",
+            "windows": [3, 7, 30],
+            "days": 90,
+            "point_count": 1,
+            "latest": {"date": "2026-03-02", "close": 40.0, "rv_3d": 90.0, "rv_7d": 80.0, "rv_30d": 70.0},
+            "series": [{"date": "2026-03-02", "close": 40.0, "rv_3d": 90.0, "rv_7d": 80.0, "rv_30d": 70.0}],
+        }
+        client = app.test_client()
+        resp = client.get("/api/global/hype-volatility?days=90")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["asset"], "HYPE")
+        self.assertEqual(payload["latest"]["rv_7d"], 80.0)
+
+    @patch("app.get_asset_volatility")
+    def test_api_global_volatility_shape(self, mock_vol):
+        mock_vol.return_value = {
+            "asset": "BTC",
+            "windows": [3, 7, 30],
+            "days": 90,
+            "point_count": 1,
+            "latest": {"date": "2026-03-02", "close": 70000.0, "rv_7d": 40.0},
+            "series": [{"date": "2026-03-02", "close": 70000.0, "rv_7d": 40.0}],
+        }
+        client = app.test_client()
+        resp = client.get("/api/global/volatility?asset=BTC&days=90")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["asset"], "BTC")
+
+    @patch("app.build_clearance_board")
+    def test_api_strategy_clearance_shape(self, mock_clearance):
+        mock_clearance.return_value = {
+            "assets": ["HYPE", "BTC"],
+            "strategies": ["covered_call", "cash_secured_put"],
+            "target_dte": None,
+            "entries": [
+                {
+                    "asset": "HYPE",
+                    "strategy": "covered_call",
+                    "strategy_label": "Covered Call",
+                    "overall": "block",
+                    "clear_to_sell": False,
+                    "as_of_date": "2026-06-10",
+                    "close": 55.0,
+                    "gates": [],
+                    "latest": {},
+                }
+            ],
+        }
+        client = app.test_client()
+        resp = client.get("/api/strategy/clearance?assets=HYPE,BTC")
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.get_json()
+        self.assertTrue(payload["success"])
+        self.assertEqual(payload["entries"][0]["overall"], "block")
+
+    @patch("app.get_history_payload")
     @patch("app.get_positions_payload")
     def test_native_dashboard_endpoints_still_available(self, mock_get_positions, mock_get_history):
         mock_get_positions.return_value = {
