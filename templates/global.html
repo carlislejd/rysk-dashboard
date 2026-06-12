@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rysk — Protocol Overview</title>
+    <title>RYSK://TERMINAL — Protocol Overview</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -15,8 +15,8 @@
             <a class="side-brand" href="/">
                 <span class="side-brand-mark">R</span>
                 <span>
-                    <strong>Rysk</strong>
-                    <small>Options Dashboard</small>
+                    <strong>RYSK</strong>
+                    <small>//terminal</small>
                 </span>
             </a>
             <div class="side-nav-group">
@@ -35,14 +35,35 @@
         </aside>
     <main class="container app-main">
         <header>
-            <nav class="dashboard-nav">
-                <a href="/" class="active">Global</a>
-                <a href="/account">Account</a>
-                <a href="/docs">Docs</a>
+            <div class="header-topline">
+                <nav class="dashboard-nav">
+                    <a href="/" class="active">Global</a>
+                    <a href="/account">Account</a>
+                    <a href="/docs">Docs</a>
+                </nav>
+                <span class="live-dot">Live Feed</span>
                 <button class="theme-toggle" id="theme-toggle" title="Toggle day/night mode">&#9790;</button>
-            </nav>
-            <h1>Rysk Protocol Overview</h1>
+            </div>
+            <h1>Protocol <em>Overview</em></h1>
         </header>
+
+        <!-- Ticker tape — pure vibes, pauses on hover -->
+        <div class="ticker-tape" aria-hidden="true">
+            <div class="ticker-track">
+                <span><em>RYSK://TERMINAL</em> ▚ sell volatility, collect premium</span>
+                <span>covered calls <em>▲</em> cash-secured puts <b>▼</b></span>
+                <span>every strike tells a story</span>
+                <span><em>HYPE</em> ▚ <em>BTC</em> ▚ <em>ETH</em> ▚ <em>SOL</em> ▚ on-chain options flow</span>
+                <span>theta gang never sleeps</span>
+                <span>assignment is just a spicy limit order</span>
+                <span><em>RYSK://TERMINAL</em> ▚ sell volatility, collect premium</span>
+                <span>covered calls <em>▲</em> cash-secured puts <b>▼</b></span>
+                <span>every strike tells a story</span>
+                <span><em>HYPE</em> ▚ <em>BTC</em> ▚ <em>ETH</em> ▚ <em>SOL</em> ▚ on-chain options flow</span>
+                <span>theta gang never sleeps</span>
+                <span>assignment is just a spicy limit order</span>
+            </div>
+        </div>
 
         <!-- Hero KPI strip — six at-a-glance numbers -->
         <section class="hero-kpis" id="hero-kpis">

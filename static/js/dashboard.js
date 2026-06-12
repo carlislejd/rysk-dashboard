@@ -130,7 +130,7 @@ function updateAccountUI(address) {
 function setAccountStatus(message = '', isError = false) {
     if (!accountStatusEl) return;
     accountStatusEl.textContent = message || '';
-    accountStatusEl.style.color = isError ? '#ef7070' : '#71717a';
+    accountStatusEl.style.color = isError ? '#ff4d6d' : '#6b7387';
 }
 
 let positionsAssetSummary = [];
@@ -664,7 +664,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         x: points.map(p => p.x),
         y: points.map(p => p.y),
         marker: {
-            color: '#34d399',
+            color: '#00ff9d',
             size: sizes,
             opacity: opacities
         },
@@ -680,17 +680,17 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: theme.fontColor, family: 'Inter, system-ui, sans-serif' },
+        font: { color: theme.fontColor, family: 'JetBrains Mono, monospace' },
         margin: { l: 60, r: 20, t: 30, b: 60 },
         xaxis: {
             title: 'Date',
-            color: '#52525b',
+            color: '#5e6878',
             gridcolor: theme.gridColor,
             type: 'date'
         },
         yaxis: {
             title: 'APR (%)',
-            color: '#52525b',
+            color: '#5e6878',
             gridcolor: theme.gridColor
         },
         showlegend: true,
@@ -707,7 +707,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         mode: 'lines',
         x: [points[0].x, points[points.length - 1].x],
         y: [avgApr, avgApr],
-        line: { color: '#f59e0b', dash: 'dash' },
+        line: { color: '#ff9f1c', dash: 'dash' },
         name: `Avg APR ${formatPercentage(avgApr)}`
     }], layout, { displayModeBar: false, responsive: true }).then(() => {
         Plotly.Plots.resize(plot);
@@ -1578,12 +1578,12 @@ function renderAccountPnl(historyData, openPositions) {
         const dateLabel = _pnlBasis === 'cash' ? 'Trade Date' : 'Expiry Date';
         const theme = getPlotlyTheme();
         Plotly.newPlot('pnl-chart-account', [
-            { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
-            { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Expired OTM Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+            { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(0, 255, 157, 0.30)' }, yaxis: 'y2' },
+            { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#00ff9d', width: 2.5 } },
+            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Expired OTM Premium', line: { color: '#ff9f1c', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 60 },
             xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
             yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
@@ -2228,12 +2228,12 @@ function renderPositionsHeatmap(summary) {
         // ITM Calls zone (left of price)
         shapes.push({
             type: 'rect', x0: xMin, x1: cp, y0: 0, y1: 1, yref: 'paper',
-            fillcolor: 'rgba(56, 189, 248, 0.04)', line: { width: 0 }, layer: 'below'
+            fillcolor: 'rgba(0, 212, 255, 0.05)', line: { width: 0 }, layer: 'below'
         });
         // ITM Puts zone (right of price)
         shapes.push({
             type: 'rect', x0: cp, x1: xMax, y0: 0, y1: 1, yref: 'paper',
-            fillcolor: 'rgba(239, 112, 112, 0.04)', line: { width: 0 }, layer: 'below'
+            fillcolor: 'rgba(255, 77, 109, 0.05)', line: { width: 0 }, layer: 'below'
         });
 
         const callZoneMid = (xMin + cp) / 2;
@@ -2244,8 +2244,8 @@ function renderPositionsHeatmap(summary) {
                 x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
-                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+                font: { size: 10, color: 'rgba(0, 212, 255, 0.85)', family: 'JetBrains Mono, monospace' },
+                bgcolor: 'rgba(6,7,9,0.75)', borderpad: 4,
             });
         }
         if (putsItm > 0 || putsItmNotional > 0) {
@@ -2253,8 +2253,8 @@ function renderPositionsHeatmap(summary) {
                 x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
-                bgcolor: 'rgba(9,9,11,0.7)', borderpad: 4,
+                font: { size: 10, color: 'rgba(255, 77, 109, 0.85)', family: 'JetBrains Mono, monospace' },
+                bgcolor: 'rgba(6,7,9,0.75)', borderpad: 4,
             });
         }
     }
@@ -2263,14 +2263,14 @@ function renderPositionsHeatmap(summary) {
     if (hasPrice) {
         shapes.push({
             type: 'line', x0: cp, x1: cp, y0: 0, y1: 1, yref: 'paper',
-            line: { color: isActiveExpiry ? 'rgba(244, 244, 245, 0.35)' : 'rgba(244, 244, 245, 0.15)', width: 1.5, dash: 'dot' }
+            line: { color: isActiveExpiry ? 'rgba(242, 255, 247, 0.4)' : 'rgba(244, 244, 245, 0.15)', width: 1.5, dash: 'dot' }
         });
         annotations.push({
             x: cp, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
             text: `<b>Price ${formatStrike(cp)}</b>`,
             showarrow: false,
-            font: { size: 10, color: isActiveExpiry ? '#f4f4f5' : '#71717a', family: 'Inter, system-ui, sans-serif' },
-            bgcolor: 'rgba(9,9,11,0.85)', borderpad: 3,
+            font: { size: 10, color: isActiveExpiry ? '#f4f4f5' : '#6b7387', family: 'JetBrains Mono, monospace' },
+            bgcolor: 'rgba(6,7,9,0.85)', borderpad: 3,
         });
     }
 
@@ -2278,13 +2278,13 @@ function renderPositionsHeatmap(summary) {
         {
             type: 'bar', name: 'Put', x: strikeValues,
             y: sorted.map(s => s.put_notional),
-            marker: { color: 'rgba(239, 112, 112, 0.7)' },
+            marker: { color: 'rgba(255, 77, 109, 0.7)' },
             width: barWidth,
         },
         {
             type: 'bar', name: 'Call', x: strikeValues,
             y: sorted.map(s => s.call_notional),
-            marker: { color: 'rgba(56, 189, 248, 0.7)' },
+            marker: { color: 'rgba(0, 212, 255, 0.7)' },
             width: barWidth,
         },
     ];
@@ -2292,20 +2292,20 @@ function renderPositionsHeatmap(summary) {
     const layout = {
         barmode: 'stack',
         plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
-        font: { family: 'Inter, system-ui, sans-serif', size: 12, color: '#71717a' },
+        font: { family: 'JetBrains Mono, monospace', size: 12, color: '#6b7387' },
         margin: { l: 60, r: 20, t: 40, b: 60 },
         xaxis: {
             title: 'Strike', showgrid: false, tickfont: { size: 10 },
             tickprefix: '$', tickangle: -45,
         },
         yaxis: {
-            title: 'Notional ($)', gridcolor: 'rgba(255,255,255,0.06)', tickprefix: '$',
+            title: 'Notional ($)', gridcolor: 'rgba(170,255,210,0.07)', tickprefix: '$',
         },
         legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
         hoverlabel: {
-            bgcolor: '#0c0c0e',
-            font: { color: '#fafafa', family: 'Inter, system-ui, sans-serif' },
-            bordercolor: 'rgba(255,255,255,0.06)'
+            bgcolor: '#0c0e13',
+            font: { color: '#f2fff7', family: 'JetBrains Mono, monospace' },
+            bordercolor: 'rgba(170,255,210,0.07)'
         },
         shapes, annotations,
     };

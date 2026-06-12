@@ -88,15 +88,15 @@ async function loadOverview(days) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('volume-chart', [
-            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(52, 211, 153, 0.6)' } },
-            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#f59e0b', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(0, 255, 157, 0.55)' } },
+            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#ff9f1c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
-            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f59e0b' }, tickprefix: '$' },
+            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#ff9f1c' }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
@@ -366,7 +366,7 @@ function renderStrikeChart(detail) {
                 x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''}${itmSuffix}</b><br>${compactCurrency(callsItmNotional)}`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(56, 189, 248, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                font: { size: 10, color: 'rgba(0, 212, 255, 0.85)', family: 'JetBrains Mono, monospace' },
                 bgcolor: theme.annotationBg, borderpad: 4,
             });
         }
@@ -376,7 +376,7 @@ function renderStrikeChart(detail) {
                 x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''}${itmSuffix}</b><br>${compactCurrency(putsItmNotional)}`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(239, 112, 112, 0.8)', family: 'Inter, system-ui, sans-serif' },
+                font: { size: 10, color: 'rgba(255, 77, 109, 0.85)', family: 'JetBrains Mono, monospace' },
                 bgcolor: theme.annotationBg, borderpad: 4,
             });
         }
@@ -384,7 +384,7 @@ function renderStrikeChart(detail) {
         // Price divider line
         shapes.push({
             type: 'line', x0: referencePrice, x1: referencePrice, y0: 0, y1: 1, yref: 'paper',
-            line: { color: 'rgba(244, 244, 245, 0.35)', width: 1.5, dash: isExpiredView ? 'solid' : 'dot' }
+            line: { color: 'rgba(242, 255, 247, 0.4)', width: 1.5, dash: isExpiredView ? 'solid' : 'dot' }
         });
 
         // Price label
@@ -392,17 +392,17 @@ function renderStrikeChart(detail) {
             x: referencePrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
             text: `<b>${priceLabel}</b>`,
             showarrow: false,
-            font: { size: 10, color: theme.annotationColor, family: 'Inter, system-ui, sans-serif' },
+            font: { size: 10, color: theme.annotationColor, family: 'JetBrains Mono, monospace' },
             bgcolor: theme.annotationBg, borderpad: 3,
         });
     }
 
     Plotly.newPlot('detail-strike-chart', [
-        { x: strikeValues, y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(239, 112, 112, 0.7)' }, width: barWidth },
-        { x: strikeValues, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(56, 189, 248, 0.7)' }, width: barWidth },
+        { x: strikeValues, y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(255, 77, 109, 0.7)' }, width: barWidth },
+        { x: strikeValues, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(0, 212, 255, 0.7)' }, width: barWidth },
     ], {
         barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
         margin: { l: 60, r: 20, t: 40, b: 60 },
         xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickprefix: '$', tickangle: -45 },
         yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickprefix: '$' },
@@ -451,15 +451,15 @@ function renderExpiryBreakdown(detail) {
 function renderDetailVolumeChart(vol) {
     const theme = getPlotlyTheme();
     Plotly.newPlot('detail-volume-chart', [
-        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(52, 211, 153, 0.6)' } },
-        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#f59e0b', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(0, 255, 157, 0.55)' } },
+        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#ff9f1c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
     ], {
         paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
         margin: { l: 60, r: 60, t: 20, b: 40 },
         xaxis: { showgrid: false, tickfont: { size: 11 } },
         yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
-        yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f59e0b' }, tickprefix: '$' },
+        yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#ff9f1c' }, tickprefix: '$' },
         legend: { orientation: 'h', y: -0.08, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
 }
@@ -797,12 +797,12 @@ async function loadPnlChart(days) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('pnl-chart', [
-            { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(52, 211, 153, 0.3)' }, yaxis: 'y2' },
-            { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#f59e0b', width: 2, dash: 'dot' } },
+            { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(0, 255, 157, 0.30)' }, yaxis: 'y2' },
+            { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#00ff9d', width: 2.5 } },
+            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#ff9f1c', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
@@ -840,17 +840,17 @@ async function loadPutCallRatio(days) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('pcr-chart', [
-            { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(239, 112, 112, 0.6)' } },
-            { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(56, 189, 248, 0.6)' } },
-            { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#f0b940', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+            { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(255, 77, 109, 0.6)' } },
+            { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(0, 212, 255, 0.6)' } },
+            { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#ffc53d', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             barmode: 'stack',
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
             margin: { l: 50, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Notional Share (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
-            yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#f0b940' } },
+            yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#ffc53d' } },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
@@ -908,14 +908,14 @@ async function loadHypeVolatility(days = 365) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('hype-vol-chart', [
-            { x: dates, y: rv3, type: 'scatter', mode: 'lines', name: '3d RV', line: { color: '#ef7070', width: 1.5 } },
-            { x: dates, y: rv7, type: 'scatter', mode: 'lines', name: '7d RV', line: { color: '#f0b940', width: 2 } },
-            { x: dates, y: rv30, type: 'scatter', mode: 'lines', name: '30d RV', line: { color: '#34d399', width: 2.5 } },
-            { x: dates, y: close, type: 'scatter', mode: 'lines', name: 'HYPE Close', line: { color: 'rgba(148, 163, 184, 0.55)', width: 1.5 }, yaxis: 'y2' },
+            { x: dates, y: rv3, type: 'scatter', mode: 'lines', name: '3d RV', line: { color: '#ff4d6d', width: 1.5 } },
+            { x: dates, y: rv7, type: 'scatter', mode: 'lines', name: '7d RV', line: { color: '#ffc53d', width: 2 } },
+            { x: dates, y: rv30, type: 'scatter', mode: 'lines', name: '30d RV', line: { color: '#00ff9d', width: 2.5 } },
+            { x: dates, y: close, type: 'scatter', mode: 'lines', name: 'HYPE Close', line: { color: 'rgba(168, 178, 194, 0.55)', width: 1.5 }, yaxis: 'y2' },
         ], {
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
-            font: { family: 'Inter, system-ui, sans-serif', color: theme.fontColor, size: 12 },
+            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Realized Vol (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%' },

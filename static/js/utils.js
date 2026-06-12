@@ -3,13 +3,13 @@
 // ── Theme Toggle (Day/Night) ──
 
 function initTheme() {
-    const saved = localStorage.getItem('rysk-theme') || 'light';
+    const saved = localStorage.getItem('rysk-theme') || 'dark';
     document.documentElement.setAttribute('data-theme', saved);
     updateToggleIcons(saved);
 }
 
 function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
     const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('rysk-theme', next);
@@ -41,12 +41,12 @@ function replotAllCharts() {
 function getPlotlyTheme() {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     return {
-        fontColor: isLight ? '#78716c' : '#71717a',
-        gridColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)',
-        annotationBg: isLight ? 'rgba(250,248,244,0.92)' : 'rgba(9,9,11,0.85)',
-        annotationColor: isLight ? '#57534E' : '#71717a',
-        zoneCallBg: isLight ? 'rgba(2,132,199,0.06)' : 'rgba(56,189,248,0.04)',
-        zonePutBg: isLight ? 'rgba(220,38,38,0.06)' : 'rgba(239,112,112,0.04)',
+        fontColor: isLight ? '#7a766b' : '#6b7387',
+        gridColor: isLight ? 'rgba(20,19,15,0.08)' : 'rgba(170,255,210,0.07)',
+        annotationBg: isLight ? 'rgba(253,251,244,0.92)' : 'rgba(6,7,9,0.85)',
+        annotationColor: isLight ? '#54514a' : '#6b7387',
+        zoneCallBg: isLight ? 'rgba(0,132,184,0.06)' : 'rgba(0,212,255,0.05)',
+        zonePutBg: isLight ? 'rgba(227,39,93,0.06)' : 'rgba(255,77,109,0.05)',
         // Marker colors stay consistent across themes (the accent/semantic colors handle contrast)
     };
 }

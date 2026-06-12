@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rysk — Account Dashboard</title>
+    <title>RYSK://TERMINAL — Account</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body data-default-account="{{ account_address }}">
@@ -16,8 +16,8 @@
             <a class="side-brand" href="/">
                 <span class="side-brand-mark">R</span>
                 <span>
-                    <strong>Rysk</strong>
-                    <small>Options Dashboard</small>
+                    <strong>RYSK</strong>
+                    <small>//terminal</small>
                 </span>
             </a>
             <div class="side-nav-group">
@@ -41,13 +41,16 @@
             </div>
         </div>
         <header>
-            <nav class="dashboard-nav">
-                <a href="/">Global</a>
-                <a href="/account" class="active">Account</a>
-                <a href="/docs">Docs</a>
+            <div class="header-topline">
+                <nav class="dashboard-nav">
+                    <a href="/">Global</a>
+                    <a href="/account" class="active">Account</a>
+                    <a href="/docs">Docs</a>
+                </nav>
+                <span class="live-dot">Live Feed</span>
                 <button class="theme-toggle" id="theme-toggle" title="Toggle day/night mode">&#9790;</button>
-            </nav>
-            <h1>Account Dashboard</h1>
+            </div>
+            <h1>Your <em>Account</em></h1>
             <div class="account-bar">
                 <div class="account-display">
                     Wallet: <span id="current-wallet-display">Not set</span>
@@ -56,6 +59,24 @@
                 <span id="account-status" class="account-status"></span>
             </div>
         </header>
+
+        <!-- Ticker tape — pure vibes, pauses on hover -->
+        <div class="ticker-tape" aria-hidden="true">
+            <div class="ticker-track">
+                <span><em>RYSK://TERMINAL</em> ▚ your book, your numbers</span>
+                <span>premium collected is premium earned</span>
+                <span>watch your strikes <em>▲</em> respect your expiries <b>▼</b></span>
+                <span>APR is a lifestyle</span>
+                <span>returned = pure profit ▚ assigned = new inventory</span>
+                <span>theta gang never sleeps</span>
+                <span><em>RYSK://TERMINAL</em> ▚ your book, your numbers</span>
+                <span>premium collected is premium earned</span>
+                <span>watch your strikes <em>▲</em> respect your expiries <b>▼</b></span>
+                <span>APR is a lifestyle</span>
+                <span>returned = pure profit ▚ assigned = new inventory</span>
+                <span>theta gang never sleeps</span>
+            </div>
+        </div>
 
         <!-- Hero KPI strip — your numbers, at a glance -->
         <section class="hero-kpis" id="hero-kpis">
