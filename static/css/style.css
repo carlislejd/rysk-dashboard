@@ -280,12 +280,13 @@ body::after {
 }
 
 /* --- Layout --- */
+/* NOTE: no z-index here — it would trap the fixed sidepanels (z-90) inside a
+   level-1 stacking context, putting them UNDER the body-level backdrop (z-80). */
 .app-shell {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr);
     min-height: 100vh;
     position: relative;
-    z-index: 1;
 }
 
 .container {
@@ -1885,45 +1886,44 @@ body.sidepanel-open .sidepanel-backdrop {
     }
 }
 
+/* Positions detail — inline drawer that expands under the asset cards.
+   No overlay, no backdrop: the page stays scrollable while it's open. */
 .positions-detail {
-    background: transparent;
-    border: none;
-    border-top: 1px solid var(--border);
-    padding: 20px 0 0;
+    background: var(--bg-raised);
+    border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border-strong));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glow-accent-soft);
     margin-top: var(--space-lg);
+    padding: 0;
+    overflow: hidden;
 }
 
-.positions-detail.sidepanel {
-    background: var(--bg);
-    border-left: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-strong));
-    border-top: none;
-    padding: 0;
-    margin-top: 0;
+.positions-detail.is-open {
+    animation: drawer-in 240ms cubic-bezier(0.2, 0.8, 0.4, 1);
+}
+
+@keyframes drawer-in {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .positions-detail-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: var(--space-md);
-}
-
-.positions-detail.sidepanel .positions-detail-header {
-    padding: var(--space-lg);
-    margin-bottom: 0;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
     border-bottom: 1px solid var(--border);
+    background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 55%);
 }
 
-.positions-detail.sidepanel .positions-detail-summary,
-.positions-detail.sidepanel .positions-detail-filters,
-.positions-detail.sidepanel .positions-heatmap,
-.positions-detail.sidepanel .positions-detail-table {
-    margin-left: var(--space-lg);
-    margin-right: var(--space-lg);
+.positions-detail-body {
+    padding: var(--space-lg);
 }
 
-.positions-detail.sidepanel .positions-detail-filters {
-    margin-top: var(--space-lg);
+/* Deepen nested tiles so they read against the raised drawer surface */
+.positions-detail .summary-card {
+    background: color-mix(in srgb, var(--bg) 55%, var(--bg-raised));
 }
 
 .positions-detail-header h3 {

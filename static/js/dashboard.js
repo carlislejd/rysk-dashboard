@@ -255,7 +255,7 @@ async function loadPositions() {
         }
 
         html += `
-            <div id="positions-detail" class="positions-detail sidepanel" style="display:none;" aria-label="Account position detail panel">
+            <div id="positions-detail" class="positions-detail" style="display:none;" aria-label="Account position detail panel">
                 <div class="positions-detail-header">
                     <div>
                         <div class="sidepanel-eyebrow">Account Asset</div>
@@ -263,7 +263,7 @@ async function loadPositions() {
                     </div>
                     <button id="positions-detail-close" class="detail-close">Close</button>
                 </div>
-                <div class="sidepanel-body">
+                <div class="positions-detail-body">
                 <div id="positions-detail-filters" class="positions-detail-filters"></div>
                 <div id="positions-detail-summary" class="positions-detail-summary"></div>
                 <div id="positions-heatmap" class="positions-heatmap"></div>
@@ -2089,15 +2089,17 @@ function showAssetPositions(asset) {
     renderPositionsHeatmap(buildHeatmapSummary(positions, summary?.current_price));
     renderPositionsDetailTable(positions);
 
-    detail.style.display = 'flex';
+    // Inline drawer — expands in place under the asset cards, no overlay
+    const firstOpen = detail.style.display === 'none';
+    detail.style.display = 'block';
+    detail.classList.add('is-open');
     requestAnimationFrame(() => {
-        detail.classList.add('is-open');
-        document.body.classList.add('sidepanel-open');
-        setTimeout(() => {
-            detail.querySelectorAll('.js-plotly-plot').forEach(el => {
-                Plotly.Plots.resize(el);
-            });
-        }, 220);
+        detail.querySelectorAll('.js-plotly-plot').forEach(el => {
+            Plotly.Plots.resize(el);
+        });
+        if (firstOpen) {
+            detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
     });
 }
 
@@ -2105,11 +2107,7 @@ function closePositionsDetailPanel() {
     const detail = document.getElementById('positions-detail');
     if (detail) {
         detail.classList.remove('is-open');
-        setTimeout(() => {
-            if (!detail.classList.contains('is-open')) {
-                detail.style.display = 'none';
-            }
-        }, 220);
+        detail.style.display = 'none';
     }
     document.body.classList.remove('sidepanel-open');
     selectedAssetSymbol = null;
@@ -2500,7 +2498,9 @@ document.addEventListener('DOMContentLoaded', () => {
         sidepanelBackdrop.addEventListener('click', closePositionsDetailPanel);
     }
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && document.body.classList.contains('sidepanel-open')) {
+        if (event.key !== 'Escape') return;
+        const detail = document.getElementById('positions-detail');
+        if (detail && detail.classList.contains('is-open')) {
             closePositionsDetailPanel();
         }
     });
