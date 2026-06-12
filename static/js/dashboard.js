@@ -1434,10 +1434,17 @@ function renderAccountPnl(historyData, openPositions) {
     const otmPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'returned');
     const itmPositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'assigned');
     const activePositions = filtered.filter(p => (p.outcome || '').toLowerCase() === 'active');
+    // Expired but settlement data not yet available (outcome Unknown).
+    // Premium is received upfront — it must still count toward totals.
+    const pendingPositions = filtered.filter(p => {
+        const o = (p.outcome || '').toLowerCase();
+        return o !== 'returned' && o !== 'assigned' && o !== 'active';
+    });
     const otmPremium = otmPositions.reduce((s, p) => s + (p.premium || 0), 0);
     const itmPremium = itmPositions.reduce((s, p) => s + (p.premium || 0), 0);
     const activePremium = activePositions.reduce((s, p) => s + (p.premium || 0), 0);
-    const totalPremium = otmPremium + itmPremium + activePremium;
+    const pendingPremium = pendingPositions.reduce((s, p) => s + (p.premium || 0), 0);
+    const totalPremium = otmPremium + itmPremium + activePremium + pendingPremium;
     const totalNotional = filtered.reduce((s, p) => s + (p.notional || 0), 0);
     // Return rate only counts settled positions
     const settledCount = otmPositions.length + itmPositions.length;
@@ -1489,6 +1496,10 @@ function renderAccountPnl(historyData, openPositions) {
         ? ` · ${activePositions.length} active`
         : '';
 
+    const pendingLabel = pendingPositions.length > 0
+        ? ` · ${pendingPositions.length} settling`
+        : '';
+
     const endingPnlColor = endingPnl >= 0 ? 'var(--accent)' : 'var(--color-error)';
     const assignmentNote = totalAssignmentLoss > 0
         ? `${formatCurrency(totalAssignmentLoss)} assignment loss`
@@ -1498,7 +1509,7 @@ function renderAccountPnl(historyData, openPositions) {
         <div class="summary-card">
             <div class="summary-label">Total Premium Collected</div>
             <div class="summary-value">${formatCurrency(totalPremium)}</div>
-            <div class="summary-subtext">${filtered.length} positions${activeLabel}</div>
+            <div class="summary-subtext">${filtered.length} positions${activeLabel}${pendingLabel}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired OTM</div>
@@ -1510,6 +1521,12 @@ function renderAccountPnl(historyData, openPositions) {
             <div class="summary-value">${formatCurrency(itmPremium)}</div>
             <div class="summary-subtext">${itmPositions.length} positions</div>
         </div>
+        ${pendingPositions.length > 0 ? `
+        <div class="summary-card">
+            <div class="summary-label">Awaiting Settlement</div>
+            <div class="summary-value">${formatCurrency(pendingPremium)}</div>
+            <div class="summary-subtext">${pendingPositions.length} expired, outcome pending</div>
+        </div>` : ''}
         <div class="summary-card">
             <div class="summary-label">Return Rate</div>
             <div class="summary-value">${settledCount > 0 ? formatPercentage(returnRate) : '—'}</div>

@@ -69,12 +69,22 @@ SYMBOL_ADDRESS_MAP = {
 # Simple in-memory cache so we don't hammer the RPC for historical expiries
 _expiry_cache = {}
 EXPIRY_CACHE_TTL = int(os.getenv("RYSK_EXPIRY_CACHE_TTL", str(12 * 3600)))  # 12 hours
+# Unfinalized or errored lookups must NOT be cached for 12 hours — a single
+# rate-limited RPC burst would otherwise poison outcomes (and the premium
+# totals derived from them) until the cache expires. Retry these quickly.
+EXPIRY_NEG_CACHE_TTL = int(os.getenv("RYSK_EXPIRY_NEG_CACHE_TTL", "900"))  # 15 minutes
 
 # Optional persistent cache on disk (JSON) to reuse expiry oracle lookups across runs
 EXPIRY_CACHE_FILE = os.getenv("RYSK_EXPIRY_CACHE_FILE", "data/expiry_cache.json")
 
 def _cache_key(address: str, expiry: int) -> str:
     return f"{(address or '').lower()}::{int(expiry)}"
+
+def _entry_fresh(entry, now=None) -> bool:
+    """Finalized prices live for the full TTL; everything else retries soon."""
+    now = now if now is not None else time.time()
+    ttl = EXPIRY_CACHE_TTL if entry.get("finalized") and entry.get("price") is not None else EXPIRY_NEG_CACHE_TTL
+    return (now - entry.get("timestamp", 0)) < ttl
 
 def _load_persistent_cache():
     if not EXPIRY_CACHE_FILE:
@@ -85,8 +95,7 @@ def _load_persistent_cache():
                 data = json.load(f)
             now = time.time()
             for key, entry in data.items():
-                ts = entry.get("timestamp", 0)
-                if now - ts < EXPIRY_CACHE_TTL:
+                if _entry_fresh(entry, now):
                     _expiry_cache[key] = entry
     except Exception as exc:
         print(f"Warning: failed to load expiry cache file {EXPIRY_CACHE_FILE}: {exc}")
@@ -100,7 +109,7 @@ def _save_persistent_cache():
         now = time.time()
         data = {
             k: v for k, v in _expiry_cache.items()
-            if (now - v.get("timestamp", 0)) < EXPIRY_CACHE_TTL
+            if _entry_fresh(v, now)
         }
         with open(EXPIRY_CACHE_FILE, "w") as f:
             json.dump(data, f)
@@ -142,7 +151,7 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
 
     cache_key = _cache_key(asset_address, expiry)
     cached = _expiry_cache.get(cache_key)
-    if cached and (time.time() - cached["timestamp"] < EXPIRY_CACHE_TTL):
+    if cached and _entry_fresh(cached):
         return cached["price"], cached["finalized"]
 
     try:
