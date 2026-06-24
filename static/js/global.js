@@ -411,10 +411,23 @@ function buildStrikeChart(detail, options = {}) {
     const shapes = [];
     const annotations = [];
     const mode = options.metricMode || 'volume';
+    const side = options.side || 'all';
+    const minNotional = Math.max(0, Number(options.minNotional || 0));
     const putField = mode === 'notional' ? 'put_notional' : 'put_volume';
     const callField = mode === 'notional' ? 'call_notional' : 'call_volume';
     const yTitle = mode === 'notional' ? 'Open Notional ($)' : 'Notional ($)';
     const compact = options.compact !== false;
+    const showPuts = side === 'all' || side === 'put';
+    const showCalls = side === 'all' || side === 'call';
+    const visibleStrikes = strikes.map(s => {
+        const putValue = Number(s[putField] || 0);
+        const callValue = Number(s[callField] || 0);
+        return {
+            ...s,
+            [putField]: showPuts && putValue >= minNotional ? putValue : 0,
+            [callField]: showCalls && callValue >= minNotional ? callValue : 0,
+        };
+    });
 
     if (strikeValues.length && reference.price !== null && Number.isFinite(reference.price)) {
         const minStrike = strikeValues[0];
@@ -422,7 +435,7 @@ function buildStrikeChart(detail, options = {}) {
         const xPad = barWidth;
         const xMin = minStrike - xPad;
         const xMax = maxStrike + xPad;
-        const exposure = summarizeStrikeExposure(strikes, reference.price, mode);
+        const exposure = summarizeStrikeExposure(visibleStrikes, reference.price, mode);
         const suffix = reference.isExpiredView ? ' settled ITM' : ' at risk';
 
         shapes.push({
@@ -468,28 +481,31 @@ function buildStrikeChart(detail, options = {}) {
         });
     }
 
-    const data = [
-        {
+    const data = [];
+    if (showPuts) {
+        data.push({
             x: strikeValues,
-            y: strikes.map(s => Number(s[putField] || 0)),
+            y: visibleStrikes.map(s => Number(s[putField] || 0)),
             customdata: strikes.map(s => [s.put_count || 0, s.trade_count || 0, s.premium || 0]),
             type: 'bar',
             name: 'Put',
             marker: { color: 'rgba(255, 77, 109, 0.72)' },
             width: barWidth,
             hovertemplate: 'Put target %{x:$,.2f}<br>Notional %{y:$,.0f}<br>Put orders %{customdata[0]}<br>Premium %{customdata[2]:$,.0f}<extra></extra>',
-        },
-        {
+        });
+    }
+    if (showCalls) {
+        data.push({
             x: strikeValues,
-            y: strikes.map(s => Number(s[callField] || 0)),
+            y: visibleStrikes.map(s => Number(s[callField] || 0)),
             customdata: strikes.map(s => [s.call_count || 0, s.trade_count || 0, s.premium || 0]),
             type: 'bar',
             name: 'Call',
             marker: { color: 'rgba(0, 212, 255, 0.72)' },
             width: barWidth,
             hovertemplate: 'Call target %{x:$,.2f}<br>Notional %{y:$,.0f}<br>Call orders %{customdata[0]}<br>Premium %{customdata[2]:$,.0f}<extra></extra>',
-        },
-    ];
+        });
+    }
 
     const layout = {
         barmode: 'stack',
@@ -509,7 +525,7 @@ function buildStrikeChart(detail, options = {}) {
         annotations,
     };
 
-    return { data, layout, strikes, reference, exposure: summarizeStrikeExposure(strikes, reference.price, mode) };
+    return { data, layout, strikes: visibleStrikes, reference, exposure: summarizeStrikeExposure(visibleStrikes, reference.price, mode) };
 }
 
 function updateStrikeCaption(detail, chartModel) {
@@ -645,7 +661,12 @@ function renderStrikeLens() {
     const levelsEl = document.getElementById('strike-modal-levels');
     const ordersEl = document.getElementById('strike-modal-orders');
     const referencePrice = Number(strikeLensState.referencePrice);
-    const chartModel = buildStrikeChart(latestStrikeDetail, { compact: false, referencePrice });
+    const chartModel = buildStrikeChart(latestStrikeDetail, {
+        compact: false,
+        referencePrice,
+        side: strikeLensState.side,
+        minNotional: strikeLensState.minNotional,
+    });
     const exposure = chartModel.exposure;
 
     if (readout) readout.textContent = formatStrike(referencePrice);

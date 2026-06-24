@@ -314,6 +314,8 @@ def get_asset_detail(conn, symbol, expiry=None):
                SUM(notional_f) as volume,
                SUM(premium_f) as premium,
                AVG(apr_f) as avg_apr,
+               SUM(CASE WHEN is_put = 1 THEN 1 ELSE 0 END) as put_count,
+               SUM(CASE WHEN is_put = 0 THEN 1 ELSE 0 END) as call_count,
                SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END) as put_volume,
                SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END) as call_volume
         FROM trades
@@ -352,6 +354,8 @@ def get_asset_detail(conn, symbol, expiry=None):
                 "volume": r["volume"],
                 "premium": r["premium"],
                 "avg_apr": r["avg_apr"],
+                "put_count": r["put_count"],
+                "call_count": r["call_count"],
                 "put_volume": r["put_volume"],
                 "call_volume": r["call_volume"],
             }
