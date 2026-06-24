@@ -2257,7 +2257,7 @@ function renderPositionsHeatmap(summary) {
         if (callsItm > 0 || callsItmNotional > 0) {
             annotations.push({
                 x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(callsItmNotional)}`,
+                text: `<b>${compactCurrency(callsItmNotional)} call exposure</b><br>${callsItm} target level${callsItm !== 1 ? 's' : ''} at risk`,
                 showarrow: false,
                 font: { size: 10, color: 'rgba(0, 212, 255, 0.85)', family: 'JetBrains Mono, monospace' },
                 bgcolor: 'rgba(6,7,9,0.75)', borderpad: 4,
@@ -2266,7 +2266,7 @@ function renderPositionsHeatmap(summary) {
         if (putsItm > 0 || putsItmNotional > 0) {
             annotations.push({
                 x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''} ITM</b><br>${compactCurrency(putsItmNotional)}`,
+                text: `<b>${compactCurrency(putsItmNotional)} put exposure</b><br>${putsItm} target level${putsItm !== 1 ? 's' : ''} at risk`,
                 showarrow: false,
                 font: { size: 10, color: 'rgba(255, 77, 109, 0.85)', family: 'JetBrains Mono, monospace' },
                 bgcolor: 'rgba(6,7,9,0.75)', borderpad: 4,

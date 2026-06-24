@@ -278,7 +278,13 @@
             <div id="detail-summary" class="summary-grid" style="margin-bottom: 24px;"></div>
             <h3 class="subsection-title">Volume Over Time</h3>
             <div id="detail-volume-chart" class="chart-container"></div>
-            <h3 class="subsection-title">Strike Distribution</h3>
+            <div class="chart-section-header">
+                <div>
+                    <h3 class="subsection-title">Strike Distribution</h3>
+                    <p id="detail-strike-caption" class="chart-caption"></p>
+                </div>
+                <button id="strike-expand" class="icon-text-button" type="button" title="Expand strike distribution">Expand</button>
+            </div>
             <div id="detail-strike-chart" class="chart-container"></div>
             <div id="detail-expiry-content"></div>
             <h3 class="subsection-title">Trades</h3>
@@ -305,6 +311,52 @@
     </main>
     </div>
     <div class="sidepanel-backdrop" id="sidepanel-backdrop" aria-hidden="true"></div>
+    <div id="strike-modal" class="modal-overlay strike-modal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="strike-modal-title">
+        <div class="modal-content strike-modal-content">
+            <div class="modal-header">
+                <div>
+                    <div class="sidepanel-eyebrow">Strike Lens</div>
+                    <h2 id="strike-modal-title">Strike Distribution</h2>
+                </div>
+                <div class="modal-controls">
+                    <button id="strike-modal-close" class="modal-close" type="button">Close</button>
+                </div>
+            </div>
+            <div class="modal-body strike-modal-body">
+                <div class="strike-lens-toolbar">
+                    <label class="strike-control">
+                        <span>Reference Price</span>
+                        <input id="strike-reference-slider" type="range" min="0" max="100" step="1" value="0">
+                    </label>
+                    <div class="strike-reference-readout">
+                        <span id="strike-reference-value">—</span>
+                        <button id="strike-reference-reset" class="terminal-button small" type="button">Reset</button>
+                    </div>
+                    <div class="tabs strike-type-tabs" id="strike-type-tabs">
+                        <button class="tab-button active" data-strike-type="all">All</button>
+                        <button class="tab-button" data-strike-type="put">Puts</button>
+                        <button class="tab-button" data-strike-type="call">Calls</button>
+                    </div>
+                    <label class="strike-control compact">
+                        <span>Min Notional</span>
+                        <input id="strike-min-notional" type="number" min="0" step="1000" value="0">
+                    </label>
+                </div>
+                <div id="strike-modal-summary" class="summary-grid modal-grid"></div>
+                <div id="strike-modal-chart" class="chart-container strike-modal-chart"></div>
+                <div class="strike-lens-grid">
+                    <section class="modal-section">
+                        <h3>Target Levels</h3>
+                        <div id="strike-modal-levels" class="modal-table-wrapper"></div>
+                    </section>
+                    <section class="modal-section">
+                        <h3>Recent Orders</h3>
+                        <div id="strike-modal-orders" class="modal-table-wrapper"></div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>

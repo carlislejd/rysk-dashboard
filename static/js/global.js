@@ -151,6 +151,14 @@ async function loadAssets() {
 
 let detailExpiries = []; // cached expiry list for the current asset
 let selectedExpiry = null; // null = All
+let latestStrikeDetail = null;
+let strikeLensState = {
+    referencePrice: null,
+    defaultReferencePrice: null,
+    side: 'all',
+    minNotional: 0,
+    orders: [],
+};
 
 async function showAssetDetail(symbol, { scroll = true } = {}) {
     selectedAsset = symbol;
@@ -293,122 +301,457 @@ function renderDetailSummary(detail) {
     `;
 }
 
-function renderStrikeChart(detail) {
-    const strikes = detail.strikes || [];
-    if (!strikes.length) { document.getElementById('detail-strike-chart').innerHTML = '<div class="loading">No strike data</div>'; return; }
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
+}
 
-    const currentPrice = detail.current_price;
-    // Use raw numeric values for x-axis so positions align with actual prices
-    const strikeValues = strikes.map(s => s.strike);
-    const minStrike = strikeValues[0];
-    const maxStrike = strikeValues[strikeValues.length - 1];
-    const barWidth = getStrikeBarWidth(strikeValues);
-
-    const shapes = [];
-    const annotations = [];
-    const theme = getPlotlyTheme();
-
-    // Determine which price to use for ITM zones:
-    // - Active expiry selected → current market price
-    // - Expired expiry selected → settlement/expiry price (historical view)
-    // - "All" view → no zones (mixed context)
+function getStrikeReference(detail, overridePrice = null) {
     const now = Date.now() / 1000;
     const isSpecificExpiry = selectedExpiry !== null;
     const isActiveView = isSpecificExpiry && selectedExpiry > now;
     const isExpiredView = isSpecificExpiry && selectedExpiry <= now;
 
-    let referencePrice = null;
-    let priceLabel = '';
+    if (overridePrice !== null && overridePrice !== undefined && Number.isFinite(Number(overridePrice))) {
+        return {
+            price: Number(overridePrice),
+            label: `Reference ${formatStrike(overridePrice)}`,
+            isExpiredView,
+            isActiveView,
+            hasContext: true,
+            isCustom: true,
+        };
+    }
 
-    if (isActiveView && currentPrice != null) {
-        referencePrice = currentPrice;
-        priceLabel = `Price ${formatStrike(currentPrice)}`;
-    } else if (isExpiredView) {
-        // Look up settlement price from the expiries data
-        const expiries = detail.expiries || [];
-        const matchedExpiry = expiries.find(e => e.expiry === selectedExpiry);
+    if (isActiveView && detail.current_price != null) {
+        return {
+            price: Number(detail.current_price),
+            label: `Price ${formatStrike(detail.current_price)}`,
+            isExpiredView: false,
+            isActiveView: true,
+            hasContext: true,
+            isCustom: false,
+        };
+    }
+
+    if (isExpiredView) {
+        const matchedExpiry = (detail.expiries || []).find(e => e.expiry === selectedExpiry);
         if (matchedExpiry && matchedExpiry.expiry_price != null) {
-            referencePrice = matchedExpiry.expiry_price;
-            priceLabel = `Settlement ${formatStrike(referencePrice)}`;
+            return {
+                price: Number(matchedExpiry.expiry_price),
+                label: `Settlement ${formatStrike(matchedExpiry.expiry_price)}`,
+                isExpiredView: true,
+                isActiveView: false,
+                hasContext: true,
+                isCustom: false,
+            };
         }
     }
 
-    if (referencePrice != null) {
+    return {
+        price: null,
+        label: '',
+        isExpiredView,
+        isActiveView,
+        hasContext: false,
+        isCustom: false,
+    };
+}
+
+function getStrikeMetric(row, side, metric) {
+    const prefix = side === 'call' ? 'call' : 'put';
+    const source = `${prefix}_${metric}`;
+    return Number(row[source] || 0);
+}
+
+function summarizeStrikeExposure(strikes, referencePrice, mode = 'volume') {
+    const putMetric = mode === 'notional' ? 'notional' : 'volume';
+    const callMetric = mode === 'notional' ? 'notional' : 'volume';
+    const summary = {
+        callLevels: 0,
+        putLevels: 0,
+        callExposure: 0,
+        putExposure: 0,
+        totalCall: 0,
+        totalPut: 0,
+        totalExposure: 0,
+    };
+
+    for (const s of strikes) {
+        const callValue = getStrikeMetric(s, 'call', callMetric);
+        const putValue = getStrikeMetric(s, 'put', putMetric);
+        summary.totalCall += callValue;
+        summary.totalPut += putValue;
+        if (referencePrice !== null && referencePrice !== undefined) {
+            if (s.strike < referencePrice && callValue > 0) {
+                summary.callLevels += 1;
+                summary.callExposure += callValue;
+            }
+            if (s.strike > referencePrice && putValue > 0) {
+                summary.putLevels += 1;
+                summary.putExposure += putValue;
+            }
+        }
+    }
+    summary.totalExposure = summary.callExposure + summary.putExposure;
+    return summary;
+}
+
+function buildStrikeChart(detail, options = {}) {
+    const strikes = [...(detail.strikes || [])].sort((a, b) => (a.strike || 0) - (b.strike || 0));
+    const strikeValues = strikes.map(s => s.strike);
+    const barWidth = getStrikeBarWidth(strikeValues);
+    const theme = getPlotlyTheme();
+    const reference = getStrikeReference(detail, options.referencePrice);
+    const shapes = [];
+    const annotations = [];
+    const mode = options.metricMode || 'volume';
+    const putField = mode === 'notional' ? 'put_notional' : 'put_volume';
+    const callField = mode === 'notional' ? 'call_notional' : 'call_volume';
+    const yTitle = mode === 'notional' ? 'Open Notional ($)' : 'Notional ($)';
+    const compact = options.compact !== false;
+
+    if (strikeValues.length && reference.price !== null && Number.isFinite(reference.price)) {
+        const minStrike = strikeValues[0];
+        const maxStrike = strikeValues[strikeValues.length - 1];
         const xPad = barWidth;
         const xMin = minStrike - xPad;
         const xMax = maxStrike + xPad;
+        const exposure = summarizeStrikeExposure(strikes, reference.price, mode);
+        const suffix = reference.isExpiredView ? ' settled ITM' : ' at risk';
 
-        // Count ITM options: calls ITM when strike < price, puts ITM when strike > price
-        let callsItm = 0, callsItmNotional = 0, putsItm = 0, putsItmNotional = 0;
-        for (const s of strikes) {
-            if (s.strike < referencePrice) { callsItm += s.call_volume > 0 ? 1 : 0; callsItmNotional += s.call_volume; }
-            if (s.strike > referencePrice) { putsItm += s.put_volume > 0 ? 1 : 0; putsItmNotional += s.put_volume; }
-        }
-
-        // --- ITM Calls zone (left of price) ---
         shapes.push({
-            type: 'rect', x0: xMin, x1: referencePrice, y0: 0, y1: 1, yref: 'paper',
+            type: 'rect', x0: xMin, x1: reference.price, y0: 0, y1: 1, yref: 'paper',
             fillcolor: theme.zoneCallBg, line: { width: 0 }, layer: 'below'
         });
-        // --- ITM Puts zone (right of price) ---
         shapes.push({
-            type: 'rect', x0: referencePrice, x1: xMax, y0: 0, y1: 1, yref: 'paper',
+            type: 'rect', x0: reference.price, x1: xMax, y0: 0, y1: 1, yref: 'paper',
             fillcolor: theme.zonePutBg, line: { width: 0 }, layer: 'below'
         });
 
-        // Zone labels
-        const callZoneMid = (xMin + referencePrice) / 2;
-        const putZoneMid = (referencePrice + xMax) / 2;
-        const itmSuffix = isExpiredView ? ' were ITM' : ' ITM';
-
-        if (callsItm > 0 || callsItmNotional > 0) {
+        if (exposure.callLevels > 0 || exposure.callExposure > 0) {
             annotations.push({
-                x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${callsItm} Call Strike${callsItm !== 1 ? 's' : ''}${itmSuffix}</b><br>${compactCurrency(callsItmNotional)}`,
+                x: (xMin + reference.price) / 2, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${compactCurrency(exposure.callExposure)} call exposure</b><br>${exposure.callLevels} target level${exposure.callLevels !== 1 ? 's' : ''}${suffix}`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(0, 212, 255, 0.85)', family: 'JetBrains Mono, monospace' },
-                bgcolor: theme.annotationBg, borderpad: 4,
+                font: { size: compact ? 10 : 12, color: 'rgba(0, 212, 255, 0.88)', family: 'JetBrains Mono, monospace' },
+                bgcolor: theme.annotationBg, borderpad: compact ? 4 : 6,
             });
         }
 
-        if (putsItm > 0 || putsItmNotional > 0) {
+        if (exposure.putLevels > 0 || exposure.putExposure > 0) {
             annotations.push({
-                x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${putsItm} Put Strike${putsItm !== 1 ? 's' : ''}${itmSuffix}</b><br>${compactCurrency(putsItmNotional)}`,
+                x: (reference.price + xMax) / 2, y: 1.0, yref: 'paper', yanchor: 'bottom',
+                text: `<b>${compactCurrency(exposure.putExposure)} put exposure</b><br>${exposure.putLevels} target level${exposure.putLevels !== 1 ? 's' : ''}${suffix}`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(255, 77, 109, 0.85)', family: 'JetBrains Mono, monospace' },
-                bgcolor: theme.annotationBg, borderpad: 4,
+                font: { size: compact ? 10 : 12, color: 'rgba(255, 77, 109, 0.88)', family: 'JetBrains Mono, monospace' },
+                bgcolor: theme.annotationBg, borderpad: compact ? 4 : 6,
             });
         }
 
-        // Price divider line
         shapes.push({
-            type: 'line', x0: referencePrice, x1: referencePrice, y0: 0, y1: 1, yref: 'paper',
-            line: { color: 'rgba(242, 255, 247, 0.4)', width: 1.5, dash: isExpiredView ? 'solid' : 'dot' }
+            type: 'line', x0: reference.price, x1: reference.price, y0: 0, y1: 1, yref: 'paper',
+            line: { color: 'rgba(242, 255, 247, 0.44)', width: compact ? 1.5 : 2, dash: reference.isExpiredView ? 'solid' : 'dot' }
         });
 
-        // Price label
         annotations.push({
-            x: referencePrice, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
-            text: `<b>${priceLabel}</b>`,
+            x: reference.price, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
+            text: `<b>${reference.label}</b>`,
             showarrow: false,
-            font: { size: 10, color: theme.annotationColor, family: 'JetBrains Mono, monospace' },
-            bgcolor: theme.annotationBg, borderpad: 3,
+            font: { size: compact ? 10 : 12, color: theme.annotationColor, family: 'JetBrains Mono, monospace' },
+            bgcolor: theme.annotationBg, borderpad: compact ? 3 : 5,
         });
     }
 
-    Plotly.newPlot('detail-strike-chart', [
-        { x: strikeValues, y: strikes.map(s => s.put_volume), type: 'bar', name: 'Put', marker: { color: 'rgba(255, 77, 109, 0.7)' }, width: barWidth },
-        { x: strikeValues, y: strikes.map(s => s.call_volume), type: 'bar', name: 'Call', marker: { color: 'rgba(0, 212, 255, 0.7)' }, width: barWidth },
-    ], {
-        barmode: 'stack', paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
-        margin: { l: 60, r: 20, t: 40, b: 60 },
-        xaxis: { title: 'Strike', showgrid: false, tickfont: { size: 10 }, tickprefix: '$', tickangle: -45 },
-        yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickprefix: '$' },
-        legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
-        shapes, annotations,
-    }, { responsive: true, displayModeBar: false });
+    const data = [
+        {
+            x: strikeValues,
+            y: strikes.map(s => Number(s[putField] || 0)),
+            customdata: strikes.map(s => [s.put_count || 0, s.trade_count || 0, s.premium || 0]),
+            type: 'bar',
+            name: 'Put',
+            marker: { color: 'rgba(255, 77, 109, 0.72)' },
+            width: barWidth,
+            hovertemplate: 'Put target %{x:$,.2f}<br>Notional %{y:$,.0f}<br>Put orders %{customdata[0]}<br>Premium %{customdata[2]:$,.0f}<extra></extra>',
+        },
+        {
+            x: strikeValues,
+            y: strikes.map(s => Number(s[callField] || 0)),
+            customdata: strikes.map(s => [s.call_count || 0, s.trade_count || 0, s.premium || 0]),
+            type: 'bar',
+            name: 'Call',
+            marker: { color: 'rgba(0, 212, 255, 0.72)' },
+            width: barWidth,
+            hovertemplate: 'Call target %{x:$,.2f}<br>Notional %{y:$,.0f}<br>Call orders %{customdata[0]}<br>Premium %{customdata[2]:$,.0f}<extra></extra>',
+        },
+    ];
+
+    const layout = {
+        barmode: 'stack',
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: compact ? 12 : 13 },
+        margin: compact ? { l: 60, r: 20, t: 48, b: 60 } : { l: 78, r: 28, t: 58, b: 70 },
+        xaxis: { title: 'Strike Target', showgrid: false, tickfont: { size: compact ? 10 : 11 }, tickprefix: '$', tickangle: -45 },
+        yaxis: { title: yTitle, gridcolor: theme.gridColor, tickprefix: '$' },
+        legend: { orientation: 'h', y: compact ? -0.12 : -0.1, font: { size: compact ? 11 : 12 } },
+        hoverlabel: {
+            bgcolor: '#0c0e13',
+            font: { color: '#f2fff7', family: 'JetBrains Mono, monospace' },
+            bordercolor: 'rgba(170,255,210,0.07)'
+        },
+        shapes,
+        annotations,
+    };
+
+    return { data, layout, strikes, reference, exposure: summarizeStrikeExposure(strikes, reference.price, mode) };
+}
+
+function updateStrikeCaption(detail, chartModel) {
+    const caption = document.getElementById('detail-strike-caption');
+    if (!caption) return;
+    if (!chartModel.reference.hasContext) {
+        caption.textContent = 'Select a single expiry to see which targets are above or below the reference price.';
+        return;
+    }
+    const exposure = chartModel.exposure;
+    caption.textContent = `${compactCurrency(exposure.putExposure)} put exposure above ${formatStrike(chartModel.reference.price)} and ${compactCurrency(exposure.callExposure)} call exposure below it.`;
+}
+
+function renderStrikeChart(detail) {
+    const strikes = detail.strikes || [];
+    latestStrikeDetail = detail;
+    const expandBtn = document.getElementById('strike-expand');
+    if (expandBtn) expandBtn.disabled = !strikes.length;
+    if (!strikes.length) {
+        document.getElementById('detail-strike-chart').innerHTML = '<div class="loading">No strike data</div>';
+        updateStrikeCaption(detail, { reference: { hasContext: false } });
+        return;
+    }
+
+    const chartModel = buildStrikeChart(detail, { compact: true });
+    updateStrikeCaption(detail, chartModel);
+    Plotly.newPlot('detail-strike-chart', chartModel.data, chartModel.layout, { responsive: true, displayModeBar: false });
+}
+
+function getStrikeSliderBounds(detail) {
+    const strikes = [...(detail?.strikes || [])].map(s => Number(s.strike)).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!strikes.length) return { min: 0, max: 100, step: 1 };
+    const min = strikes[0];
+    const max = strikes[strikes.length - 1];
+    const barWidth = getStrikeBarWidth(strikes);
+    return {
+        min: Math.max(0, min - barWidth),
+        max: max + barWidth,
+        step: Math.max(barWidth / 4, Math.abs(max - min) / 400, 0.0001),
+    };
+}
+
+function setStrikeSlider(detail, referencePrice) {
+    const slider = document.getElementById('strike-reference-slider');
+    if (!slider) return;
+    const bounds = getStrikeSliderBounds(detail);
+    slider.min = String(bounds.min);
+    slider.max = String(bounds.max);
+    slider.step = String(bounds.step);
+    slider.value = String(referencePrice ?? bounds.min);
+}
+
+async function fetchStrikeLensOrders() {
+    if (!selectedAsset) return;
+    const expiryParam = selectedExpiry ? `&expiry=${selectedExpiry}` : '';
+    const resp = await fetch(`/api/global/trades?symbol=${encodeURIComponent(selectedAsset)}&limit=200&page=1${expiryParam}`);
+    const data = await resp.json();
+    strikeLensState.orders = data.success ? (data.trades || []) : [];
+    renderStrikeLens();
+}
+
+function openStrikeLens() {
+    if (!latestStrikeDetail || !(latestStrikeDetail.strikes || []).length) return;
+    const modal = document.getElementById('strike-modal');
+    const title = document.getElementById('strike-modal-title');
+    const defaultReference = getStrikeReference(latestStrikeDetail);
+    const strikes = latestStrikeDetail.strikes || [];
+    const fallback = strikes.length ? strikes[Math.floor(strikes.length / 2)].strike : 0;
+    const referencePrice = defaultReference.price ?? fallback;
+
+    strikeLensState = {
+        referencePrice,
+        defaultReferencePrice: referencePrice,
+        side: 'all',
+        minNotional: 0,
+        orders: [],
+    };
+
+    if (title) {
+        title.textContent = `${selectedAsset || 'Asset'} Strike Distribution${selectedExpiry ? ` · ${formatUnixDate(selectedExpiry)}` : ' · All Expiries'}`;
+    }
+    setStrikeSlider(latestStrikeDetail, referencePrice);
+    const minInput = document.getElementById('strike-min-notional');
+    if (minInput) minInput.value = '0';
+    document.querySelectorAll('#strike-type-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.strikeType === 'all');
+    });
+
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    renderStrikeLens();
+    fetchStrikeLensOrders();
+}
+
+function closeStrikeLens() {
+    const modal = document.getElementById('strike-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function filteredStrikeRows(detail) {
+    const side = strikeLensState.side;
+    const minNotional = Number(strikeLensState.minNotional || 0);
+    const rows = [];
+    for (const s of detail.strikes || []) {
+        const put = Number(s.put_volume || 0);
+        const call = Number(s.call_volume || 0);
+        const includePut = (side === 'all' || side === 'put') && put >= minNotional && put > 0;
+        const includeCall = (side === 'all' || side === 'call') && call >= minNotional && call > 0;
+        if (includePut) rows.push({ side: 'Put', strike: s.strike, notional: put, orders: s.put_count || 0, premium: s.premium || 0 });
+        if (includeCall) rows.push({ side: 'Call', strike: s.strike, notional: call, orders: s.call_count || 0, premium: s.premium || 0 });
+    }
+    const ref = Number(strikeLensState.referencePrice);
+    rows.sort((a, b) => Math.abs(a.strike - ref) - Math.abs(b.strike - ref) || b.notional - a.notional);
+    return rows;
+}
+
+function filteredStrikeOrders() {
+    const side = strikeLensState.side;
+    const minNotional = Number(strikeLensState.minNotional || 0);
+    return (strikeLensState.orders || [])
+        .filter(order => side === 'all' || String(order.type || '').toLowerCase() === side)
+        .filter(order => Number(order.notional || 0) >= minNotional)
+        .slice(0, 80);
+}
+
+function renderStrikeLens() {
+    if (!latestStrikeDetail) return;
+    const chartEl = document.getElementById('strike-modal-chart');
+    const readout = document.getElementById('strike-reference-value');
+    const summaryEl = document.getElementById('strike-modal-summary');
+    const levelsEl = document.getElementById('strike-modal-levels');
+    const ordersEl = document.getElementById('strike-modal-orders');
+    const referencePrice = Number(strikeLensState.referencePrice);
+    const chartModel = buildStrikeChart(latestStrikeDetail, { compact: false, referencePrice });
+    const exposure = chartModel.exposure;
+
+    if (readout) readout.textContent = formatStrike(referencePrice);
+    if (summaryEl) {
+        summaryEl.innerHTML = `
+            <div class="summary-card"><div class="summary-label">Put Exposure Above</div><div class="summary-value">${compactCurrency(exposure.putExposure)}</div><div class="summary-subtext">${exposure.putLevels} target level${exposure.putLevels !== 1 ? 's' : ''}</div></div>
+            <div class="summary-card"><div class="summary-label">Call Exposure Below</div><div class="summary-value">${compactCurrency(exposure.callExposure)}</div><div class="summary-subtext">${exposure.callLevels} target level${exposure.callLevels !== 1 ? 's' : ''}</div></div>
+            <div class="summary-card"><div class="summary-label">Total At Reference</div><div class="summary-value">${compactCurrency(exposure.totalExposure)}</div><div class="summary-subtext">Around ${formatStrike(referencePrice)}</div></div>
+            <div class="summary-card"><div class="summary-label">Put / Call Book</div><div class="summary-value">${compactCurrency(exposure.totalPut)} / ${compactCurrency(exposure.totalCall)}</div></div>
+        `;
+    }
+
+    if (chartEl && typeof Plotly !== 'undefined') {
+        Plotly.newPlot(chartEl, chartModel.data, chartModel.layout, { responsive: true, displayModeBar: false }).then(() => Plotly.Plots.resize(chartEl));
+    }
+
+    const rows = filteredStrikeRows(latestStrikeDetail);
+    if (levelsEl) {
+        levelsEl.innerHTML = rows.length ? `
+            <table class="data-table">
+                <thead><tr><th>Side</th><th>Target</th><th>Distance</th><th>Notional</th><th>Orders</th></tr></thead>
+                <tbody>${rows.map(row => {
+                    const distance = referencePrice ? ((row.strike - referencePrice) / referencePrice) * 100 : 0;
+                    const sideClass = row.side === 'Call' ? 'strike-side-call' : 'strike-side-put';
+                    return `<tr>
+                        <td class="${sideClass}">${row.side}</td>
+                        <td>${formatStrike(row.strike)}</td>
+                        <td class="strike-distance">${distance >= 0 ? '+' : ''}${formatNumber(distance, 1)}%</td>
+                        <td>${compactCurrency(row.notional)}</td>
+                        <td>${formatNumber(row.orders, 0)}</td>
+                    </tr>`;
+                }).join('')}</tbody>
+            </table>
+        ` : '<p class="empty-state">No target levels match the filters.</p>';
+    }
+
+    const orders = filteredStrikeOrders();
+    if (ordersEl) {
+        ordersEl.innerHTML = orders.length ? `
+            <table class="data-table">
+                <thead><tr><th>Date</th><th>Side</th><th>Type</th><th>Strike</th><th>Notional</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead>
+                <tbody>${orders.map(order => `
+                    <tr>
+                        <td>${formatUnixDateTime(order.created_at)}</td>
+                        <td>${escapeHtml(order.side || '—')}</td>
+                        <td class="${String(order.type).toLowerCase() === 'call' ? 'strike-side-call' : 'strike-side-put'}">${escapeHtml(order.type || '—')}</td>
+                        <td>${formatStrike(order.strike)}</td>
+                        <td>${compactCurrency(order.notional || 0)}</td>
+                        <td>${formatCurrency(order.premium || 0)}</td>
+                        <td>${formatPercentage(order.apr)}</td>
+                        <td>${formatUnixDate(order.expiry)}</td>
+                    </tr>
+                `).join('')}</tbody>
+            </table>
+        ` : '<p class="empty-state">No recent orders match the filters.</p>';
+    }
+}
+
+function initStrikeLens() {
+    const expandBtn = document.getElementById('strike-expand');
+    const closeBtn = document.getElementById('strike-modal-close');
+    const modal = document.getElementById('strike-modal');
+    const slider = document.getElementById('strike-reference-slider');
+    const resetBtn = document.getElementById('strike-reference-reset');
+    const minInput = document.getElementById('strike-min-notional');
+    const tabs = document.getElementById('strike-type-tabs');
+
+    if (expandBtn) expandBtn.addEventListener('click', openStrikeLens);
+    if (closeBtn) closeBtn.addEventListener('click', closeStrikeLens);
+    if (modal) {
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeStrikeLens();
+        });
+    }
+    if (slider) {
+        slider.addEventListener('input', event => {
+            strikeLensState.referencePrice = Number(event.target.value);
+            renderStrikeLens();
+        });
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            strikeLensState.referencePrice = strikeLensState.defaultReferencePrice;
+            setStrikeSlider(latestStrikeDetail, strikeLensState.referencePrice);
+            renderStrikeLens();
+        });
+    }
+    if (minInput) {
+        minInput.addEventListener('input', event => {
+            strikeLensState.minNotional = Math.max(0, Number(event.target.value || 0));
+            renderStrikeLens();
+        });
+    }
+    if (tabs) {
+        tabs.addEventListener('click', event => {
+            const btn = event.target.closest('.tab-button');
+            if (!btn) return;
+            tabs.querySelectorAll('.tab-button').forEach(tab => tab.classList.remove('active'));
+            btn.classList.add('active');
+            strikeLensState.side = btn.dataset.strikeType || 'all';
+            renderStrikeLens();
+        });
+    }
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && modal && modal.style.display === 'flex') closeStrikeLens();
+    });
 }
 
 function renderExpiryBreakdown(detail) {
@@ -1149,6 +1492,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initActNavScrollSpy();
+    initStrikeLens();
 
     document.getElementById('detail-close').addEventListener('click', closeAssetDetail);
     const sidepanelBackdrop = document.getElementById('sidepanel-backdrop');
