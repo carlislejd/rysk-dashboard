@@ -2,6 +2,8 @@
 
 let selectedAsset = null;
 const DETAIL_TRADES_PER_PAGE = 25;
+const HYPE_VOL_DEFAULT_DAYS = 365;
+let globalAssetList = [];
 
 // ── Helpers ──
 
@@ -19,6 +21,21 @@ function shortSymbol(symbol) {
     if (!symbol) return '—';
     const dash = symbol.indexOf('-');
     return dash > 0 ? symbol.substring(0, dash) : symbol;
+}
+
+function getNextExpiry(expiries) {
+    const now = Date.now() / 1000;
+    const future = (expiries || [])
+        .map(e => Number(e.expiry))
+        .filter(expiry => Number.isFinite(expiry) && expiry > now)
+        .sort((a, b) => a - b);
+    if (future.length) return future[0];
+
+    const all = (expiries || [])
+        .map(e => Number(e.expiry))
+        .filter(Number.isFinite)
+        .sort((a, b) => b - a);
+    return all[0] ?? null;
 }
 
 function outcomeBadge(outcome) {
@@ -112,8 +129,9 @@ async function loadAssets() {
         const resp = await fetch('/api/global/assets');
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
+        globalAssetList = data.assets || [];
 
-        document.getElementById('asset-grid').innerHTML = data.assets.map(a => {
+        document.getElementById('asset-grid').innerHTML = globalAssetList.map(a => {
             const base = shortSymbol(a.symbol);
             const putPct = a.trade_count > 0 ? ((a.put_count / a.trade_count) * 100).toFixed(0) : 0;
             const callPct = a.trade_count > 0 ? ((a.call_count / a.trade_count) * 100).toFixed(0) : 0;
@@ -160,10 +178,9 @@ let strikeLensState = {
     orders: [],
 };
 
-async function showAssetDetail(symbol, { scroll = true } = {}) {
+async function showAssetDetail(symbol, { scroll = true, preserveExpiry = false, preferredExpiry = undefined } = {}) {
     selectedAsset = symbol;
-    // Note: selectedExpiry is preserved across asset switches below — dropped only
-    // if the newly selected asset doesn't trade that expiry date
+    if (!preserveExpiry) selectedExpiry = null;
     const panel = document.getElementById('asset-detail');
     const base = shortSymbol(symbol);
 
@@ -185,10 +202,15 @@ async function showAssetDetail(symbol, { scroll = true } = {}) {
     if (detail.success) {
         detailExpiries = detail.expiries || [];
 
-        // Preserve expiry across asset switches if the new asset trades that date;
-        // otherwise fall back to All
-        if (selectedExpiry !== null && !detailExpiries.some(e => e.expiry === selectedExpiry)) {
-            selectedExpiry = null;
+        if (preferredExpiry !== undefined) {
+            const parsed = preferredExpiry === null ? null : Number(preferredExpiry);
+            selectedExpiry = parsed === null
+                ? null
+                : detailExpiries.some(e => e.expiry === parsed) ? parsed : getNextExpiry(detailExpiries);
+        } else if (preserveExpiry && selectedExpiry !== null && !detailExpiries.some(e => e.expiry === selectedExpiry)) {
+            selectedExpiry = getNextExpiry(detailExpiries);
+        } else if (!preserveExpiry && selectedExpiry === null) {
+            selectedExpiry = getNextExpiry(detailExpiries);
         }
 
         renderExpiryTabs(symbol);
@@ -587,27 +609,95 @@ async function fetchStrikeLensOrders() {
     renderStrikeLens();
 }
 
+function getStrikeLensAssetSymbols() {
+    const fromData = (globalAssetList || []).map(asset => asset.symbol).filter(Boolean);
+    if (fromData.length) return fromData;
+
+    return Array.from(document.querySelectorAll('.asset-card[data-asset]'))
+        .map(card => card.dataset.asset)
+        .filter(Boolean);
+}
+
+function updateStrikeLensTitle() {
+    const title = document.getElementById('strike-modal-title');
+    if (!title) return;
+    title.textContent = `${selectedAsset || 'Asset'} Strike Distribution${selectedExpiry ? ` · ${formatUnixDate(selectedExpiry)}` : ' · All Expiries'}`;
+}
+
+function populateStrikeLensControls() {
+    const assetSelect = document.getElementById('strike-asset-select');
+    const expirySelect = document.getElementById('strike-expiry-select');
+    if (assetSelect) {
+        const symbols = getStrikeLensAssetSymbols();
+        assetSelect.innerHTML = symbols.map(symbol =>
+            `<option value="${escapeHtml(symbol)}"${symbol === selectedAsset ? ' selected' : ''}>${escapeHtml(shortSymbol(symbol))}</option>`
+        ).join('');
+    }
+    if (expirySelect) {
+        const sorted = [...(detailExpiries || [])].sort((a, b) => b.expiry - a.expiry);
+        expirySelect.innerHTML = `<option value="all"${selectedExpiry === null ? ' selected' : ''}>All Expiries</option>` +
+            sorted.map(expiry =>
+                `<option value="${expiry.expiry}"${expiry.expiry === selectedExpiry ? ' selected' : ''}>${formatUnixDate(expiry.expiry)}</option>`
+            ).join('');
+    }
+}
+
+function resetStrikeLensReference(detail) {
+    const defaultReference = getStrikeReference(detail);
+    const strikes = detail.strikes || [];
+    const fallback = strikes.length ? strikes[Math.floor(strikes.length / 2)].strike : 0;
+    const referencePrice = defaultReference.price ?? fallback;
+    strikeLensState.referencePrice = referencePrice;
+    strikeLensState.defaultReferencePrice = referencePrice;
+    setStrikeSlider(detail, referencePrice);
+}
+
+async function switchStrikeLensView(symbol, expiry, { resetReference = true } = {}) {
+    if (!symbol) return;
+    selectedAsset = symbol;
+
+    const baseResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
+    const baseDetail = await baseResp.json();
+    if (!baseDetail.success) return;
+
+    detailExpiries = baseDetail.expiries || [];
+    if (expiry === undefined) {
+        selectedExpiry = getNextExpiry(detailExpiries);
+    } else if (expiry === null) {
+        selectedExpiry = null;
+    } else {
+        const parsed = Number(expiry);
+        selectedExpiry = detailExpiries.some(e => e.expiry === parsed) ? parsed : getNextExpiry(detailExpiries);
+    }
+
+    const detail = selectedExpiry
+        ? await fetch(`/api/global/asset/${encodeURIComponent(symbol)}?expiry=${selectedExpiry}`).then(resp => resp.json())
+        : baseDetail;
+    if (!detail.success) return;
+
+    latestStrikeDetail = detail;
+    populateStrikeLensControls();
+    updateStrikeLensTitle();
+    if (resetReference) resetStrikeLensReference(detail);
+    renderStrikeLens();
+    fetchStrikeLensOrders();
+}
+
 function openStrikeLens() {
     if (!latestStrikeDetail || !(latestStrikeDetail.strikes || []).length) return;
     const modal = document.getElementById('strike-modal');
-    const title = document.getElementById('strike-modal-title');
-    const defaultReference = getStrikeReference(latestStrikeDetail);
-    const strikes = latestStrikeDetail.strikes || [];
-    const fallback = strikes.length ? strikes[Math.floor(strikes.length / 2)].strike : 0;
-    const referencePrice = defaultReference.price ?? fallback;
 
     strikeLensState = {
-        referencePrice,
-        defaultReferencePrice: referencePrice,
+        referencePrice: null,
+        defaultReferencePrice: null,
         side: 'all',
         minNotional: 0,
         orders: [],
     };
 
-    if (title) {
-        title.textContent = `${selectedAsset || 'Asset'} Strike Distribution${selectedExpiry ? ` · ${formatUnixDate(selectedExpiry)}` : ' · All Expiries'}`;
-    }
-    setStrikeSlider(latestStrikeDetail, referencePrice);
+    updateStrikeLensTitle();
+    populateStrikeLensControls();
+    resetStrikeLensReference(latestStrikeDetail);
     const minInput = document.getElementById('strike-min-notional');
     if (minInput) minInput.value = '0';
     document.querySelectorAll('#strike-type-tabs .tab-button').forEach(btn => {
@@ -733,6 +823,8 @@ function initStrikeLens() {
     const resetBtn = document.getElementById('strike-reference-reset');
     const minInput = document.getElementById('strike-min-notional');
     const tabs = document.getElementById('strike-type-tabs');
+    const assetSelect = document.getElementById('strike-asset-select');
+    const expirySelect = document.getElementById('strike-expiry-select');
 
     if (expandBtn) expandBtn.addEventListener('click', openStrikeLens);
     if (closeBtn) closeBtn.addEventListener('click', closeStrikeLens);
@@ -768,6 +860,17 @@ function initStrikeLens() {
             btn.classList.add('active');
             strikeLensState.side = btn.dataset.strikeType || 'all';
             renderStrikeLens();
+        });
+    }
+    if (assetSelect) {
+        assetSelect.addEventListener('change', event => {
+            switchStrikeLensView(event.target.value, undefined);
+        });
+    }
+    if (expirySelect) {
+        expirySelect.addEventListener('change', event => {
+            const value = event.target.value;
+            switchStrikeLensView(selectedAsset, value === 'all' ? null : Number(value));
         });
     }
     document.addEventListener('keydown', event => {
@@ -1492,7 +1595,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadRecent(),
         loadAssets(),
         loadPutCallRatio(90),
-        loadHypeVolatility(90),
+        loadHypeVolatility(HYPE_VOL_DEFAULT_DAYS),
         loadOutcomes(),
         loadExpiryExplorer(),
     ]).then(() => {

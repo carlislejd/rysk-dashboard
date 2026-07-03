@@ -82,9 +82,16 @@ function getStrikeBarWidth(strikeValues) {
         .filter(Number.isFinite)
         .sort((a, b) => a - b);
 
+    const fallbackWidth = (strike) => {
+        const absStrike = Math.abs(Number(strike) || 0);
+        if (absStrike === 0) return 0.1;
+
+        const magnitude = 10 ** Math.floor(Math.log10(absStrike));
+        return magnitude * 0.04;
+    };
+
     if (values.length <= 1) {
-        const strike = Math.abs(values[0] || 1);
-        return Math.max(strike * 0.04, 1);
+        return fallbackWidth(values[0]);
     }
 
     let minGap = Infinity;
@@ -94,8 +101,7 @@ function getStrikeBarWidth(strikeValues) {
     }
 
     if (!Number.isFinite(minGap)) {
-        const strike = Math.abs(values[0] || 1);
-        return Math.max(strike * 0.04, 1);
+        return fallbackWidth(values[0]);
     }
 
     return minGap * 0.8;
