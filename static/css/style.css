@@ -1231,6 +1231,11 @@ header h1 em {
     border-right: none;
 }
 
+.asset-empty-state {
+    min-width: 100%;
+    padding: var(--space-lg);
+}
+
 .carousel-arrow {
     position: absolute;
     top: 50%;
@@ -2738,6 +2743,96 @@ code {
 
 .time-range-tabs {
     margin-bottom: 0 !important;
+}
+
+.chain-filter-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    margin: 0 0 var(--space-lg);
+    flex-wrap: wrap;
+}
+
+.chain-filter-tabs {
+    margin-bottom: 0 !important;
+}
+
+.chain-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--text-muted) 30%, transparent);
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    font-family: var(--font-mono);
+    font-size: 0.66em;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.chain-badge.hyperevm {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: var(--accent-dim);
+}
+
+.chain-badge.ethereum {
+    color: #8ea0ff;
+    border-color: rgba(142, 160, 255, 0.35);
+    background: rgba(98, 126, 234, 0.12);
+}
+
+.asset-card-chain {
+    margin-bottom: var(--space-sm);
+}
+
+.compact-list-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--space-sm);
+}
+
+.chain-breakdown {
+    margin-top: var(--space-md);
+}
+
+.chain-breakdown-title {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.7em;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    margin-bottom: var(--space-xs);
+    text-transform: uppercase;
+}
+
+.chain-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--border);
+}
+
+.chain-breakdown-card {
+    background: var(--bg-raised);
+    padding: var(--space-md);
+}
+
+.chain-breakdown-head {
+    margin-bottom: var(--space-sm);
+}
+
+@media (max-width: 720px) {
+    .chain-filter-control {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

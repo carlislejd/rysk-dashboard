@@ -1,11 +1,58 @@
 // Global Dashboard JavaScript — Asset-focused with Inventory & Outcomes
 
 let selectedAsset = null;
-const DETAIL_TRADES_PER_PAGE = 25;
+let selectedAssetChain = null;
+let selectedChain = 'all';
+const DETAIL_TRADES_PER_PAGE = 5;
 const HYPE_VOL_DEFAULT_DAYS = 365;
+const LIST_PREVIEW_LIMIT = 5;
 let globalAssetList = [];
+let assetsExpanded = false;
+let expiryExpanded = false;
+let detailExpiryExpanded = false;
+let outcomesExpanded = false;
 
 // ── Helpers ──
+
+function chainValueToId(value) {
+    if (value === null || value === undefined || value === '' || value === 'all') return null;
+    const text = String(value).toLowerCase();
+    if (text === 'ethereum' || text === 'eth' || text === '1') return 1;
+    if (text === 'hyperevm' || text === 'hyper-evm' || text === '999') return 999;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function withChain(url, chainOverride = undefined) {
+    const chain = chainOverride === undefined ? selectedChain : chainOverride;
+    if (chain === null || chain === undefined || chain === '' || chain === 'all') return url;
+    const joiner = url.includes('?') ? '&' : '?';
+    return `${url}${joiner}chain=${encodeURIComponent(chain)}`;
+}
+
+function chainLabel(item) {
+    if (!item || item.chain_id === null || item.chain_id === undefined) return 'Unknown';
+    return item.chain_name || (Number(item.chain_id) === 1 ? 'Ethereum' : Number(item.chain_id) === 999 ? 'HyperEVM' : `Chain ${item.chain_id}`);
+}
+
+function chainBadge(item) {
+    const slug = item?.chain_slug || (Number(item?.chain_id) === 1 ? 'ethereum' : Number(item?.chain_id) === 999 ? 'hyperevm' : 'unknown');
+    return `<span class="chain-badge ${slug}">${chainLabel(item)}</span>`;
+}
+
+function chainKey(item) {
+    return item?.chain_id ?? 'all';
+}
+
+function escapeAttr(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
+}
 
 function formatUnixDate(ts) {
     if (!ts) return '—';
@@ -56,8 +103,8 @@ async function loadOverview(days) {
     const summaryParams = days > 0 ? `?days=${days}` : '';
     const volumeDays = days > 0 ? days : 365;
     const [summaryResp, volumeResp] = await Promise.all([
-        fetch('/api/global/summary' + summaryParams),
-        fetch(`/api/global/volume?days=${volumeDays}`),
+        fetch(withChain('/api/global/summary' + summaryParams)),
+        fetch(withChain(`/api/global/volume?days=${volumeDays}`)),
     ]);
     const [summaryData, volumeData] = await Promise.all([summaryResp.json(), volumeResp.json()]);
 
@@ -96,18 +143,41 @@ async function loadOverview(days) {
 
         loading.style.display = 'none';
         content.style.display = 'block';
+        renderChainBreakdown(data.chain_breakdown || []);
     }
 
     if (volumeData.success) {
         const dates = volumeData.data.map(d => d.date);
         const volumes = volumeData.data.map(d => d.volume);
         const premiums = volumeData.data.map(d => d.premium);
+        const chainRows = volumeData.by_chain || [];
 
         const theme = getPlotlyTheme();
-        Plotly.newPlot('volume-chart', [
-            { x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(0, 255, 157, 0.55)' } },
-            { x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#ff9f1c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
-        ], {
+        const traces = [];
+        if (selectedChain === 'all' && chainRows.length) {
+            const byChain = new Map();
+            chainRows.forEach(row => {
+                const key = chainLabel(row);
+                if (!byChain.has(key)) byChain.set(key, { dates: [], volumes: [], slug: row.chain_slug });
+                byChain.get(key).dates.push(row.date);
+                byChain.get(key).volumes.push(row.volume);
+            });
+            byChain.forEach((series, label) => {
+                traces.push({
+                    x: series.dates,
+                    y: series.volumes,
+                    type: 'bar',
+                    name: `${label} Notional`,
+                    marker: { color: series.slug === 'ethereum' ? 'rgba(98, 126, 234, 0.58)' : 'rgba(0, 255, 157, 0.52)' },
+                });
+            });
+        } else {
+            traces.push({ x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(0, 255, 157, 0.55)' } });
+        }
+        traces.push({ x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#ff9f1c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' });
+
+        Plotly.newPlot('volume-chart', traces, {
+            barmode: 'stack',
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
@@ -120,41 +190,43 @@ async function loadOverview(days) {
     }
 }
 
+function renderChainBreakdown(chains) {
+    const el = document.getElementById('chain-breakdown');
+    if (!el) return;
+    if (!chains.length) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = `
+        <div class="chain-breakdown-title">By Chain</div>
+        <div class="chain-breakdown-grid">
+            ${chains.map(chain => `
+                <div class="chain-breakdown-card">
+                    <div class="chain-breakdown-head">${chainBadge(chain)}</div>
+                    <div class="asset-card-metrics">
+                        <div class="asset-metric"><span class="asset-metric-label">Orders</span><span class="asset-metric-value">${formatNumber(chain.trade_count, 0)}</span></div>
+                        <div class="asset-metric"><span class="asset-metric-label">Notional</span><span class="asset-metric-value">${compactCurrency(chain.total_volume)}</span></div>
+                        <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(chain.total_premium)}</span></div>
+                        <div class="asset-metric"><span class="asset-metric-label">Assets</span><span class="asset-metric-value">${formatNumber(chain.asset_count, 0)}</span></div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
 // ── Asset Grid ──
 
 async function loadAssets() {
     const loading = document.getElementById('assets-loading');
     const content = document.getElementById('assets-content');
     try {
-        const resp = await fetch('/api/global/assets');
+        const resp = await fetch(withChain('/api/global/assets'));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
         globalAssetList = data.assets || [];
-
-        document.getElementById('asset-grid').innerHTML = globalAssetList.map(a => {
-            const base = shortSymbol(a.symbol);
-            const putPct = a.trade_count > 0 ? ((a.put_count / a.trade_count) * 100).toFixed(0) : 0;
-            const callPct = a.trade_count > 0 ? ((a.call_count / a.trade_count) * 100).toFixed(0) : 0;
-            const expiredTotal = a.expired_count || 0;
-            const returnedPct = expiredTotal > 0 ? ((a.returned / expiredTotal) * 100).toFixed(0) : '—';
-            return `
-                <div class="asset-card" data-asset="${a.symbol}" onclick="showAssetDetail('${a.symbol}')">
-                    <div class="asset-card-header">
-                        <span class="asset-symbol"><span class="token-badge ${base.toLowerCase()}">${base}</span></span>
-                        <span class="asset-count">${formatNumber(a.trade_count, 0)} orders</span>
-                    </div>
-                    <div class="asset-card-metrics">
-                        <div class="asset-metric"><span class="asset-metric-label">Notional</span><span class="asset-metric-value">${compactCurrency(a.total_volume)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(a.total_premium)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Avg APR</span><span class="asset-metric-value asset-summary-apr">${formatPercentage(a.avg_apr)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Put / Call</span><span class="asset-metric-value">${putPct}% / ${callPct}%</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Active</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Expired</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
-                        <div class="asset-metric"><span class="asset-metric-label">Returned</span><span class="asset-metric-value" style="color: var(--accent);">${returnedPct}%</span></div>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        assetsExpanded = false;
+        renderAssetCards();
 
         loading.style.display = 'none';
         content.style.display = 'block';
@@ -162,6 +234,50 @@ async function loadAssets() {
         selectedAsset = null;
     } catch (e) {
         loading.textContent = 'Failed to load assets: ' + e.message;
+    }
+}
+
+function renderAssetCards() {
+    const grid = document.getElementById('asset-grid');
+    const toggle = document.getElementById('asset-list-toggle');
+    if (!grid) return;
+    if (!globalAssetList.length) {
+        grid.innerHTML = '<div class="empty-state asset-empty-state">No assets for this chain yet.</div>';
+        if (toggle) toggle.style.display = 'none';
+        return;
+    }
+    const visible = assetsExpanded ? globalAssetList : globalAssetList.slice(0, LIST_PREVIEW_LIMIT);
+
+    grid.innerHTML = visible.map(a => {
+        const base = shortSymbol(a.symbol);
+        const putPct = a.trade_count > 0 ? ((a.put_count / a.trade_count) * 100).toFixed(0) : 0;
+        const callPct = a.trade_count > 0 ? ((a.call_count / a.trade_count) * 100).toFixed(0) : 0;
+        const expiredTotal = a.expired_count || 0;
+        const returnedPct = expiredTotal > 0 ? ((a.returned / expiredTotal) * 100).toFixed(0) : '—';
+        return `
+            <div class="asset-card" data-asset="${escapeAttr(a.symbol)}" data-chain-id="${escapeAttr(a.chain_id ?? '')}">
+                <div class="asset-card-header">
+                    <span class="asset-symbol"><span class="token-badge ${base.toLowerCase()}">${base}</span></span>
+                    <span class="asset-count">${formatNumber(a.trade_count, 0)} orders</span>
+                </div>
+                <div class="asset-card-chain">${chainBadge(a)}</div>
+                <div class="asset-card-metrics">
+                    <div class="asset-metric"><span class="asset-metric-label">Notional</span><span class="asset-metric-value">${compactCurrency(a.total_volume)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(a.total_premium)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Avg APR</span><span class="asset-metric-value asset-summary-apr">${formatPercentage(a.avg_apr)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Put / Call</span><span class="asset-metric-value">${putPct}% / ${callPct}%</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Active</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Expired</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Returned</span><span class="asset-metric-value" style="color: var(--accent);">${returnedPct}%</span></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (toggle) {
+        const needsToggle = globalAssetList.length > LIST_PREVIEW_LIMIT;
+        toggle.style.display = needsToggle ? 'inline-flex' : 'none';
+        toggle.textContent = assetsExpanded ? 'Show fewer' : `Show all ${globalAssetList.length}`;
     }
 }
 
@@ -178,14 +294,16 @@ let strikeLensState = {
     orders: [],
 };
 
-async function showAssetDetail(symbol, { scroll = true, preserveExpiry = false, preferredExpiry = undefined } = {}) {
+async function showAssetDetail(symbol, { scroll = true, preserveExpiry = false, preferredExpiry = undefined, chainId = undefined } = {}) {
     selectedAsset = symbol;
+    selectedAssetChain = chainId !== undefined ? chainId : chainValueToId(selectedChain);
     if (!preserveExpiry) selectedExpiry = null;
     const panel = document.getElementById('asset-detail');
     const base = shortSymbol(symbol);
 
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('selected'));
-    const card = document.querySelector(`.asset-card[data-asset="${symbol}"]`);
+    const card = Array.from(document.querySelectorAll(`.asset-card[data-asset="${CSS.escape(symbol)}"]`))
+        .find(c => String(c.dataset.chainId || '') === String(selectedAssetChain ?? ''));
     if (card) card.classList.add('selected');
 
     document.getElementById('detail-asset-name').textContent = `${symbol}`;
@@ -196,7 +314,7 @@ async function showAssetDetail(symbol, { scroll = true, preserveExpiry = false, 
     });
 
     // First fetch unfiltered to get full expiry list for this asset
-    const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
+    const detailResp = await fetch(withChain(`/api/global/asset/${encodeURIComponent(symbol)}`, selectedAssetChain));
     const detail = await detailResp.json();
 
     if (detail.success) {
@@ -217,7 +335,7 @@ async function showAssetDetail(symbol, { scroll = true, preserveExpiry = false, 
 
         if (selectedExpiry !== null) {
             // Re-fetch summary data filtered by the preserved expiry
-            const filteredResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}?expiry=${selectedExpiry}`);
+            const filteredResp = await fetch(withChain(`/api/global/asset/${encodeURIComponent(symbol)}?expiry=${selectedExpiry}`, selectedAssetChain));
             const filtered = await filteredResp.json();
             if (filtered.success) {
                 renderDetailSummary(filtered);
@@ -256,7 +374,7 @@ function renderExpiryTabs(symbol) {
 
         // Re-fetch detail (filtered strikes) + volume + trades
         const expiryParam = selectedExpiry ? `&expiry=${selectedExpiry}` : '';
-        const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}?${selectedExpiry ? 'expiry=' + selectedExpiry : ''}`);
+        const detailResp = await fetch(withChain(`/api/global/asset/${encodeURIComponent(symbol)}?${selectedExpiry ? 'expiry=' + selectedExpiry : ''}`, selectedAssetChain));
         const detail = await detailResp.json();
 
         if (detail.success) {
@@ -277,14 +395,14 @@ async function loadDetailData(symbol, expiry) {
     const sym = encodeURIComponent(symbol);
     const expiryParam = expiry ? `&expiry=${expiry}` : '';
     const [volResp, tradesResp] = await Promise.all([
-        fetch(`/api/global/volume?symbol=${sym}&days=365${expiryParam}`),
-        fetch(`/api/global/trades?symbol=${sym}&limit=${DETAIL_TRADES_PER_PAGE}&page=1${expiryParam}`),
+        fetch(withChain(`/api/global/volume?symbol=${sym}&days=365${expiryParam}`, selectedAssetChain)),
+        fetch(withChain(`/api/global/trades?symbol=${sym}&limit=${DETAIL_TRADES_PER_PAGE}&page=1${expiryParam}`, selectedAssetChain)),
     ]);
     const [vol, trades] = await Promise.all([volResp.json(), tradesResp.json()]);
     if (vol.success) renderDetailVolumeChart(vol);
 
     // Also re-fetch strike chart with expiry filter
-    const detailResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}${expiry ? '?expiry=' + expiry : ''}`);
+    const detailResp = await fetch(withChain(`/api/global/asset/${encodeURIComponent(symbol)}${expiry ? '?expiry=' + expiry : ''}`, selectedAssetChain));
     const detail = await detailResp.json();
     if (detail.success) renderStrikeChart(detail);
 
@@ -603,7 +721,7 @@ function setStrikeSlider(detail, referencePrice) {
 async function fetchStrikeLensOrders() {
     if (!selectedAsset) return;
     const expiryParam = selectedExpiry ? `&expiry=${selectedExpiry}` : '';
-    const resp = await fetch(`/api/global/trades?symbol=${encodeURIComponent(selectedAsset)}&limit=200&page=1${expiryParam}`);
+    const resp = await fetch(withChain(`/api/global/trades?symbol=${encodeURIComponent(selectedAsset)}&limit=200&page=1${expiryParam}`, selectedAssetChain));
     const data = await resp.json();
     strikeLensState.orders = data.success ? (data.trades || []) : [];
     renderStrikeLens();
@@ -656,7 +774,7 @@ async function switchStrikeLensView(symbol, expiry, { resetReference = true } = 
     if (!symbol) return;
     selectedAsset = symbol;
 
-    const baseResp = await fetch(`/api/global/asset/${encodeURIComponent(symbol)}`);
+    const baseResp = await fetch(withChain(`/api/global/asset/${encodeURIComponent(symbol)}`, selectedAssetChain));
     const baseDetail = await baseResp.json();
     if (!baseDetail.success) return;
 
@@ -671,7 +789,7 @@ async function switchStrikeLensView(symbol, expiry, { resetReference = true } = 
     }
 
     const detail = selectedExpiry
-        ? await fetch(`/api/global/asset/${encodeURIComponent(symbol)}?expiry=${selectedExpiry}`).then(resp => resp.json())
+        ? await fetch(withChain(`/api/global/asset/${encodeURIComponent(symbol)}?expiry=${selectedExpiry}`, selectedAssetChain)).then(resp => resp.json())
         : baseDetail;
     if (!detail.success) return;
 
@@ -882,6 +1000,7 @@ function renderExpiryBreakdown(detail) {
     const expiries = detail.expiries || [];
     if (!expiries.length) { document.getElementById('detail-expiry-content').innerHTML = '<div class="loading">No expiry data</div>'; return; }
     const now = Date.now() / 1000;
+    const visibleExpiries = detailExpiryExpanded ? expiries : expiries.slice(0, LIST_PREVIEW_LIMIT);
     document.getElementById('detail-expiry-content').style.display = '';
     document.getElementById('detail-expiry-content').innerHTML = `
         <h3 class="subsection-title">Expiry Breakdown</h3>
@@ -896,7 +1015,7 @@ function renderExpiryBreakdown(detail) {
                 <th>Settlement</th>
                 <th>Assigned</th><th>Returned</th>
             </tr></thead>
-            <tbody>${expiries.map(e => {
+            <tbody>${visibleExpiries.map(e => {
                 const expired = e.expiry && e.expiry < now;
                 const pxDisplay = e.expiry_price != null ? formatCurrency(e.expiry_price, 2) : (expired ? '—' : '');
                 return `<tr>
@@ -911,7 +1030,12 @@ function renderExpiryBreakdown(detail) {
                     <td>${expired ? (e.returned || 0) : ''}</td>
                 </tr>`;
             }).join('')}</tbody>
-        </table>`;
+        </table>
+        ${expiries.length > LIST_PREVIEW_LIMIT ? `
+            <div class="compact-list-actions">
+                <button class="terminal-button small" type="button" onclick="detailExpiryExpanded = !detailExpiryExpanded; renderExpiryBreakdown(latestStrikeDetail);">${detailExpiryExpanded ? 'Show fewer' : `Show all ${expiries.length}`}</button>
+            </div>
+        ` : ''}`;
     setupSortableTable('detail-expiry-table');
 }
 
@@ -935,7 +1059,7 @@ function renderDetailTrades(data, symbol, expiry) {
     const now = Date.now() / 1000;
     document.getElementById('detail-trades-content').innerHTML = `
         <table class="data-table" id="detail-trades-table"><thead><tr>
-            <th data-sort-key="created">Date</th><th>Type</th><th data-sort-key="strike">Strike</th>
+            <th data-sort-key="created">Date</th><th>Chain</th><th>Type</th><th data-sort-key="strike">Strike</th>
             <th data-sort-key="quantity">Qty</th><th data-sort-key="premium">Premium</th>
             <th data-sort-key="notional">Notional</th><th data-sort-key="apr">APR</th>
             <th>Expiry</th><th>Outcome</th>
@@ -949,6 +1073,7 @@ function renderDetailTrades(data, symbol, expiry) {
             else outcomeHtml = '—';
             return `<tr>
             <td data-sort-key="created" data-sort-value="${t.created_at}">${formatUnixDateTime(t.created_at)}</td>
+            <td>${chainBadge(t)}</td>
             <td>${t.type}</td>
             <td data-sort-key="strike" data-sort-value="${t.strike}">${formatStrike(t.strike)}</td>
             <td data-sort-key="quantity" data-sort-value="${t.quantity}">${formatNumber(t.quantity, 4)}</td>
@@ -970,7 +1095,7 @@ function renderDetailTrades(data, symbol, expiry) {
 
 async function loadDetailTrades(symbol, page, expiry) {
     const expiryParam = expiry ? `&expiry=${expiry}` : '';
-    const resp = await fetch(`/api/global/trades?symbol=${encodeURIComponent(symbol)}&limit=${DETAIL_TRADES_PER_PAGE}&page=${page}${expiryParam}`);
+    const resp = await fetch(withChain(`/api/global/trades?symbol=${encodeURIComponent(symbol)}&limit=${DETAIL_TRADES_PER_PAGE}&page=${page}${expiryParam}`, selectedAssetChain));
     const data = await resp.json();
     if (data.success) renderDetailTrades(data, symbol, expiry);
 }
@@ -988,6 +1113,7 @@ function closeAssetDetail() {
     document.body.classList.remove('sidepanel-open');
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('selected'));
     selectedAsset = null;
+    selectedAssetChain = null;
     selectedExpiry = null;
 }
 
@@ -1000,7 +1126,7 @@ async function loadExpiryExplorer() {
     const loading = document.getElementById('expiry-loading');
     const content = document.getElementById('expiry-content');
     try {
-        const resp = await fetch('/api/global/expiries');
+        const resp = await fetch(withChain('/api/global/expiries'));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
         expiryData = data.expiries;
@@ -1009,7 +1135,7 @@ async function loadExpiryExplorer() {
         const tabs = document.getElementById('expiry-explorer-tabs');
         tabs.innerHTML = `<button class="tab-button active" data-exp-tab="all">All</button>` +
             expiryData.map(e =>
-                `<button class="tab-button" data-exp-tab="${e.expiry}">${formatUnixDate(e.expiry)}${e.expired ? '' : ' *'}</button>`
+                `<button class="tab-button" data-exp-tab="${e.expiry}:${e.chain_id ?? ''}">${formatUnixDate(e.expiry)} · ${e.chain_short_name || e.chain_name || ''}${e.expired ? '' : ' *'}</button>`
             ).join('');
 
         tabs.onclick = (ev) => {
@@ -1018,7 +1144,7 @@ async function loadExpiryExplorer() {
             tabs.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             const val = btn.dataset.expTab;
-            selectedExplorerExpiry = val === 'all' ? null : parseInt(val);
+            selectedExplorerExpiry = val === 'all' ? null : val;
             renderExpiryExplorer();
         };
 
@@ -1032,7 +1158,9 @@ async function loadExpiryExplorer() {
 
 function renderExpiryExplorer() {
     const selected = selectedExplorerExpiry;
-    const filtered = selected ? expiryData.filter(e => e.expiry === selected) : expiryData;
+    const filtered = selected
+        ? expiryData.filter(e => `${e.expiry}:${e.chain_id ?? ''}` === selected)
+        : expiryData;
 
     // Aggregate stats across filtered expiries
     const totalOrders = filtered.reduce((s, e) => s + e.total_orders, 0);
@@ -1076,6 +1204,7 @@ function renderExpiryExplorer() {
                     <div class="subsection-title">Assets Traded</div>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                         ${single.assets.map(a => `<span class="token-badge ${shortSymbol(a).toLowerCase()}">${shortSymbol(a)}</span>`).join('')}
+                        ${chainBadge(single)}
                     </div>
                 </div>
                 <div style="flex: 1; min-width: 200px;">
@@ -1093,10 +1222,12 @@ function renderExpiryExplorer() {
         `;
     } else {
         // All view — show per-expiry table
+        const visibleExpiries = expiryExpanded ? expiryData : expiryData.slice(0, LIST_PREVIEW_LIMIT);
         detail.innerHTML = `
             <table class="data-table" id="expiry-overview-table">
                 <thead><tr>
                     <th data-sort-key="expiry">Expiry</th>
+                    <th>Chain</th>
                     <th data-sort-key="orders">Orders</th>
                     <th>Assets</th>
                     <th data-sort-key="notional">Notional</th>
@@ -1106,13 +1237,14 @@ function renderExpiryExplorer() {
                     <th>Put/Call</th>
                     <th>Returned</th>
                 </tr></thead>
-                <tbody>${expiryData.map(e => {
+                <tbody>${visibleExpiries.map(e => {
                     const rr = (e.assigned + e.returned) > 0
                         ? `<span style="color: var(--accent);">${e.return_rate}%</span>`
                         : (e.expired ? '—' : '<span style="color: var(--text-muted);">Active</span>');
                     const pc = e.total_orders > 0 ? `${((e.put_count / e.total_orders) * 100).toFixed(0)}/${((e.call_count / e.total_orders) * 100).toFixed(0)}` : '—';
                     return `<tr>
                         <td data-sort-key="expiry" data-sort-value="${e.expiry}">${formatUnixDate(e.expiry)}${e.expired ? '' : ' *'}</td>
+                        <td>${chainBadge(e)}</td>
                         <td data-sort-key="orders" data-sort-value="${e.total_orders}">${e.total_orders}</td>
                         <td>${e.asset_count}</td>
                         <td data-sort-key="notional" data-sort-value="${e.total_notional}">${compactCurrency(e.total_notional)}</td>
@@ -1124,6 +1256,11 @@ function renderExpiryExplorer() {
                     </tr>`;
                 }).join('')}</tbody>
             </table>
+            ${expiryData.length > LIST_PREVIEW_LIMIT ? `
+                <div class="compact-list-actions">
+                    <button class="terminal-button small" type="button" onclick="expiryExpanded = !expiryExpanded; renderExpiryExplorer();">${expiryExpanded ? 'Show fewer' : `Show all ${expiryData.length}`}</button>
+                </div>
+            ` : ''}
         `;
         setupSortableTable('expiry-overview-table');
     }
@@ -1135,12 +1272,13 @@ async function loadRecent() {
     const loading = document.getElementById('recent-loading');
     const content = document.getElementById('recent-content');
     try {
-        const resp = await fetch('/api/global/trades?limit=10&iv=true');
+        const resp = await fetch(withChain('/api/global/trades?limit=5&iv=true'));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
         document.getElementById('recent-body').innerHTML = data.trades.map(t => `<tr>
             <td>${formatUnixDateTime(t.created_at)}</td>
+            <td>${chainBadge(t)}</td>
             <td><span class="token-badge ${shortSymbol(t.symbol).toLowerCase()}">${shortSymbol(t.symbol)}</span></td>
             <td>${t.type}</td>
             <td>${formatStrike(t.strike)}</td>
@@ -1164,7 +1302,7 @@ async function loadMarketPulse() {
     const loading = document.getElementById('pulse-loading');
     const content = document.getElementById('pulse-content');
     try {
-        const resp = await fetch('/api/global/market-pulse');
+        const resp = await fetch(withChain('/api/global/market-pulse'));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -1184,7 +1322,7 @@ async function loadMarketPulse() {
             <div class="summary-card">
                 <div class="summary-label">Hottest Asset (24h)</div>
                 <div class="summary-value">${top ? `<span class="token-badge ${shortSymbol(top.symbol).toLowerCase()}">${shortSymbol(top.symbol)}</span>` : '—'}</div>
-                <div class="summary-subtext">${top ? `${top.trades} trades · ${compactCurrency(top.volume)}` : 'No activity'}</div>
+                <div class="summary-subtext">${top ? `${chainLabel(top)} · ${top.trades} trades · ${compactCurrency(top.volume)}` : 'No activity'}</div>
             </div>
             <div class="summary-card">
                 <div class="summary-label">24h Volume</div>
@@ -1218,9 +1356,10 @@ async function loadMarketPulse() {
             document.getElementById('pulse-strikes').innerHTML = `
                 <h3 class="subsection-title">Trending Strikes (7d)</h3>
                 <table class="data-table">
-                    <thead><tr><th>Asset</th><th>Strike</th><th>Type</th><th>Trades</th><th>Notional</th><th>Avg APR</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Chain</th><th>Strike</th><th>Type</th><th>Trades</th><th>Notional</th><th>Avg APR</th></tr></thead>
                     <tbody>${data.popular_strikes.map(s => `<tr>
                         <td><span class="token-badge ${shortSymbol(s.symbol).toLowerCase()}">${shortSymbol(s.symbol)}</span></td>
+                        <td>${chainBadge(s)}</td>
                         <td>${formatStrike(s.strike)}</td>
                         <td>${s.dominant_type || '—'}</td>
                         <td>${s.count}</td>
@@ -1250,7 +1389,7 @@ async function loadPnlChart(days) {
     const fetchDays = days > 0 ? days : 365;
 
     try {
-        const resp = await fetch(`/api/global/premium-over-time?days=${fetchDays}`);
+        const resp = await fetch(withChain(`/api/global/premium-over-time?days=${fetchDays}`));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -1293,7 +1432,7 @@ async function loadPutCallRatio(days) {
     const fetchDays = days > 0 ? days : 365;
 
     try {
-        const resp = await fetch(`/api/global/put-call-ratio?days=${fetchDays}`);
+        const resp = await fetch(withChain(`/api/global/put-call-ratio?days=${fetchDays}`));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -1400,7 +1539,7 @@ async function loadOutcomes() {
     const loading = document.getElementById('outcomes-loading');
     const content = document.getElementById('outcomes-content');
     try {
-        const resp = await fetch('/api/global/outcomes');
+        const resp = await fetch(withChain('/api/global/outcomes'));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -1414,17 +1553,19 @@ async function loadOutcomes() {
         `;
 
         if (data.by_asset && data.by_asset.length) {
+            const rows = outcomesExpanded ? data.by_asset : data.by_asset.slice(0, LIST_PREVIEW_LIMIT);
             document.getElementById('outcomes-by-asset').innerHTML = `
                 <h3 class="subsection-title">By Asset</h3>
                 <table class="data-table" id="outcomes-asset-table">
                     <thead><tr>
-                        <th>Asset</th><th data-sort-key="total">Expired</th>
+                        <th>Asset</th><th>Chain</th><th data-sort-key="total">Expired</th>
                         <th data-sort-key="assigned">Assigned</th><th data-sort-key="returned">Returned</th>
                         <th data-sort-key="assignedpct">Assign %</th>
                         <th data-sort-key="premium">Premium</th><th data-sort-key="notional">Notional</th>
                     </tr></thead>
-                    <tbody>${data.by_asset.map(a => `<tr>
+                    <tbody>${rows.map(a => `<tr>
                         <td><span class="token-badge ${shortSymbol(a.symbol).toLowerCase()}">${shortSymbol(a.symbol)}</span></td>
+                        <td>${chainBadge(a)}</td>
                         <td data-sort-key="total" data-sort-value="${a.total}">${a.total}</td>
                         <td data-sort-key="assigned" data-sort-value="${a.assigned}">${a.assigned}</td>
                         <td data-sort-key="returned" data-sort-value="${a.returned}">${a.returned}</td>
@@ -1433,6 +1574,11 @@ async function loadOutcomes() {
                         <td data-sort-key="notional" data-sort-value="${a.total_notional}">${compactCurrency(a.total_notional)}</td>
                     </tr>`).join('')}</tbody>
                 </table>
+                ${data.by_asset.length > LIST_PREVIEW_LIMIT ? `
+                    <div class="compact-list-actions">
+                        <button class="terminal-button small" type="button" onclick="outcomesExpanded = !outcomesExpanded; loadOutcomes();">${outcomesExpanded ? 'Show fewer' : `Show all ${data.by_asset.length}`}</button>
+                    </div>
+                ` : ''}
             `;
             setupSortableTable('outcomes-asset-table');
         }
@@ -1450,7 +1596,7 @@ async function loadNextExpiryPositions() {
     const loading = document.getElementById('next-expiry-loading');
     const content = document.getElementById('next-expiry-content');
     try {
-        const resp = await fetch('/api/global/next-expiry-positions?limit=5');
+        const resp = await fetch(withChain('/api/global/next-expiry-positions?limit=5'));
         const data = await resp.json();
         if (!data.success) throw new Error(data.error);
 
@@ -1483,6 +1629,7 @@ async function loadNextExpiryPositions() {
 
         document.getElementById('next-expiry-body').innerHTML = data.positions.map(p => `<tr>
             <td><span class="token-badge ${shortSymbol(p.symbol).toLowerCase()}">${shortSymbol(p.symbol)}</span></td>
+            <td>${chainBadge(p)}</td>
             <td>${formatStrike(p.strike)}</td>
             <td>${p.dominant_type}</td>
             <td>${p.order_count}</td>
@@ -1520,7 +1667,7 @@ function populateGlobalHero({ act, top, active, volIndicator, volColor }) {
         `${compactCurrency(active.notional)} notional`);
     if (top) {
         setHero('hero-hot', shortSymbol(top.symbol),
-            `${formatNumber(top.trades, 0)} trades · ${compactCurrency(top.volume)}`);
+            `${chainLabel(top)} · ${formatNumber(top.trades, 0)} trades · ${compactCurrency(top.volume)}`);
     } else {
         setHero('hero-hot', '—', 'No 24h activity');
     }
@@ -1545,6 +1692,42 @@ function setTimeRange(days) {
     loadPnlChart(days);
     loadPutCallRatio(days);
     loadHypeVolatility(days > 0 ? days : 365);
+}
+
+function loadGlobalDashboard() {
+    return Promise.allSettled([
+        loadNextExpiryPositions(),
+        loadMarketPulse(),
+        loadOverview(overviewDays),
+        loadPnlChart(pnlDays),
+        loadRecent(),
+        loadAssets(),
+        loadPutCallRatio(pcrDays),
+        loadHypeVolatility(HYPE_VOL_DEFAULT_DAYS),
+        loadOutcomes(),
+        loadExpiryExplorer(),
+    ]).then(() => {
+        document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {
+            Plotly.Plots.resize(el);
+        });
+    });
+}
+
+function setChainFilter(chain) {
+    selectedChain = chain || 'all';
+    selectedAsset = null;
+    selectedAssetChain = null;
+    selectedExpiry = null;
+    selectedExplorerExpiry = null;
+    assetsExpanded = false;
+    expiryExpanded = false;
+    detailExpiryExpanded = false;
+    outcomesExpanded = false;
+    document.querySelectorAll('#chain-filter-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.chain === selectedChain);
+    });
+    closeAssetDetail();
+    loadGlobalDashboard();
 }
 
 // ── Scroll-spy for sticky act-nav ──
@@ -1586,24 +1769,7 @@ function initActNavScrollSpy() {
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Load all sections in parallel — historical charts default to 90d (matches selector)
-    Promise.allSettled([
-        loadNextExpiryPositions(),
-        loadMarketPulse(),
-        loadOverview(90),
-        loadPnlChart(90),
-        loadRecent(),
-        loadAssets(),
-        loadPutCallRatio(90),
-        loadHypeVolatility(HYPE_VOL_DEFAULT_DAYS),
-        loadOutcomes(),
-        loadExpiryExplorer(),
-    ]).then(() => {
-        // Force Plotly to recalculate widths after all charts are visible
-        document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {
-            Plotly.Plots.resize(el);
-        });
-    });
+    loadGlobalDashboard();
 
     // Unified time-range selector — cascades to Overview, PnL, Put/Call
     const timeRangeTabs = document.getElementById('time-range-tabs');
@@ -1612,6 +1778,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const btn = e.target.closest('.tab-button');
             if (!btn) return;
             setTimeRange(parseInt(btn.dataset.rangeDays));
+        });
+    }
+
+    const chainTabs = document.getElementById('chain-filter-tabs');
+    if (chainTabs) {
+        chainTabs.addEventListener('click', e => {
+            const btn = e.target.closest('.tab-button');
+            if (!btn) return;
+            setChainFilter(btn.dataset.chain || 'all');
+        });
+    }
+
+    const assetToggle = document.getElementById('asset-list-toggle');
+    if (assetToggle) {
+        assetToggle.addEventListener('click', () => {
+            assetsExpanded = !assetsExpanded;
+            renderAssetCards();
+        });
+    }
+
+    const assetGrid = document.getElementById('asset-grid');
+    if (assetGrid) {
+        assetGrid.addEventListener('click', event => {
+            const card = event.target.closest('.asset-card[data-asset]');
+            if (!card) return;
+            showAssetDetail(card.dataset.asset, { chainId: chainValueToId(card.dataset.chainId) });
         });
     }
 

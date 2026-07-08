@@ -4,6 +4,7 @@ Flask application for Rysk Options Dashboard.
 
 from flask import Flask, render_template, jsonify, request
 import os
+from chain_metadata import parse_chain_filter
 from dashboard_services import (
     build_assignment_backtest,
     build_history_expiry_prices,
@@ -56,6 +57,14 @@ def resolve_account_address():
     if ACCOUNT_ADDRESS:
         return validate_account_address(ACCOUNT_ADDRESS)
     raise ValueError("Wallet address required")
+
+
+def resolve_chain_filter():
+    """Return the requested chain id, or None for all chains."""
+    value = request.args.get("chain_id", None)
+    if value is None:
+        value = request.args.get("chain", None)
+    return parse_chain_filter(value)
 
 
 @app.route('/')
@@ -224,6 +233,7 @@ def api_cli_positions_expiring():
             raise ValueError("expiry_date query param is required (YYYY-MM-DD)")
         symbol = request.args.get("symbol", "").strip() or None
         strategy = request.args.get("strategy", "").strip() or None
+        chain_id = resolve_chain_filter()
 
         payload = get_positions_payload(account_address)
         open_positions = payload["positions"].get("open_positions") or []
@@ -232,6 +242,7 @@ def api_cli_positions_expiring():
             expiry_date=expiry_date,
             symbol=symbol,
             strategy=strategy,
+            chain_id=chain_id,
         )
         return jsonify({
             "success": True,
@@ -257,6 +268,7 @@ def api_cli_history_expiry_prices():
         account_address = resolve_account_address()
         symbol = request.args.get("symbol", "").strip() or None
         expiry_date = request.args.get("expiry_date", "").strip() or None
+        chain_id = resolve_chain_filter()
 
         payload = get_history_payload(account_address)
         expired_positions = payload["history"].get("expired_positions") or []
@@ -264,6 +276,7 @@ def api_cli_history_expiry_prices():
             expired_positions,
             symbol=symbol,
             expiry_date=expiry_date,
+            chain_id=chain_id,
         )
         return jsonify({
             "success": True,
@@ -455,9 +468,10 @@ def api_global_summary():
     """Aggregate protocol stats"""
     try:
         days = request.args.get("days", 0, type=int)
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_global_summary(conn, days=days)
+            data = get_global_summary(conn, days=days, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -472,10 +486,11 @@ def api_global_trades():
         limit = request.args.get("limit", 50, type=int)
         symbol = request.args.get("symbol", "").strip() or None
         expiry = request.args.get("expiry", None, type=int)
+        chain_id = resolve_chain_filter()
         iv = request.args.get("iv", "").lower() in ("1", "true")
         conn = get_db()
         try:
-            data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry)
+            data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry, chain_id=chain_id)
         finally:
             conn.close()
         if iv:
@@ -492,9 +507,10 @@ def api_global_volume():
         symbol = request.args.get("symbol", "").strip() or None
         days = request.args.get("days", 30, type=int)
         expiry = request.args.get("expiry", None, type=int)
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_global_volume(conn, interval=interval, symbol=symbol, days=days, expiry=expiry)
+            data = get_global_volume(conn, interval=interval, symbol=symbol, days=days, expiry=expiry, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -505,9 +521,10 @@ def api_global_volume():
 def api_global_assets():
     """Per-asset breakdown"""
     try:
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_asset_summary(conn)
+            data = get_asset_summary(conn, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -519,9 +536,10 @@ def api_global_asset_detail(symbol):
     """Detailed data for a single asset: strikes, expiries, current price"""
     try:
         expiry = request.args.get("expiry", None, type=int)
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_asset_detail(conn, symbol, expiry=expiry)
+            data = get_asset_detail(conn, symbol, expiry=expiry, chain_id=chain_id)
         finally:
             conn.close()
         # Fetch live price for the asset
@@ -545,9 +563,10 @@ def api_global_inventory():
 def api_global_outcomes():
     """Outcome analysis for expired trades"""
     try:
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_outcome_summary(conn)
+            data = get_outcome_summary(conn, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -558,9 +577,10 @@ def api_global_outcomes():
 def api_global_expiries():
     """Rich per-expiry overview stats"""
     try:
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_expiry_overview(conn)
+            data = get_expiry_overview(conn, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -573,9 +593,10 @@ def api_global_put_call_ratio():
     try:
         days = request.args.get("days", 90, type=int)
         symbol = request.args.get("symbol", "").strip() or None
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_put_call_ratio_over_time(conn, days=days, symbol=symbol)
+            data = get_put_call_ratio_over_time(conn, days=days, symbol=symbol, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -586,9 +607,10 @@ def api_global_put_call_ratio():
 def api_global_assignment_trend():
     """Assignment rate trend by expiry date"""
     try:
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_assignment_rate_trend(conn)
+            data = get_assignment_rate_trend(conn, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -600,9 +622,10 @@ def api_global_next_expiry_positions():
     """Top positions by notional for the next upcoming expiry"""
     try:
         limit = request.args.get("limit", 5, type=int)
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_next_expiry_top_positions(conn, limit=limit)
+            data = get_next_expiry_top_positions(conn, limit=limit, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -613,9 +636,10 @@ def api_global_next_expiry_positions():
 def api_global_market_pulse():
     """Market pulse: what's hot right now"""
     try:
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_market_pulse(conn)
+            data = get_market_pulse(conn, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})
@@ -628,9 +652,10 @@ def api_global_premium_over_time():
     try:
         days = request.args.get("days", 365, type=int)
         symbol = request.args.get("symbol", "").strip() or None
+        chain_id = resolve_chain_filter()
         conn = get_db()
         try:
-            data = get_premium_over_time(conn, days=days, symbol=symbol)
+            data = get_premium_over_time(conn, days=days, symbol=symbol, chain_id=chain_id)
         finally:
             conn.close()
         return jsonify({"success": True, **data})

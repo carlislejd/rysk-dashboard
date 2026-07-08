@@ -106,6 +106,15 @@
             <a href="#act-explore" data-act="act-explore">Explore</a>
         </nav>
 
+        <div class="chain-filter-control">
+            <span class="time-range-label">Chain</span>
+            <div class="tabs chain-filter-tabs" id="chain-filter-tabs">
+                <button class="tab-button active" data-chain="all">All</button>
+                <button class="tab-button" data-chain="hyperevm">HyperEVM</button>
+                <button class="tab-button" data-chain="ethereum">Ethereum</button>
+            </div>
+        </div>
+
         <!-- ════════════════════════════════════════════════════════════════
              ACT 1 — RIGHT NOW
              What's happening this minute / this week
@@ -135,6 +144,7 @@
                     <thead>
                         <tr>
                             <th>Asset</th>
+                            <th>Chain</th>
                             <th>Strike</th>
                             <th>Type</th>
                             <th>Orders</th>
@@ -157,6 +167,7 @@
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Chain</th>
                             <th>Asset</th>
                             <th>Type</th>
                             <th>Strike</th>
@@ -198,6 +209,7 @@
             <div id="summary-loading" class="loading">Loading summary...</div>
             <div id="summary-content" style="display: none;">
                 <div class="summary-grid" id="summary-grid"></div>
+                <div id="chain-breakdown" class="chain-breakdown"></div>
             </div>
             <div id="volume-chart" class="chart-container" style="margin-top: 24px;"></div>
         </section>
@@ -256,6 +268,9 @@
                     <button class="carousel-arrow left" id="asset-carousel-left">&#8249;</button>
                     <div class="asset-carousel-track" id="asset-grid"></div>
                     <button class="carousel-arrow right" id="asset-carousel-right">&#8250;</button>
+                </div>
+                <div class="compact-list-actions">
+                    <button id="asset-list-toggle" class="terminal-button small" type="button" style="display: none;">Show all</button>
                 </div>
             </div>
         </section>

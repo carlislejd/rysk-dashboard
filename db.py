@@ -11,6 +11,8 @@ import os
 import sqlite3
 from decimal import Decimal, getcontext
 
+from chain_metadata import default_chain_id, parse_chain_id
+
 getcontext().prec = 28
 
 DB_PATH = os.getenv("RYSK_DB_PATH", os.path.join(os.path.dirname(__file__), "data", "rysk_trades.db"))
@@ -51,6 +53,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_created_at ON trades(created_at);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol_created ON trades(symbol, created_at);
 CREATE INDEX IF NOT EXISTS idx_trades_expiry ON trades(expiry);
+CREATE INDEX IF NOT EXISTS idx_trades_chain_id ON trades(chain_id);
 """
 
 
@@ -84,7 +87,10 @@ def _migrate(conn):
         conn.execute("ALTER TABLE trades ADD COLUMN outcome TEXT")
     if "expiry_price_f" not in cols:
         conn.execute("ALTER TABLE trades ADD COLUMN expiry_price_f REAL")
+    if "chain_id" not in cols:
+        conn.execute("ALTER TABLE trades ADD COLUMN chain_id INTEGER")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_outcome ON trades(outcome)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_chain_id ON trades(chain_id)")
 
 
 def _from_wei(value, decimals=18):
@@ -125,7 +131,7 @@ def insert_trades(conn, rows):
                 (
                     row.get("txHash") or row.get("tx_hash"),
                     row.get("address", ""),
-                    row.get("chainId") or row.get("chain_id"),
+                    parse_chain_id(row.get("chainId") or row.get("chain_id"), default=default_chain_id()),
                     row.get("createdAt") or row.get("created_at"),
                     row.get("expiry"),
                     1 if row.get("isBuy") or row.get("is_buy") else 0,

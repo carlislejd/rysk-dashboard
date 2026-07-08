@@ -136,7 +136,7 @@ function setAccountStatus(message = '', isError = false) {
 let positionsAssetSummary = [];
 let openPositionsData = [];
 let openPositionsPage = 1;
-const OPEN_POSITIONS_PER_PAGE = 15;
+const OPEN_POSITIONS_PER_PAGE = 5;
 
 // Simple positions data cache for health/PnL rendering
 const _positions_cache = new Map();
@@ -145,6 +145,7 @@ let selectedAssetExpiry = '';
 let historyDataCache = null;
 let historyDataTimestamp = null;
 let historyModalInitialized = false;
+let accountOutcomesExpanded = false;
 
 function getTokenClass(token) {
     return token.toLowerCase();
@@ -352,6 +353,7 @@ async function loadHistory() {
         const trades = history.trades || [];
         const expiredPositions = history.expired_positions || [];
         const summary = history.summary || {};
+        accountOutcomesExpanded = false;
 
         historyDataCache = history;
         historyDataTimestamp = new Date();
@@ -397,23 +399,27 @@ async function loadHistory() {
         if (assetOutcomes.length > 0) {
             html += `<h3 class="subsection-title">Expiry Outcomes by Asset (${assetOutcomes.length})</h3>`;
             html += `<div class="history-actions" style="justify-content: flex-start; margin-bottom: 6px;">`;
-            html += `<button id="outcomes-show-all" class="terminal-button">Show All Assets</button>`;
+            html += `<button id="outcomes-show-all" class="terminal-button">All Expired</button>`;
+            if (assetOutcomes.length > 5) {
+                html += `<button id="outcomes-toggle-assets" class="terminal-button">Show all ${assetOutcomes.length}</button>`;
+            }
             html += `</div>`;
             html += `<div class="asset-summary-grid outcome-grid">`;
-            for (const outcome of assetOutcomes) {
+            assetOutcomes.forEach((outcome, index) => {
                 const symbol = outcome.symbol || '—';
                 const totalPositions = formatNumber(outcome.total_positions || 0, 0);
                 const assignedCount = formatNumber(outcome.assigned_count || 0, 0);
                 const assignedNotional = formatCurrency(outcome.assigned_notional || 0);
+                const hidden = index >= 5 && !accountOutcomesExpanded;
 
                 html += `
-                    <div class="asset-card outcome-card">
+                    <div class="asset-card outcome-card" data-outcome-extra="${index >= 5 ? 'true' : 'false'}" style="${hidden ? 'display: none;' : ''}">
                         <span class="asset-summary-symbol token-badge ${getTokenClass(symbol)}">${symbol}</span>
                         <span class="asset-summary-count">${totalPositions} Expired</span>
                         <span class="asset-summary-notional">${assignedCount} Assigned · ${assignedNotional}</span>
                     </div>
                 `;
-            }
+            });
             html += `</div>`;
         }
 
@@ -444,7 +450,7 @@ async function loadHistory() {
     }
 }
 
-function buildExpiredSection(expiredPositions, summary, filterSymbol = null, page = 1, pageSize = 50) {
+function buildExpiredSection(expiredPositions, summary, filterSymbol = null, page = 1, pageSize = 5) {
     const totalCount = summary.expired_count || expiredPositions.length;
     const symbolUpper = filterSymbol ? String(filterSymbol).toUpperCase() : null;
     const filtered = symbolUpper
@@ -555,6 +561,7 @@ function renderExpiredSection(expiredPositions, summary, filterSymbol = null, pa
 function setupOutcomeFilters(expiredPositions, summary) {
     const cards = document.querySelectorAll('.outcome-card');
     const allButton = document.getElementById('outcomes-show-all');
+    const toggleButton = document.getElementById('outcomes-toggle-assets');
 
     const clearSelection = () => {
         cards.forEach(card => card.classList.remove('selected'));
@@ -565,6 +572,16 @@ function setupOutcomeFilters(expiredPositions, summary) {
             clearSelection();
             renderExpiredSection(expiredPositions, summary, null, 1);
             renderAprChart(expiredPositions, null);
+        });
+    }
+
+    if (toggleButton) {
+        toggleButton.addEventListener('click', () => {
+            accountOutcomesExpanded = !accountOutcomesExpanded;
+            document.querySelectorAll('[data-outcome-extra="true"]').forEach(card => {
+                card.style.display = accountOutcomesExpanded ? '' : 'none';
+            });
+            toggleButton.textContent = accountOutcomesExpanded ? 'Show fewer' : `Show all ${cards.length}`;
         });
     }
 
@@ -849,12 +866,12 @@ function renderHistoryModalContent(history) {
 
     const topPremiumPositions = [...expiredPositions]
         .sort((a, b) => (Number(b.premium || 0) - Number(a.premium || 0)))
-        .slice(0, 15);
+        .slice(0, 5);
 
     const topAprPositions = [...expiredPositions]
         .filter(p => p.apr !== null && p.apr !== undefined)
         .sort((a, b) => Number(b.apr) - Number(a.apr))
-        .slice(0, 15);
+        .slice(0, 5);
 
     let html = '';
 
@@ -1144,12 +1161,12 @@ function renderDeepDiveInline(history) {
     // Top premium & APR tables
     const topPremiumPositions = [...expiredPositions]
         .sort((a, b) => (Number(b.premium || 0) - Number(a.premium || 0)))
-        .slice(0, 10);
+        .slice(0, 5);
 
     const topAprPositions = [...expiredPositions]
         .filter(p => p.apr !== null && p.apr !== undefined)
         .sort((a, b) => Number(b.apr) - Number(a.apr))
-        .slice(0, 10);
+        .slice(0, 5);
 
     if (topPremiumPositions.length > 0) {
         html += '<h3 class="subsection-title">Top Premium Harvests</h3>';

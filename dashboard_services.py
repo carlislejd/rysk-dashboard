@@ -8,6 +8,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from backtest_services import build_assignment_backtest
+from chain_metadata import chain_fields, parse_chain_id
 from positions_api import fetch_history, fetch_positions
 
 
@@ -62,6 +63,12 @@ def filter_open_positions(positions: List[Dict], symbol: Optional[str], strategy
     return rows
 
 
+def filter_positions_by_chain(positions: List[Dict], chain_id: Optional[int]) -> List[Dict]:
+    if chain_id is None:
+        return list(positions or [])
+    return [p for p in positions or [] if parse_chain_id(p.get("chain_id")) == chain_id]
+
+
 def filter_expired_positions(expired_positions: List[Dict], symbol: Optional[str], outcome: Optional[str]) -> List[Dict]:
     rows = list(expired_positions or [])
     if symbol:
@@ -105,24 +112,29 @@ def build_positions_expiring(
     expiry_date: str,
     symbol: Optional[str] = None,
     strategy: Optional[str] = None,
+    chain_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     filtered = filter_open_positions(open_positions, symbol=symbol, strategy=strategy)
+    filtered = filter_positions_by_chain(filtered, chain_id)
     expiring = [p for p in filtered if (p.get("expiry_date") or "") == expiry_date]
     total_notional = sum(_to_float(p.get("notional")) for p in expiring)
     total_premium = sum(_to_float(p.get("premium")) for p in expiring)
 
     by_symbol: Dict[str, float] = {}
     by_strategy: Dict[str, float] = {}
+    by_chain: Dict[str, float] = {}
     for p in expiring:
         sym = (p.get("symbol") or "UNKNOWN").upper()
         strat = (p.get("strategy") or "other").lower()
         by_symbol[sym] = by_symbol.get(sym, 0.0) + _to_float(p.get("notional"))
         by_strategy[strat] = by_strategy.get(strat, 0.0) + _to_float(p.get("notional"))
+        chain_name = chain_fields(p.get("chain_id"))["chain_name"]
+        by_chain[chain_name] = by_chain.get(chain_name, 0.0) + _to_float(p.get("notional"))
 
     return {
         "expiry_date": expiry_date,
         "count": len(expiring),
-        "filters": {"symbol": symbol, "strategy": strategy},
+        "filters": {"symbol": symbol, "strategy": strategy, "chain_id": chain_id},
         "totals": {
             "notional": total_notional,
             "premium": total_premium,
@@ -130,6 +142,7 @@ def build_positions_expiring(
         "breakdown": {
             "by_symbol_notional": by_symbol,
             "by_strategy_notional": by_strategy,
+            "by_chain_notional": by_chain,
         },
         "positions": expiring,
     }
@@ -139,24 +152,28 @@ def build_history_expiry_prices(
     expired_positions: List[Dict],
     symbol: Optional[str] = None,
     expiry_date: Optional[str] = None,
+    chain_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     filtered = filter_expired_positions(expired_positions, symbol=symbol, outcome=None)
+    filtered = filter_positions_by_chain(filtered, chain_id)
     if expiry_date:
         filtered = [p for p in filtered if (p.get("expiry_date") or "") == expiry_date]
 
-    grouped: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    grouped: Dict[Tuple[str, int, Optional[int]], Dict[str, Any]] = {}
     for pos in filtered:
         sym = (pos.get("symbol") or "UNKNOWN").upper()
+        pos_chain_id = parse_chain_id(pos.get("chain_id"))
         expiry_raw = pos.get("expiry")
         expiry_ts = int(_to_float(expiry_raw)) if expiry_raw is not None else 0
         expiry_day = pos.get("expiry_date") or "Unknown"
-        key = (sym, expiry_ts)
+        key = (sym, expiry_ts, pos_chain_id)
         entry = grouped.setdefault(
             key,
             {
                 "symbol": sym,
                 "expiry": expiry_ts if expiry_ts > 0 else None,
                 "expiry_date": expiry_day,
+                **chain_fields(pos_chain_id),
                 "positions_total": 0,
                 "positions_with_price": 0,
                 "assigned_count": 0,
@@ -182,9 +199,9 @@ def build_history_expiry_prices(
             entry["expiry_price"] = price
 
     rows = list(grouped.values())
-    rows.sort(key=lambda r: (-(r.get("expiry") or 0), (r.get("symbol") or "")))
+    rows.sort(key=lambda r: (-(r.get("expiry") or 0), (r.get("symbol") or ""), r.get("chain_id") or 0))
     return {
-        "filters": {"symbol": symbol, "expiry_date": expiry_date},
+        "filters": {"symbol": symbol, "expiry_date": expiry_date, "chain_id": chain_id},
         "groups": rows,
         "group_count": len(rows),
         "positions_considered": len(filtered),

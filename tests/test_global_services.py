@@ -12,6 +12,7 @@ class TestGlobalServices(unittest.TestCase):
             """
             CREATE TABLE trades (
                 symbol TEXT,
+                chain_id INTEGER,
                 expiry INTEGER,
                 strike_f REAL,
                 notional_f REAL,
@@ -27,13 +28,13 @@ class TestGlobalServices(unittest.TestCase):
             """
             INSERT INTO trades (
                 symbol, expiry, strike_f, notional_f, premium_f, apr_f,
-                is_put, outcome, expiry_price_f
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                is_put, outcome, expiry_price_f, chain_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                ("WHYPE", 1774598400, 63.0, 100.0, 5.0, 20.0, 1, None, None),
-                ("WHYPE", 1774598400, 63.0, 200.0, 8.0, 30.0, 1, None, None),
-                ("WHYPE", 1774598400, 63.0, 300.0, 9.0, 40.0, 0, None, None),
+                ("WHYPE", 1774598400, 63.0, 100.0, 5.0, 20.0, 1, None, None, 999),
+                ("WHYPE", 1774598400, 63.0, 200.0, 8.0, 30.0, 1, None, None, 999),
+                ("WHYPE", 1774598400, 63.0, 300.0, 9.0, 40.0, 0, None, None, 999),
             ],
         )
 

@@ -1,9 +1,9 @@
 """
-Expiry price oracle client for Rysk covered call analysis.
+Expiry price oracle client for Rysk option outcome analysis.
 
 Provides cached access to the getExpiryPrice(view) function exposed by the
-HyperEVM contract so we can determine whether a position finished in-the-money
-or out-of-the-money at expiry.
+Rysk expiry oracle so we can determine whether a position finished
+in-the-money or out-of-the-money at expiry.
 """
 
 import os
@@ -13,13 +13,24 @@ from typing import Optional, Tuple
 
 from web3 import Web3
 
-from rpc_client import get_rpc_connection, TOKEN_ADDRESSES, HYPE_ADDRESSES
+from chain_metadata import ETHEREUM_CHAIN_ID, HYPEREVM_CHAIN_ID, chain_meta, default_chain_id, parse_chain_id
+from rpc_client import (
+    ETHEREUM_TOKEN_ADDRESSES,
+    HYPE_ADDRESSES,
+    TOKEN_ADDRESSES,
+    get_rpc_connection,
+)
 
 
-# Oracle contract (can be overridden via env for testing)
-EXPIRY_ORACLE_ADDRESS = os.getenv(
-    "RYSK_EXPIRY_ORACLE",
-    "0x664aD80F6891cD663228Dc9d1510a6A5Db57e815"
+# Expiry oracle contracts. RYSK_EXPIRY_ORACLE remains the backwards-compatible
+# HyperEVM override. Ethereum is opt-in until Rysk publishes/updates docs.
+HYPEREVM_EXPIRY_ORACLE_ADDRESS = os.getenv(
+    "RYSK_HYPEREVM_EXPIRY_ORACLE",
+    os.getenv("RYSK_EXPIRY_ORACLE", "0x664aD80F6891cD663228Dc9d1510a6A5Db57e815"),
+)
+ETHEREUM_EXPIRY_ORACLE_ADDRESS = os.getenv(
+    "RYSK_ETHEREUM_EXPIRY_ORACLE",
+    os.getenv("RYSK_MAINNET_EXPIRY_ORACLE", ""),
 )
 
 # ABI fragment for getExpiryPrice(address underlying, uint256 expiry)
@@ -38,8 +49,8 @@ GET_EXPIRY_PRICE_ABI = [{
 }]
 
 
-# Mapping of Rysk symbols to underlying asset addresses used by the oracle
-SYMBOL_ADDRESS_MAP = {
+# Mapping of Rysk symbols to underlying asset addresses used by HyperEVM oracle
+HYPEREVM_SYMBOL_ADDRESS_MAP = {
     "BTC": TOKEN_ADDRESSES.get("BTC"),
     "UBTC": TOKEN_ADDRESSES.get("BTC"),
     "ETH": TOKEN_ADDRESSES.get("ETH"),
@@ -64,6 +75,19 @@ SYMBOL_ADDRESS_MAP = {
     "KHYPE-PT-19MAR26": HYPE_ADDRESSES[1] if len(HYPE_ADDRESSES) > 1 else None,
     "HYPE-PT": HYPE_ADDRESSES[0] if HYPE_ADDRESSES else None,
 }
+
+ETHEREUM_SYMBOL_ADDRESS_MAP = {
+    "BTC": ETHEREUM_TOKEN_ADDRESSES.get("BTC"),
+    "WBTC": ETHEREUM_TOKEN_ADDRESSES.get("WBTC"),
+    "UBTC": ETHEREUM_TOKEN_ADDRESSES.get("BTC"),
+    "ETH": ETHEREUM_TOKEN_ADDRESSES.get("ETH"),
+    "WETH": ETHEREUM_TOKEN_ADDRESSES.get("WETH"),
+    "UETH": ETHEREUM_TOKEN_ADDRESSES.get("ETH"),
+    "USDC": ETHEREUM_TOKEN_ADDRESSES.get("USDC"),
+    "USDT": ETHEREUM_TOKEN_ADDRESSES.get("USDT"),
+}
+
+SYMBOL_ADDRESS_MAP = HYPEREVM_SYMBOL_ADDRESS_MAP
 
 
 # Simple in-memory cache so we don't hammer the RPC for historical expiries
@@ -119,29 +143,45 @@ def _save_persistent_cache():
 # Load persistent cache on module import
 _load_persistent_cache()
 
-_oracle_contract = None
+_oracle_contracts = {}
 
 
-def _get_oracle_contract():
+def _oracle_address_for_chain(chain_id: Optional[int]) -> Optional[str]:
+    resolved = parse_chain_id(chain_id, default=default_chain_id()) or default_chain_id()
+    if resolved == HYPEREVM_CHAIN_ID:
+        return HYPEREVM_EXPIRY_ORACLE_ADDRESS
+    if resolved == ETHEREUM_CHAIN_ID:
+        return ETHEREUM_EXPIRY_ORACLE_ADDRESS
+    return os.getenv(f"RYSK_CHAIN_{resolved}_EXPIRY_ORACLE", "")
+
+
+def _get_oracle_contract(chain_id: Optional[int]):
     """Get (and cache) the oracle contract instance."""
-    global _oracle_contract
-    if _oracle_contract is None:
-        w3 = get_rpc_connection()
+    resolved = parse_chain_id(chain_id, default=default_chain_id()) or default_chain_id()
+    oracle_address = _oracle_address_for_chain(resolved)
+    if not oracle_address:
+        meta = chain_meta(resolved)
+        raise RuntimeError(f"No Rysk expiry oracle configured for {meta['name']}")
+
+    if resolved not in _oracle_contracts:
+        w3 = get_rpc_connection(resolved)
         if not w3.is_connected():
-            raise RuntimeError("Unable to reach Hyperliquid RPC for expiry oracle")
-        _oracle_contract = w3.eth.contract(
-            address=Web3.to_checksum_address(EXPIRY_ORACLE_ADDRESS),
+            meta = chain_meta(resolved)
+            raise RuntimeError(f"Unable to reach {meta['name']} RPC for expiry oracle")
+        _oracle_contracts[resolved] = w3.eth.contract(
+            address=Web3.to_checksum_address(oracle_address),
             abi=GET_EXPIRY_PRICE_ABI
         )
-    return _oracle_contract
+    return _oracle_contracts[resolved]
 
 
-def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], bool]:
+def get_expiry_price(asset_address: str, expiry: int, chain_id: Optional[int] = None) -> Tuple[Optional[float], bool]:
     """Fetch the finalized expiry price from the oracle.
 
     Args:
         asset_address: Underlying ERC20 address used by the option series.
         expiry: Expiry timestamp (unix seconds).
+        chain_id: EVM chain id for the expiry oracle.
 
     Returns:
         (price_in_usd, is_finalized) where price is a float (USD) if available.
@@ -149,13 +189,14 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
     if not asset_address or not expiry:
         return None, False
 
-    cache_key = _cache_key(asset_address, expiry)
+    resolved_chain_id = parse_chain_id(chain_id, default=default_chain_id()) or default_chain_id()
+    cache_key = f"{resolved_chain_id}::{_cache_key(asset_address, expiry)}"
     cached = _expiry_cache.get(cache_key)
     if cached and _entry_fresh(cached):
         return cached["price"], cached["finalized"]
 
     try:
-        contract = _get_oracle_contract()
+        contract = _get_oracle_contract(resolved_chain_id)
         price_raw, finalized = contract.functions.getExpiryPrice(
             Web3.to_checksum_address(asset_address),
             int(expiry)
@@ -173,7 +214,8 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
 
         return price, bool(finalized)
     except Exception as exc:
-        print(f"Error fetching expiry price for {asset_address} @ {expiry}: {exc}")
+        meta = chain_meta(resolved_chain_id)
+        print(f"Error fetching expiry price on {meta['name']} for {asset_address} @ {expiry}: {exc}")
         _expiry_cache[cache_key] = {
             "price": None,
             "finalized": False,
@@ -183,16 +225,18 @@ def get_expiry_price(asset_address: str, expiry: int) -> Tuple[Optional[float], 
         return None, False
 
 
-def get_underlying_address(symbol: Optional[str]) -> Optional[str]:
+def get_underlying_address(symbol: Optional[str], chain_id: Optional[int] = None) -> Optional[str]:
     """Map a Rysk symbol (e.g. UBTC, kHYPE) to the underlying asset address."""
     if not symbol:
         return None
     symbol_upper = symbol.upper()
-    if symbol_upper in SYMBOL_ADDRESS_MAP:
-        return SYMBOL_ADDRESS_MAP[symbol_upper]
+    resolved_chain_id = parse_chain_id(chain_id, default=default_chain_id()) or default_chain_id()
+    chain_map = ETHEREUM_SYMBOL_ADDRESS_MAP if resolved_chain_id == ETHEREUM_CHAIN_ID else HYPEREVM_SYMBOL_ADDRESS_MAP
+    if symbol_upper in chain_map:
+        return chain_map[symbol_upper]
 
     # Handle prefixed symbols like "U" + base (UBTC) dynamically
-    if symbol_upper.startswith("U") and symbol_upper[1:] in SYMBOL_ADDRESS_MAP:
-        return SYMBOL_ADDRESS_MAP.get(symbol_upper[1:])
+    if symbol_upper.startswith("U") and symbol_upper[1:] in chain_map:
+        return chain_map.get(symbol_upper[1:])
 
     return None

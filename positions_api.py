@@ -10,6 +10,7 @@ from decimal import Decimal, getcontext
 
 import requests
 
+from chain_metadata import chain_fields, default_chain_id, parse_chain_id
 from expiry_price import get_expiry_price, get_underlying_address
 from hyperliquid_client import get_current_price
 
@@ -82,6 +83,10 @@ def _fetch_json(url, params=None):
     return response.json()
 
 
+def _item_chain_id(item: dict):
+    return parse_chain_id(item.get("chainId") or item.get("chain_id"), default=default_chain_id())
+
+
 def _infer_strategy_key(position: dict) -> str:
     """Classify short option legs for UI strategy labeling."""
     side = str(position.get("side") or "").strip().lower()
@@ -134,11 +139,12 @@ def _annotate_expired_position(position: dict):
         return
 
     symbol = position.get("symbol")
+    chain_id = parse_chain_id(position.get("chain_id"), default=default_chain_id())
     expiry = position.get("expiry")
     strike = position.get("strike") or 0.0
     option_type = (position.get("type") or "").lower()
 
-    asset_address = get_underlying_address(symbol)
+    asset_address = position.get("underlying_address") or get_underlying_address(symbol, chain_id=chain_id)
     if not asset_address or not expiry:
         position.setdefault("outcome", "Unknown")
         return
@@ -146,7 +152,7 @@ def _annotate_expired_position(position: dict):
     expiry_ts = int(expiry)
 
     # Try primary expiry timestamp
-    price, finalized = get_expiry_price(asset_address, expiry_ts)
+    price, finalized = get_expiry_price(asset_address, expiry_ts, chain_id=chain_id)
 
     # Fallback: normalize to midnight UTC for the expiry date if not finalized/available
     if (price is None or not finalized) and expiry_ts:
@@ -154,7 +160,7 @@ def _annotate_expired_position(position: dict):
             dt = datetime.fromtimestamp(expiry_ts, tz=timezone.utc)
             midnight_ts = int(dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
             if midnight_ts != expiry_ts:
-                price_fallback, finalized_fallback = get_expiry_price(asset_address, midnight_ts)
+                price_fallback, finalized_fallback = get_expiry_price(asset_address, midnight_ts, chain_id=chain_id)
                 if price_fallback is not None:
                     price, finalized = price_fallback, finalized_fallback
                     position["expiry_fallback_ts"] = midnight_ts
@@ -207,6 +213,7 @@ def fetch_positions(account_address: str):
     notional_weighted_apr_sum = 0.0
 
     for item in taker_raw or []:
+        chain_id = _item_chain_id(item)
         expiry_dt, expiry_date, days_to_expiry, status = _parse_expiry(item.get("expiry"))
         created_dt, created_human, created_date = _parse_timestamp(item.get("createdAt"))
 
@@ -239,7 +246,10 @@ def fetch_positions(account_address: str):
             "price": price,
             "notional": notional,
             "tx_hash": item.get("txHash"),
+            "underlying_address": item.get("address"),
             "usd_address": item.get("usd"),
+            "collateral_address": item.get("collateral"),
+            **chain_fields(chain_id),
         }
         position["strategy"] = _infer_strategy_key(position)
 
@@ -255,8 +265,10 @@ def fetch_positions(account_address: str):
 
             # Aggregate by asset symbol
             asset_symbol = (position["symbol"] or "UNKNOWN").upper()
-            entry = asset_summary.setdefault(asset_symbol, {
+            asset_key = (asset_symbol, chain_id)
+            entry = asset_summary.setdefault(asset_key, {
                 "symbol": asset_symbol,
+                "chain_id": chain_id,
                 "count": 0,
                 "quantity_total": 0.0,
                 "premium_total": 0.0,
@@ -315,7 +327,7 @@ def fetch_positions(account_address: str):
     open_sorted = sorted(open_positions, key=lambda x: (x.get("expiry") or 0, x.get("created_at_iso") or ""))
 
     asset_summary_list = []
-    for symbol, entry in asset_summary.items():
+    for (_symbol, _chain_id), entry in asset_summary.items():
         strikes_list = []
         for strike_key, strike_entry in entry["strikes"].items():
             avg_apr = strike_entry["apr_sum"] / strike_entry["apr_count"] if strike_entry["apr_count"] else None
@@ -342,20 +354,21 @@ def fetch_positions(account_address: str):
         strikes_list.sort(key=lambda s: s["strike"] or 0)
 
         avg_apr = entry["apr_sum"] / entry["apr_count"] if entry["apr_count"] else None
-        market_asset = _symbol_to_market_asset(symbol)
+        market_asset = _symbol_to_market_asset(entry["symbol"])
         current_price = get_current_price(market_asset) if market_asset else None
         asset_summary_list.append({
-            "symbol": symbol,
+            "symbol": entry["symbol"],
             "count": entry["count"],
             "quantity_total": entry["quantity_total"],
             "premium_total": entry["premium_total"],
             "notional_total": entry["notional_total"],
             "avg_apr": avg_apr,
             "current_price": current_price,
-            "strikes": strikes_list
+            "strikes": strikes_list,
+            **chain_fields(entry["chain_id"]),
         })
 
-    asset_summary_list.sort(key=lambda x: (-x["notional_total"], x["symbol"]))
+    asset_summary_list.sort(key=lambda x: (-x["notional_total"], x["symbol"], x.get("chain_id") or 0))
 
     results = {
         "open_positions": open_sorted if limit <= 0 else open_sorted[:limit],
@@ -404,6 +417,7 @@ def fetch_history(account_address: str, limit: int = 0):
     trades = []
 
     for item in raw_history or []:
+        chain_id = _item_chain_id(item)
         created_dt, created_human, created_date = _parse_timestamp(item.get("createdAt"))
         expiry_dt, expiry_date, days_to_expiry, status = _parse_expiry(item.get("expiry"))
 
@@ -429,6 +443,10 @@ def fetch_history(account_address: str, limit: int = 0):
             "premium": premium,
             "price": price,
             "notional": notional,
+            "underlying_address": item.get("address"),
+            "usd_address": item.get("usd"),
+            "collateral_address": item.get("collateral"),
+            **chain_fields(chain_id),
         })
 
     trades_sorted = sorted(
@@ -482,12 +500,15 @@ def fetch_history(account_address: str, limit: int = 0):
         expiry_price = pos.get("expiry_price") if pos.get("expiry_price") is not None else None
         outcome = (pos.get("outcome") or "").capitalize()
         symbol = (pos.get("symbol") or "UNKNOWN").upper()
+        chain_id = parse_chain_id(pos.get("chain_id"), default=default_chain_id())
 
         expired_premium_total += premium
         expired_notional_total += notional
 
-        entry = asset_outcomes.setdefault(symbol, {
+        outcome_key = (symbol, chain_id)
+        entry = asset_outcomes.setdefault(outcome_key, {
             "symbol": symbol,
+            "chain_id": chain_id,
             "total_positions": 0,
             "assigned_count": 0,
             "returned_count": 0,
@@ -529,7 +550,7 @@ def fetch_history(account_address: str, limit: int = 0):
             total_unknown_positions += 1
 
     asset_outcome_list = []
-    for symbol, entry in asset_outcomes.items():
+    for (_symbol, _chain_id), entry in asset_outcomes.items():
         assigned_avg_price = None
         if entry["assigned_quantity"] > 0:
             assigned_avg_price = entry["assigned_notional"] / entry["assigned_quantity"]
@@ -543,7 +564,7 @@ def fetch_history(account_address: str, limit: int = 0):
             avg_returned_expiry = entry["expiry_price_returned_sum"] / entry["expiry_price_returned_count"]
 
         asset_outcome_list.append({
-            "symbol": symbol,
+            "symbol": entry["symbol"],
             "total_positions": entry["total_positions"],
             "assigned_count": entry["assigned_count"],
             "returned_count": entry["returned_count"],
@@ -556,9 +577,10 @@ def fetch_history(account_address: str, limit: int = 0):
             "avg_assigned_expiry": avg_assigned_expiry,
             "avg_returned_expiry": avg_returned_expiry,
             "premium_total": entry["premium_total"],
+            **chain_fields(entry["chain_id"]),
         })
 
-    asset_outcome_list.sort(key=lambda x: (-x["assigned_count"], -x["returned_count"], x["symbol"]))
+    asset_outcome_list.sort(key=lambda x: (-x["assigned_count"], -x["returned_count"], x["symbol"], x.get("chain_id") or 0))
 
     results = {
         "trades": [],
@@ -581,4 +603,3 @@ def fetch_history(account_address: str, limit: int = 0):
         "data": results
     }
     return results
-
