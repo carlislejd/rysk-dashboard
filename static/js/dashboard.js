@@ -81,6 +81,8 @@ function renderOpenPositionsPage(page) {
 
 let defaultAccount = '';
 let currentAccount = '';
+let walletAddresses = [];
+let selectedWallet = 'all';
 let accountInputEl = null;
 let accountStatusEl = null;
 let accountDisplayEl = null;
@@ -93,6 +95,58 @@ let splashErrorEl = null;
 let splashTypingTimer = null;
 let mainLoadingEl = null;
 let accountChangeEl = null;
+let accountFilterEl = null;
+
+function parseWalletAddresses(value) {
+    const seen = new Set();
+    return String(value || '')
+        .split(/[\s,]+/)
+        .map(address => address.trim())
+        .filter(address => {
+            const key = address.toLowerCase();
+            if (!address || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+}
+
+function syncCurrentAccount() {
+    currentAccount = selectedWallet === 'all'
+        ? walletAddresses.join(',')
+        : (walletAddresses.find(address => address.toLowerCase() === selectedWallet.toLowerCase()) || walletAddresses.join(','));
+}
+
+function saveWalletAddresses() {
+    try {
+        localStorage.setItem('dashboardAccounts', JSON.stringify(walletAddresses));
+        localStorage.setItem('dashboardAccount', walletAddresses[0] || '');
+    } catch (_) {
+        // Ignore storage errors.
+    }
+}
+
+function updateAccountFilter() {
+    if (!accountFilterEl) return;
+    const previous = selectedWallet;
+    accountFilterEl.innerHTML = '';
+    if (walletAddresses.length > 1) {
+        const allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = `All wallets (${walletAddresses.length})`;
+        accountFilterEl.appendChild(allOption);
+    }
+    walletAddresses.forEach(address => {
+        const option = document.createElement('option');
+        option.value = address.toLowerCase();
+        option.textContent = formatAddress(address);
+        accountFilterEl.appendChild(option);
+    });
+    accountFilterEl.style.display = walletAddresses.length > 1 ? '' : 'none';
+    selectedWallet = walletAddresses.length > 1 && previous === 'all'
+        ? 'all'
+        : (walletAddresses.some(address => address.toLowerCase() === previous.toLowerCase()) ? previous : (walletAddresses.length > 1 ? 'all' : (walletAddresses[0] || '')));
+    accountFilterEl.value = selectedWallet === 'all' ? 'all' : selectedWallet.toLowerCase();
+}
 
 function buildUrl(path, params = {}) {
     const searchParams = new URLSearchParams();
@@ -114,7 +168,11 @@ function fetchWithAccount(path, params = {}) {
 }
 
 function updateAccountUI(address) {
-    const display = address ? address : 'Not set';
+    const display = walletAddresses.length > 1 && selectedWallet === 'all'
+        ? `${walletAddresses.length} wallets combined`
+        : (walletAddresses.length > 1
+            ? `${formatAddress(address)} (filtered)`
+            : (walletAddresses[0] || address || 'Not set'));
     if (accountDisplayEl) {
         accountDisplayEl.textContent = display;
     }
@@ -123,8 +181,9 @@ function updateAccountUI(address) {
         accountBar.classList.toggle('needs-wallet', !address);
     }
     if (accountInputEl && document.activeElement !== accountInputEl) {
-        accountInputEl.value = address || '';
+        accountInputEl.value = walletAddresses.join(', ');
     }
+    updateAccountFilter();
 }
 
 function setAccountStatus(message = '', isError = false) {
@@ -176,13 +235,10 @@ async function loadPositions() {
 
         notConfigured.style.display = 'none';
         error.style.display = 'none';
-        if (data.account && data.account !== currentAccount) {
-            currentAccount = data.account;
-            try {
-                localStorage.setItem('dashboardAccount', currentAccount || '');
-            } catch (_) {
-                // ignore storage errors
-            }
+        if (Array.isArray(data.accounts) && data.accounts.length && walletAddresses.length === 0) {
+            walletAddresses = data.accounts;
+            syncCurrentAccount();
+            saveWalletAddresses();
             updateAccountUI(currentAccount);
         }
         const positions = data.positions || {};
@@ -339,13 +395,10 @@ async function loadHistory() {
         notConfigured.style.display = 'none';
         error.style.display = 'none';
 
-        if (data.account && data.account !== currentAccount) {
-            currentAccount = data.account;
-            try {
-                localStorage.setItem('dashboardAccount', currentAccount || '');
-            } catch (_) {
-                // ignore storage errors
-            }
+        if (Array.isArray(data.accounts) && data.accounts.length && walletAddresses.length === 0) {
+            walletAddresses = data.accounts;
+            syncCurrentAccount();
+            saveWalletAddresses();
             updateAccountUI(currentAccount);
         }
 
@@ -1834,11 +1887,11 @@ function showAccountEntry() {
     if (splashErrorEl) splashErrorEl.style.display = 'none';
     if (splashTypingEl) {
         splashTypingEl.textContent = currentAccount
-            ? 'Swap to another wallet without leaving the account workflow.'
-            : 'Choose any wallet to inspect positions, health, and history.';
+            ? 'Edit the list to replace, add, or remove wallets. Combined history is the default.'
+            : 'Add up to 10 wallets. Combined history is the default.';
     }
     if (splashAccountInputEl) {
-        splashAccountInputEl.value = currentAccount || splashAccountInputEl.value || '';
+        splashAccountInputEl.value = walletAddresses.join('\n') || splashAccountInputEl.value || '';
         setTimeout(() => splashAccountInputEl.focus(), 0);
     }
 }
@@ -1864,11 +1917,11 @@ function setMainLoading(isLoading, message = 'Loading account data...') {
 }
 
 async function launchDashboard(addressInput, { fromSplash = false } = {}) {
-    let normalized = (addressInput || '').trim();
-    if (!normalized && defaultAccount) {
-        normalized = defaultAccount;
+    let addresses = parseWalletAddresses(addressInput);
+    if (!addresses.length && defaultAccount) {
+        addresses = parseWalletAddresses(defaultAccount);
     }
-    if (!normalized) {
+    if (!addresses.length) {
         if (fromSplash && splashErrorEl) {
             splashErrorEl.textContent = 'Enter a wallet address';
             splashErrorEl.style.display = 'block';
@@ -1877,7 +1930,17 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
         }
         return;
     }
-    if (!/^0x[0-9a-fA-F]{40}$/.test(normalized)) {
+    if (addresses.length > 10) {
+        const message = 'A maximum of 10 wallet addresses is supported';
+        if (fromSplash && splashErrorEl) {
+            splashErrorEl.textContent = message;
+            splashErrorEl.style.display = 'block';
+        } else {
+            setAccountStatus(message, true);
+        }
+        return;
+    }
+    if (addresses.some(address => !/^0x[0-9a-fA-F]{40}$/.test(address))) {
         if (fromSplash && splashErrorEl) {
             splashErrorEl.textContent = 'Invalid wallet address format';
             splashErrorEl.style.display = 'block';
@@ -1887,13 +1950,11 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
         return;
     }
 
-    currentAccount = normalized;
+    walletAddresses = addresses;
+    selectedWallet = walletAddresses.length > 1 ? 'all' : walletAddresses[0];
+    syncCurrentAccount();
     updateAccountUI(currentAccount);
-    try {
-        localStorage.setItem('dashboardAccount', currentAccount || '');
-    } catch (_) {
-        // ignore storage errors
-    }
+    saveWalletAddresses();
 
     // Reset cached state similar to applyAccountChange
     historyDataCache = null;
@@ -1954,7 +2015,7 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
         setMainLoading(false);
         if (fromSplash && splashLaunchEl) {
             splashLaunchEl.disabled = false;
-            splashLaunchEl.textContent = 'Load';
+            splashLaunchEl.textContent = 'Save & load';
         }
     }
 }
@@ -2450,7 +2511,7 @@ document.addEventListener('DOMContentLoaded', () => {
     accountInputEl = document.getElementById('account-input');
     accountStatusEl = document.getElementById('account-status');
     accountDisplayEl = document.getElementById('current-wallet-display');
-    splashScreenEl = document.getElementById('splash-screen');
+    splashScreenEl = document.getElementById('account-entry-modal');
     mainContentEl = document.getElementById('main-content');
     splashAccountInputEl = document.getElementById('splash-account-input');
     splashLaunchEl = document.getElementById('splash-launch');
@@ -2458,15 +2519,20 @@ document.addEventListener('DOMContentLoaded', () => {
     splashErrorEl = document.getElementById('splash-error');
     mainLoadingEl = document.getElementById('account-main-loading');
     accountChangeEl = document.getElementById('account-change');
+    accountFilterEl = document.getElementById('account-filter');
     const applyButton = document.getElementById('account-apply');
 
-    let savedAccount = '';
+    let savedAccounts = [];
     try {
-        savedAccount = (localStorage.getItem('dashboardAccount') || '').trim();
+        const parsed = JSON.parse(localStorage.getItem('dashboardAccounts') || '[]');
+        if (Array.isArray(parsed)) savedAccounts = parsed;
+        if (!savedAccounts.length) {
+            savedAccounts = parseWalletAddresses(localStorage.getItem('dashboardAccount') || '');
+        }
     } catch (_) {
-        savedAccount = '';
+        savedAccounts = parseWalletAddresses(localStorage.getItem('dashboardAccount') || '');
     }
-    const initialAccount = savedAccount || '';
+    const initialAccount = savedAccounts.join(',');
     currentAccount = '';
     if (splashAccountInputEl) {
         splashAccountInputEl.value = initialAccount;
@@ -2495,7 +2561,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (splashAccountInputEl) {
         splashAccountInputEl.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
                 launchDashboard(splashAccountInputEl.value, { fromSplash: true });
             }
@@ -2503,6 +2569,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (accountChangeEl) {
         accountChangeEl.addEventListener('click', showAccountEntry);
+    }
+    if (accountFilterEl) {
+        accountFilterEl.addEventListener('change', () => {
+            selectedWallet = accountFilterEl.value;
+            syncCurrentAccount();
+            updateAccountUI(currentAccount);
+            historyDataCache = null;
+            refreshAllData();
+        });
+    }
+    if (splashScreenEl) {
+        splashScreenEl.addEventListener('click', event => {
+            if (event.target === splashScreenEl && walletAddresses.length) hideAccountEntry();
+        });
     }
 
     initCollapsibleSections();

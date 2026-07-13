@@ -4,9 +4,23 @@ from unittest.mock import patch
 from app import app
 
 TEST_ADDRESS = "0x1111111111111111111111111111111111111111"
+TEST_ADDRESS_2 = "0x2222222222222222222222222222222222222222"
 
 
 class TestAppServiceParity(unittest.TestCase):
+    @patch("app.get_positions_payload_for_accounts")
+    def test_native_positions_accepts_multiple_addresses(self, mock_get_positions):
+        mock_get_positions.return_value = {
+            "account": None,
+            "accounts": [TEST_ADDRESS, TEST_ADDRESS_2],
+            "positions": {"open_positions": [], "asset_summary": [], "summary": {}},
+        }
+        client = app.test_client()
+        resp = client.get(f"/api/positions?address={TEST_ADDRESS},{TEST_ADDRESS_2}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.get_json()["accounts"], [TEST_ADDRESS, TEST_ADDRESS_2])
+        mock_get_positions.assert_called_once_with([TEST_ADDRESS, TEST_ADDRESS_2])
+
     def test_api_cli_account_validate(self):
         client = app.test_client()
         resp = client.get(f"/api/cli/account/validate?address={TEST_ADDRESS}")

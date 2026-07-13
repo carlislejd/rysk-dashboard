@@ -811,6 +811,21 @@ header h1 em {
     font-size: 0.76em;
 }
 
+.account-filter {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 4px 8px;
+    font: 0.76em var(--font-mono);
+}
+
+.account-address-list {
+    min-height: 88px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
 .account-entry-modal {
     position: fixed;
     inset: 0;

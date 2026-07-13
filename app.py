@@ -13,7 +13,9 @@ from dashboard_services import (
     filter_expired_positions,
     filter_open_positions,
     get_history_payload,
+    get_history_payload_for_accounts,
     get_positions_payload,
+    get_positions_payload_for_accounts,
     validate_account_address,
 )
 from db import get_db, init_db
@@ -59,6 +61,27 @@ def resolve_account_address():
     raise ValueError("Wallet address required")
 
 
+def resolve_account_addresses():
+    """Return one or more unique dashboard wallet addresses."""
+    raw_values = request.args.getlist("address")
+    raw = ",".join(raw_values).strip()
+    if not raw and ACCOUNT_ADDRESS:
+        raw = ACCOUNT_ADDRESS
+    candidates = [part.strip() for part in raw.replace("\n", ",").split(",") if part.strip()]
+    if not candidates:
+        raise ValueError("Wallet address required")
+    if len(candidates) > 10:
+        raise ValueError("A maximum of 10 wallet addresses is supported")
+    addresses = []
+    seen = set()
+    for candidate in candidates:
+        validated = validate_account_address(candidate)
+        if validated.lower() not in seen:
+            addresses.append(validated)
+            seen.add(validated.lower())
+    return addresses
+
+
 def resolve_chain_filter():
     """Return the requested chain id, or None for all chains."""
     value = request.args.get("chain_id", None)
@@ -94,11 +117,11 @@ def docs():
 def api_positions():
     """API endpoint for current positions."""
     try:
-        account_address = resolve_account_address()
-        return jsonify({
-            "success": True,
-            **get_positions_payload(account_address)
-        })
+        account_addresses = resolve_account_addresses()
+        payload = (get_positions_payload(account_addresses[0]) if len(account_addresses) == 1
+                   else get_positions_payload_for_accounts(account_addresses))
+        payload["accounts"] = account_addresses
+        return jsonify({"success": True, **payload})
     except ValueError as e:
         return jsonify({
             "success": False,
@@ -207,11 +230,11 @@ def api_cli_positions_strikes():
 def api_history():
     """API endpoint for historical performance."""
     try:
-        account_address = resolve_account_address()
-        return jsonify({
-            "success": True,
-            **get_history_payload(account_address)
-        })
+        account_addresses = resolve_account_addresses()
+        payload = (get_history_payload(account_addresses[0]) if len(account_addresses) == 1
+                   else get_history_payload_for_accounts(account_addresses))
+        payload["accounts"] = account_addresses
+        return jsonify({"success": True, **payload})
     except ValueError as e:
         return jsonify({
             "success": False,

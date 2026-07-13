@@ -36,6 +36,161 @@ def get_history_payload(account_address: str) -> Dict:
     }
 
 
+def _number(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _tag_rows(rows: List[Dict], account_address: str) -> List[Dict]:
+    return [{**row, "wallet_address": account_address} for row in (rows or [])]
+
+
+def _merge_asset_summaries(payloads: List[Dict]) -> List[Dict]:
+    merged: Dict[Tuple[str, Any], Dict] = {}
+    for payload in payloads:
+        for asset in payload.get("asset_summary") or []:
+            key = ((asset.get("symbol") or "UNKNOWN").upper(), asset.get("chain_id"))
+            entry = merged.setdefault(key, {
+                "symbol": key[0], **chain_fields(key[1]),
+                "count": 0, "quantity_total": 0.0, "premium_total": 0.0,
+                "notional_total": 0.0, "current_price": asset.get("current_price"), "strikes": {},
+                "apr_weighted": 0.0, "apr_weight": 0.0,
+            })
+            count = int(asset.get("count") or 0)
+            entry["count"] += count
+            for field in ("quantity_total", "premium_total", "notional_total"):
+                entry[field] += _number(asset.get(field))
+            if entry["current_price"] is None:
+                entry["current_price"] = asset.get("current_price")
+            if asset.get("avg_apr") is not None:
+                entry["apr_weighted"] += _number(asset.get("avg_apr")) * count
+                entry["apr_weight"] += count
+            for strike in asset.get("strikes") or []:
+                strike_key = str(strike.get("strike"))
+                target = entry["strikes"].setdefault(strike_key, {
+                    "strike": strike.get("strike"), "count": 0, "quantity_total": 0.0,
+                    "premium_total": 0.0, "notional_total": 0.0, "apr_weighted": 0.0,
+                    "apr_weight": 0.0, "strategy_notional": {},
+                })
+                strike_count = int(strike.get("count") or 0)
+                target["count"] += strike_count
+                for field in ("quantity_total", "premium_total", "notional_total"):
+                    target[field] += _number(strike.get(field))
+                if strike.get("avg_apr") is not None:
+                    target["apr_weighted"] += _number(strike.get("avg_apr")) * strike_count
+                    target["apr_weight"] += strike_count
+                for strategy, notional in (strike.get("strategy_notional") or {}).items():
+                    target["strategy_notional"][strategy] = target["strategy_notional"].get(strategy, 0.0) + _number(notional)
+
+    results = []
+    for entry in merged.values():
+        strikes = []
+        for strike in entry.pop("strikes").values():
+            strategy_values = strike["strategy_notional"]
+            non_zero = [name for name, value in strategy_values.items() if value > 0]
+            strike["dominant_strategy"] = non_zero[0] if len(non_zero) == 1 else ("mixed" if non_zero else "other")
+            strike["avg_apr"] = strike.pop("apr_weighted") / strike["apr_weight"] if strike["apr_weight"] else None
+            strike.pop("apr_weight")
+            strikes.append(strike)
+        strikes.sort(key=lambda row: row.get("strike") or 0)
+        entry["strikes"] = strikes
+        entry["avg_apr"] = entry.pop("apr_weighted") / entry["apr_weight"] if entry["apr_weight"] else None
+        entry.pop("apr_weight")
+        results.append(entry)
+    return sorted(results, key=lambda row: (-row["notional_total"], row["symbol"], row.get("chain_id") or 0))
+
+
+def get_positions_payload_for_accounts(account_addresses: List[str]) -> Dict:
+    payloads = [fetch_positions(address) for address in account_addresses]
+    open_positions = []
+    for address, payload in zip(account_addresses, payloads):
+        open_positions.extend(_tag_rows(payload.get("open_positions") or [], address))
+    open_positions.sort(key=lambda row: (row.get("expiry") or 0, row.get("created_at_iso") or ""))
+    summaries = [payload.get("summary") or {} for payload in payloads]
+    total_notional = sum(_number(summary.get("open_notional_total")) for summary in summaries)
+    weighted_apr = sum(
+        _number(summary.get("open_weighted_apr")) * _number(summary.get("open_notional_total"))
+        for summary in summaries if summary.get("open_weighted_apr") is not None
+    )
+    weighted_days = sum(
+        _number(summary.get("open_weighted_days")) * _number(summary.get("open_notional_total"))
+        for summary in summaries if summary.get("open_weighted_days") is not None
+    )
+    return {
+        "account": account_addresses[0] if len(account_addresses) == 1 else None,
+        "accounts": account_addresses,
+        "positions": {
+            "open_positions": open_positions,
+            "asset_summary": _merge_asset_summaries(payloads),
+            "summary": {
+                "open_count": sum(int(summary.get("open_count") or 0) for summary in summaries),
+                "open_premium_total": sum(_number(summary.get("open_premium_total")) for summary in summaries),
+                "open_notional_total": total_notional,
+                "open_weighted_days": weighted_days / total_notional if total_notional else None,
+                "open_annualized_premium_total": sum(_number(summary.get("open_annualized_premium_total")) for summary in summaries),
+                "open_weighted_apr": weighted_apr / total_notional if total_notional else None,
+            },
+        },
+    }
+
+
+def _merge_asset_outcomes(summaries: List[Dict]) -> List[Dict]:
+    merged: Dict[Tuple[str, Any], Dict] = {}
+    additive = ("total_positions", "assigned_count", "returned_count", "unknown_count", "assigned_quantity",
+                "returned_quantity", "assigned_notional", "premium_total", "total_notional")
+    for summary in summaries:
+        for asset in summary.get("asset_outcomes") or []:
+            key = ((asset.get("symbol") or "UNKNOWN").upper(), asset.get("chain_id"))
+            entry = merged.setdefault(key, {"symbol": key[0], **chain_fields(key[1])})
+            for field in additive:
+                entry[field] = entry.get(field, 0) + _number(asset.get(field))
+            for value_field, count_field in (("avg_assigned_expiry", "assigned_count"), ("avg_returned_expiry", "returned_count")):
+                if asset.get(value_field) is not None:
+                    entry[value_field + "_sum"] = entry.get(value_field + "_sum", 0.0) + _number(asset[value_field]) * _number(asset.get(count_field))
+                    entry[value_field + "_count"] = entry.get(value_field + "_count", 0.0) + _number(asset.get(count_field))
+    results = []
+    for entry in merged.values():
+        entry["avg_assignment_price"] = entry["assigned_notional"] / entry["assigned_quantity"] if entry["assigned_quantity"] else None
+        for field in ("avg_assigned_expiry", "avg_returned_expiry"):
+            total = entry.pop(field + "_sum", 0.0)
+            count = entry.pop(field + "_count", 0.0)
+            entry[field] = total / count if count else None
+        results.append(entry)
+    return sorted(results, key=lambda row: (-row["assigned_count"], -row["returned_count"], row["symbol"], row.get("chain_id") or 0))
+
+
+def get_history_payload_for_accounts(account_addresses: List[str]) -> Dict:
+    payloads = [fetch_history(address) for address in account_addresses]
+    trades, expired = [], []
+    for address, payload in zip(account_addresses, payloads):
+        trades.extend(_tag_rows(payload.get("trades") or [], address))
+        expired.extend(_tag_rows(payload.get("expired_positions") or [], address))
+    trades.sort(key=lambda row: row.get("created_at_iso") or "", reverse=True)
+    expired.sort(key=lambda row: (row.get("expiry") or 0, row.get("created_at_iso") or ""), reverse=True)
+    summaries = [payload.get("summary") or {} for payload in payloads]
+    return {
+        "account": account_addresses[0] if len(account_addresses) == 1 else None,
+        "accounts": account_addresses,
+        "history": {
+            "trades": trades,
+            "expired_positions": expired,
+            "summary": {
+                "expired_count": sum(int(summary.get("expired_count") or 0) for summary in summaries),
+                "net_premium": sum(_number(summary.get("net_premium")) for summary in summaries),
+                "total_notional": sum(_number(summary.get("total_notional")) for summary in summaries),
+                "assigned_count": sum(int(summary.get("assigned_count") or 0) for summary in summaries),
+                "unknown_count": sum(int(summary.get("unknown_count") or 0) for summary in summaries),
+                "assigned_notional_total": sum(_number(summary.get("assigned_notional_total")) for summary in summaries),
+                "returned_count": sum(int(summary.get("returned_count") or 0) for summary in summaries),
+                "returned_quantity_total": sum(_number(summary.get("returned_quantity_total")) for summary in summaries),
+                "asset_outcomes": _merge_asset_outcomes(summaries),
+            },
+        },
+    }
+
+
 def _to_float(value: Any) -> float:
     try:
         return float(value)

@@ -55,6 +55,7 @@
                 <div class="account-display">
                     Wallet: <span id="current-wallet-display">Not set</span>
                 </div>
+                <select id="account-filter" class="account-filter" aria-label="Filter dashboard by wallet" style="display: none;"></select>
                 <button id="account-change" class="terminal-button account-change-button" type="button">Change</button>
                 <span id="account-status" class="account-status"></span>
             </div>
@@ -194,15 +195,15 @@
             <div class="account-entry-header">
                 <div>
                     <div class="sidepanel-eyebrow">Account</div>
-                    <h2 id="account-entry-title">Enter wallet address</h2>
+                    <h2 id="account-entry-title">Manage wallet addresses</h2>
                 </div>
             </div>
             <div class="splash-input-row account-entry-row">
-                <input id="splash-account-input" class="account-input splash-input" type="text" value="" placeholder="0x0000..." spellcheck="false" autocomplete="off">
-                <button id="splash-launch" class="terminal-button splash-button" type="button">Load</button>
+                <textarea id="splash-account-input" class="account-input splash-input account-address-list" rows="3" placeholder="One 0x address per line" spellcheck="false" autocomplete="off"></textarea>
+                <button id="splash-launch" class="terminal-button splash-button" type="button">Save &amp; load</button>
             </div>
             <div id="splash-error" class="error" style="display: none;"></div>
-            <div id="splash-typing" class="account-entry-hint">Choose any wallet to inspect positions, health, and history.</div>
+            <div id="splash-typing" class="account-entry-hint">Add up to 10 addresses. The default view combines their full history; use the wallet filter to inspect one.</div>
         </div>
     </div>
     </div>
