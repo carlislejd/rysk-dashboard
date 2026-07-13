@@ -1167,6 +1167,7 @@ header h1 em {
     padding: 16px 20px;
     position: relative;
     transition: background var(--transition-fast);
+    min-width: 0;
 }
 
 .summary-card:hover {
@@ -1179,10 +1180,13 @@ header h1 em {
 
 .summary-value {
     font-family: var(--font-mono);
-    font-size: 1.25em;
+    font-size: clamp(0.95rem, 1.5vw, 1.25em);
     font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--text-primary);
+    max-width: 100%;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .summary-subtext {
@@ -2498,6 +2502,7 @@ code {
     position: relative;
     transition: background var(--transition-fast);
     overflow: hidden;
+    min-width: 0;
 }
 
 .hero-kpi:hover {
@@ -2559,11 +2564,14 @@ code {
 
 .hero-kpi-value {
     font-family: var(--font-mono);
-    font-size: 1.8em;
+    font-size: clamp(1.15rem, 2vw, 1.8em);
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--text-primary);
     line-height: 1.1;
+    max-width: 100%;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .hero-kpi[data-slot="primary"] .hero-kpi-value {

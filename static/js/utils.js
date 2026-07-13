@@ -124,10 +124,18 @@ function formatCurrency(num, decimals = 2) {
 
 function compactCurrency(num) {
     if (num === null || num === undefined) return '$0';
-    const abs = Math.abs(num);
-    if (abs >= 1e6) return `$${(num / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
+    const value = Number(num) || 0;
+    const abs = Math.abs(value);
+    const sign = value < 0 ? '-' : '';
+    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
     return formatCurrency(num, 0);
+}
+
+function formatTileCurrency(num) {
+    const value = Number(num) || 0;
+    return Math.abs(value) >= 10000 ? compactCurrency(value) : formatCurrency(value);
 }
 
 function formatPercentage(value, decimals = 2) {

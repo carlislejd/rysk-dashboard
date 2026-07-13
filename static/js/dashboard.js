@@ -266,11 +266,11 @@ async function loadPositions() {
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Open Notional</span>
-                        <span class="summary-value">${formatCurrency(summary.open_notional_total || 0)}</span>
+                        <span class="summary-value" title="${formatCurrency(summary.open_notional_total || 0)}">${formatTileCurrency(summary.open_notional_total || 0)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Net Premium</span>
-                        <span class="summary-value">${formatCurrency(summary.open_premium_total || 0)}</span>
+                        <span class="summary-value" title="${formatCurrency(summary.open_premium_total || 0)}">${formatTileCurrency(summary.open_premium_total || 0)}</span>
                     </div>
                     ${aprCard}
                 </div>
@@ -429,11 +429,11 @@ async function loadHistory() {
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Net Premium</span>
-                        <span class="summary-value">${formatCurrency(summary.net_premium || 0)}</span>
+                        <span class="summary-value" title="${formatCurrency(summary.net_premium || 0)}">${formatTileCurrency(summary.net_premium || 0)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Total Notional</span>
-                        <span class="summary-value">${formatCurrency(summary.total_notional || 0)}</span>
+                        <span class="summary-value" title="${formatCurrency(summary.total_notional || 0)}">${formatTileCurrency(summary.total_notional || 0)}</span>
                     </div>
                     <div class="summary-card">
                         <span class="summary-label">Assigned Positions</span>
@@ -1578,23 +1578,23 @@ function renderAccountPnl(historyData, openPositions) {
     pnlGrid.innerHTML = `
         <div class="summary-card">
             <div class="summary-label">Total Premium Collected</div>
-            <div class="summary-value">${formatCurrency(totalPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(totalPremium)}">${formatTileCurrency(totalPremium)}</div>
             <div class="summary-subtext">${filtered.length} positions${activeLabel}${pendingLabel}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired OTM</div>
-            <div class="summary-value">${formatCurrency(otmPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(otmPremium)}">${formatTileCurrency(otmPremium)}</div>
             <div class="summary-subtext">${otmPositions.length} positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired ITM</div>
-            <div class="summary-value">${formatCurrency(itmPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(itmPremium)}">${formatTileCurrency(itmPremium)}</div>
             <div class="summary-subtext">${itmPositions.length} positions</div>
         </div>
         ${pendingPositions.length > 0 ? `
         <div class="summary-card">
             <div class="summary-label">Awaiting Settlement</div>
-            <div class="summary-value">${formatCurrency(pendingPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(pendingPremium)}">${formatTileCurrency(pendingPremium)}</div>
             <div class="summary-subtext">${pendingPositions.length} expired, outcome pending</div>
         </div>` : ''}
         <div class="summary-card">
@@ -1604,7 +1604,7 @@ function renderAccountPnl(historyData, openPositions) {
         </div>
         <div class="summary-card">
             <div class="summary-label">Total Notional</div>
-            <div class="summary-value">${formatCurrency(totalNotional)}</div>
+            <div class="summary-value" title="${formatCurrency(totalNotional)}">${formatTileCurrency(totalNotional)}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Avg APR</div>
@@ -1617,7 +1617,7 @@ function renderAccountPnl(historyData, openPositions) {
         </div>
         <div class="summary-card">
             <div class="summary-label">Net PnL</div>
-            <div class="summary-value" style="color: ${endingPnlColor};">${formatCurrency(endingPnl)}</div>
+            <div class="summary-value" title="${formatCurrency(endingPnl)}" style="color: ${endingPnlColor};">${formatTileCurrency(endingPnl)}</div>
             <div class="summary-subtext">${assignmentNote}</div>
         </div>
     `;
@@ -1647,7 +1647,7 @@ function renderAccountPnl(historyData, openPositions) {
     pnlContent.style.display = 'block';
 
     const chartEl = document.getElementById('pnl-chart-account');
-    if (dates.length > 1 && typeof Plotly !== 'undefined') {
+    if (dates.length >= 1 && typeof Plotly !== 'undefined') {
         let cumTotal = 0;
         let cumReturned = 0;
         const cumTotalArr = [];
@@ -1664,10 +1664,11 @@ function renderAccountPnl(historyData, openPositions) {
 
         const dateLabel = _pnlBasis === 'cash' ? 'Trade Date' : 'Expiry Date';
         const theme = getPlotlyTheme();
+        const cumulativeMode = dates.length === 1 ? 'lines+markers' : 'lines';
         Plotly.newPlot('pnl-chart-account', [
             { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(0, 255, 157, 0.30)' }, yaxis: 'y2' },
-            { x: dates, y: cumTotalArr, type: 'scatter', mode: 'lines', name: 'Cumulative Total', line: { color: '#00ff9d', width: 2.5 } },
-            { x: dates, y: cumReturnedArr, type: 'scatter', mode: 'lines', name: 'Expired OTM Premium', line: { color: '#ff9f1c', width: 2, dash: 'dot' } },
+            { x: dates, y: cumTotalArr, type: 'scatter', mode: cumulativeMode, name: 'Cumulative Total', line: { color: '#00ff9d', width: 2.5 }, marker: { size: 8 } },
+            { x: dates, y: cumReturnedArr, type: 'scatter', mode: cumulativeMode, name: 'Expired OTM Premium', line: { color: '#ff9f1c', width: 2, dash: 'dot' }, marker: { size: 8 } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
             font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
@@ -1679,8 +1680,11 @@ function renderAccountPnl(historyData, openPositions) {
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
     } else if (chartEl) {
-        // Not enough data for chart, or single bar — clear it
-        chartEl.innerHTML = '';
+        if (typeof Plotly !== 'undefined' && chartEl.classList.contains('js-plotly-plot')) {
+            Plotly.purge(chartEl);
+        } else {
+            chartEl.innerHTML = '';
+        }
     }
 }
 
@@ -1716,12 +1720,13 @@ async function loadAllData() {
 
 // ── Hero KPI population (account) ──
 
-function _setAccountHero(id, value, sub, valueClass) {
+function _setAccountHero(id, value, sub, valueClass, exactValue = '') {
     const el = document.getElementById(id);
     if (el) {
         el.textContent = value;
         el.classList.remove('pos', 'neg');
         if (valueClass) el.classList.add(valueClass);
+        el.title = exactValue;
     }
     if (sub !== undefined) {
         const subEl = document.getElementById(id + '-sub');
@@ -1758,17 +1763,21 @@ function populateAccountHero(positionsData, historyData) {
     const pnlSub = assignmentLoss > 0
         ? `${formatCurrency(totalPremium)} premium · ${formatCurrency(assignmentLoss)} assigned loss`
         : `${formatCurrency(totalPremium)} premium · no assigned losses`;
-    _setAccountHero('hero-net-pnl', formatCurrency(netPnl), pnlSub, pnlClass);
+    _setAccountHero('hero-net-pnl', formatTileCurrency(netPnl), pnlSub, pnlClass, formatCurrency(netPnl));
 
     // Open Notional
     _setAccountHero('hero-open-notional',
-        formatCurrency(summary.open_notional_total || 0),
-        `${formatNumber(summary.open_count || openPositions.length || 0, 0)} open positions`);
+        formatTileCurrency(summary.open_notional_total || 0),
+        `${formatNumber(summary.open_count || openPositions.length || 0, 0)} open positions`,
+        '',
+        formatCurrency(summary.open_notional_total || 0));
 
     // Open Premium
     _setAccountHero('hero-open-premium',
-        formatCurrency(summary.open_premium_total || 0),
-        'Premium received on open legs');
+        formatTileCurrency(summary.open_premium_total || 0),
+        'Premium received on open legs',
+        '',
+        formatCurrency(summary.open_premium_total || 0));
 
     // Portfolio APR
     const apr = summary.open_weighted_apr;
