@@ -144,7 +144,11 @@ def _annotate_expired_position(position: dict):
     strike = position.get("strike") or 0.0
     option_type = (position.get("type") or "").lower()
 
-    asset_address = position.get("underlying_address") or get_underlying_address(symbol, chain_id=chain_id)
+    # Prefer the canonical symbol mapping. Some V12 rows contain a generic or
+    # collateral address in `address` (for example, UPUMP rows tagged with the
+    # WHYPE address), which returns a valid but completely unrelated oracle
+    # price and can inflate assignment PnL by several orders of magnitude.
+    asset_address = get_underlying_address(symbol, chain_id=chain_id) or position.get("underlying_address")
     if not asset_address or not expiry:
         position.setdefault("outcome", "Unknown")
         return
