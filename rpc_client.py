@@ -10,7 +10,10 @@ from chain_metadata import ETHEREUM_CHAIN_ID, HYPEREVM_CHAIN_ID, default_chain_i
 
 # RPC configuration. RPC_URL remains the backwards-compatible HyperEVM knob.
 HYPEREVM_RPC_URL = os.getenv("HYPEREVM_RPC_URL", os.getenv("RPC_URL", "https://rpc.hyperliquid.xyz/evm"))
-ETHEREUM_RPC_URL = os.getenv("ETHEREUM_RPC_URL", os.getenv("MAINNET_RPC_URL", ""))
+ETHEREUM_RPC_URL = os.getenv(
+    "ETHEREUM_RPC_URL",
+    os.getenv("MAINNET_RPC_URL", "https://eth-mainnet.g.alchemy.com/public"),
+)
 CHAIN_ID = HYPEREVM_CHAIN_ID
 RPC_URL = HYPEREVM_RPC_URL
 

@@ -23,14 +23,14 @@ from rpc_client import (
 
 
 # Expiry oracle contracts. RYSK_EXPIRY_ORACLE remains the backwards-compatible
-# HyperEVM override. Ethereum is opt-in until Rysk publishes/updates docs.
+# HyperEVM override. Chain-specific environment variables can override defaults.
 HYPEREVM_EXPIRY_ORACLE_ADDRESS = os.getenv(
     "RYSK_HYPEREVM_EXPIRY_ORACLE",
     os.getenv("RYSK_EXPIRY_ORACLE", "0x664aD80F6891cD663228Dc9d1510a6A5Db57e815"),
 )
 ETHEREUM_EXPIRY_ORACLE_ADDRESS = os.getenv(
     "RYSK_ETHEREUM_EXPIRY_ORACLE",
-    os.getenv("RYSK_MAINNET_EXPIRY_ORACLE", ""),
+    os.getenv("RYSK_MAINNET_EXPIRY_ORACLE", "0xc11a4767d83fb2ab643cfc30288a7ee9690009a7"),
 )
 
 # ABI fragment for getExpiryPrice(address underlying, uint256 expiry)

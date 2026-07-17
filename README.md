@@ -28,9 +28,10 @@ export ACCOUNT_ADDRESS="0xYourAddress"
 # Optional RPC override (default is Hyperliquid EVM RPC)
 export RPC_URL="https://rpc.hyperliquid.xyz/evm"
 
-# Optional Ethereum mainnet settlement lookup support
-export ETHEREUM_RPC_URL="https://mainnet.infura.io/v3/..."
-export RYSK_ETHEREUM_EXPIRY_ORACLE="0x..."
+# Optional Ethereum mainnet settlement lookup overrides
+# (defaults shown below)
+export ETHEREUM_RPC_URL="https://eth-mainnet.g.alchemy.com/public"
+export RYSK_ETHEREUM_EXPIRY_ORACLE="0xc11a4767d83fb2ab643cfc30288a7ee9690009a7"
 
 # Optional Rysk API override (defaults to v12)
 export RYSK_API_BASE="https://v12.rysk.finance/api"
