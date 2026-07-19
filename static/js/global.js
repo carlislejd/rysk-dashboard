@@ -1698,13 +1698,8 @@ function loadGlobalDashboard() {
     return Promise.allSettled([
         loadNextExpiryPositions(),
         loadMarketPulse(),
-        loadOverview(overviewDays),
-        loadPnlChart(pnlDays),
         loadRecent(),
         loadAssets(),
-        loadPutCallRatio(pcrDays),
-        loadHypeVolatility(HYPE_VOL_DEFAULT_DAYS),
-        loadOutcomes(),
         loadExpiryExplorer(),
     ]).then(() => {
         document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {

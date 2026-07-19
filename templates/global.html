@@ -23,12 +23,12 @@
                 <div class="side-nav-label">Workflows</div>
                 <a href="/" class="side-nav-item active">Global</a>
                 <a href="/account" class="side-nav-item">Account</a>
+                <a href="/analytics" class="side-nav-item">Analytics</a>
                 <a href="/docs" class="side-nav-item">Docs</a>
             </div>
             <div class="side-nav-group page-jump-list">
                 <div class="side-nav-label">Global</div>
                 <a href="#act-now" class="side-nav-item compact">Right Now</a>
-                <a href="#act-protocol" class="side-nav-item compact">The Protocol</a>
                 <a href="#act-explore" class="side-nav-item compact">Explore</a>
             </div>
             <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
@@ -39,6 +39,7 @@
                 <nav class="dashboard-nav">
                     <a href="/" class="active">Global</a>
                     <a href="/account">Account</a>
+                    <a href="/analytics">Analytics</a>
                     <a href="/docs">Docs</a>
                 </nav>
                 <span class="live-dot">Live Feed</span>
@@ -102,7 +103,6 @@
         <!-- Act sub-nav — sticky anchor links -->
         <nav class="act-nav" id="act-nav">
             <a href="#act-now" data-act="act-now" class="active">Right Now</a>
-            <a href="#act-protocol" data-act="act-protocol">The Protocol</a>
             <a href="#act-explore" data-act="act-explore">Explore</a>
         </nav>
 
@@ -183,72 +183,14 @@
             </div>
         </section>
 
-        <!-- ════════════════════════════════════════════════════════════════
-             ACT 2 — THE PROTOCOL
-             How the protocol has performed over time
-             ════════════════════════════════════════════════════════════════ -->
-        <div class="act-divider" id="act-protocol">
-            <div class="act-title">The Protocol</div>
-            <div class="act-subtitle">Historical performance — change the time window once, the charts follow</div>
-            <!-- Unified time-range selector — cascades to Overview, PnL, Put/Call -->
-            <div class="time-range-control">
-                <span class="time-range-label">Time window</span>
-                <div class="tabs time-range-tabs" id="time-range-tabs">
-                    <button class="tab-button" data-range-days="7">7d</button>
-                    <button class="tab-button" data-range-days="30">30d</button>
-                    <button class="tab-button active" data-range-days="90">90d</button>
-                    <button class="tab-button" data-range-days="180">180d</button>
-                    <button class="tab-button" data-range-days="0">All</button>
-                </div>
+        <a class="analytics-handoff" href="/analytics">
+            <div>
+                <span class="analytics-eyebrow">NEW // RESEARCH DESK</span>
+                <strong>Looking for the deeper protocol story?</strong>
+                <p>Notional streams, historical premium surfaces, volatility regimes, and assignment-adjusted outcomes now live in Analytics.</p>
             </div>
-        </div>
-
-        <!-- Protocol Overview + Volume -->
-        <section class="card">
-            <h2>Volume &amp; Activity</h2>
-            <div id="summary-loading" class="loading">Loading summary...</div>
-            <div id="summary-content" style="display: none;">
-                <div class="summary-grid" id="summary-grid"></div>
-                <div id="chain-breakdown" class="chain-breakdown"></div>
-            </div>
-            <div id="volume-chart" class="chart-container" style="margin-top: 24px;"></div>
-        </section>
-
-        <!-- Premium PnL — cumulative premium over time -->
-        <section class="card">
-            <h2>Protocol Premium (PnL)</h2>
-            <div id="pnl-loading" class="loading">Loading...</div>
-            <div id="pnl-chart" class="chart-container" style="display: none;"></div>
-        </section>
-
-        <!-- Put/Call Ratio Trend -->
-        <section class="card">
-            <h2>Put / Call Trend</h2>
-            <div id="pcr-loading" class="loading">Loading...</div>
-            <div id="pcr-chart" class="chart-container" style="display: none;"></div>
-        </section>
-
-        <!-- HYPE realized volatility -->
-        <section class="card">
-            <h2>HYPE Volatility Index</h2>
-            <p class="card-subtitle">Daily close-to-close realized volatility, annualized.</p>
-            <div id="hype-vol-loading" class="loading">Loading...</div>
-            <div id="hype-vol-content" style="display: none;">
-                <div class="summary-grid" id="hype-vol-summary"></div>
-                <div id="hype-vol-chart" class="chart-container" style="margin-top: 24px;"></div>
-            </div>
-        </section>
-
-        <!-- Outcomes Breakdown (lifetime — independent of time window) -->
-        <section class="card">
-            <h2>Outcome Analysis</h2>
-            <p class="card-subtitle">Lifetime — settled positions only.</p>
-            <div id="outcomes-loading" class="loading">Loading...</div>
-            <div id="outcomes-content" style="display: none;">
-                <div class="summary-grid" id="outcomes-summary"></div>
-                <div id="outcomes-by-asset" style="margin-top: 16px;"></div>
-            </div>
-        </section>
+            <span class="analytics-handoff-arrow">Open Analytics →</span>
+        </a>
 
         <!-- ════════════════════════════════════════════════════════════════
              ACT 3 — EXPLORE

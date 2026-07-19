@@ -6,6 +6,7 @@ Web dashboard and agent-friendly CLI for managing Rysk option positions.
 
 - **Open Positions**: Track current positions with strategy tagging (CC/CSP)
 - **Historical Performance**: View expired outcomes and deep-dive analytics
+- **Protocol Analytics**: Explore notional streams, historical OTM/APR cohorts, volatility regimes, and assignment-adjusted outcomes
 - **CLI**: Query account, open positions, strike distributions, and history in table or JSON mode
 
 ## Setup
@@ -48,6 +49,8 @@ poetry run python app.py
 ```
 http://localhost:5001
 ```
+
+The protocol research desk is available at `http://localhost:5001/analytics`.
 
 ## CLI Usage
 
@@ -123,6 +126,7 @@ CLI reliability options:
 ## Project Structure
 
 - `app.py` - Flask web server
+- `analytics_services.py` - Protocol flow, tenor, outcome, and OTM/APR research datasets
 - `dashboard_services.py` - Shared service layer for API routes + CLI parity
 - `rysk_cli.py` - Agent-oriented CLI entrypoint
 - `rpc_client.py` - Hyperliquid RPC client for balances

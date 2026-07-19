@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RYSK://TERMINAL — Analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="side-nav" aria-label="Dashboard workflow">
+            <a class="side-brand" href="/">
+                <span class="side-brand-mark">R</span>
+                <span><strong>RYSK</strong><small>//terminal</small></span>
+            </a>
+            <div class="side-nav-group">
+                <div class="side-nav-label">Workflows</div>
+                <a href="/" class="side-nav-item">Global</a>
+                <a href="/account" class="side-nav-item">Account</a>
+                <a href="/analytics" class="side-nav-item active">Analytics</a>
+                <a href="/docs" class="side-nav-item">Docs</a>
+            </div>
+            <div class="side-nav-group page-jump-list">
+                <div class="side-nav-label">Research</div>
+                <a href="#act-flow" class="side-nav-item compact">Protocol Flow</a>
+                <a href="#act-surface" class="side-nav-item compact">Premium Surface</a>
+                <a href="#act-volatility" class="side-nav-item compact">Volatility</a>
+                <a href="#act-outcomes" class="side-nav-item compact">Risk / Reward</a>
+            </div>
+            <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
+        </aside>
+
+        <main class="container app-main analytics-page">
+            <header>
+                <div class="header-topline">
+                    <nav class="dashboard-nav">
+                        <a href="/">Global</a>
+                        <a href="/account">Account</a>
+                        <a href="/analytics" class="active">Analytics</a>
+                        <a href="/docs">Docs</a>
+                    </nav>
+                    <span class="live-dot observed-dot">Observed Data</span>
+                    <button class="theme-toggle" id="theme-toggle" title="Toggle day/night mode">&#9790;</button>
+                </div>
+                <h1>Research <em>Desk</em></h1>
+            </header>
+
+            <section class="analytics-masthead">
+                <div class="analytics-masthead-copy">
+                    <div class="analytics-eyebrow">RYSK INTELLIGENCE // EXECUTED FLOW</div>
+                    <h2>Turn yesterday's RFQs into tomorrow's edge.</h2>
+                    <p>Explore where notional moves, how tenor and moneyness have historically priced, and which volatility regimes paid option sellers.</p>
+                </div>
+                <div class="analytics-masthead-aside">
+                    <span class="method-chip">Historical executions</span>
+                    <span class="method-chip">Prior-close moneyness</span>
+                    <span class="method-chip">Settled outcomes</span>
+                    <div class="signal-line"><span></span> No synthetic live quotes</div>
+                </div>
+            </section>
+
+            <section class="hero-kpis analytics-kpis" id="analytics-kpis">
+                <div class="hero-kpi" data-slot="primary">
+                    <div class="hero-kpi-label">Observed Notional</div>
+                    <div class="hero-kpi-value" id="analytics-notional">—</div>
+                    <div class="hero-kpi-sub" id="analytics-notional-sub">&nbsp;</div>
+                </div>
+                <div class="hero-kpi">
+                    <div class="hero-kpi-label">Premium</div>
+                    <div class="hero-kpi-value" id="analytics-premium">—</div>
+                    <div class="hero-kpi-sub" id="analytics-premium-sub">&nbsp;</div>
+                </div>
+                <div class="hero-kpi">
+                    <div class="hero-kpi-label">Premium Yield</div>
+                    <div class="hero-kpi-value" id="analytics-yield">—</div>
+                    <div class="hero-kpi-sub">premium / notional</div>
+                </div>
+                <div class="hero-kpi">
+                    <div class="hero-kpi-label">Weighted APR</div>
+                    <div class="hero-kpi-value" id="analytics-apr">—</div>
+                    <div class="hero-kpi-sub" id="analytics-apr-sub">&nbsp;</div>
+                </div>
+                <div class="hero-kpi">
+                    <div class="hero-kpi-label">Returned</div>
+                    <div class="hero-kpi-value" id="analytics-returned">—</div>
+                    <div class="hero-kpi-sub" id="analytics-returned-sub">settled positions</div>
+                </div>
+            </section>
+
+            <nav class="act-nav analytics-act-nav" id="analytics-act-nav">
+                <a href="#act-flow" data-act="act-flow" class="active">Protocol Flow</a>
+                <a href="#act-surface" data-act="act-surface">Premium Surface</a>
+                <a href="#act-volatility" data-act="act-volatility">Volatility</a>
+                <a href="#act-outcomes" data-act="act-outcomes">Risk / Reward</a>
+            </nav>
+
+            <div class="analytics-toolbar card">
+                <div class="analytics-filter-group">
+                    <span class="analytics-filter-label">Window</span>
+                    <div class="tabs" id="analytics-range-tabs">
+                        <button class="tab-button" data-days="30">30d</button>
+                        <button class="tab-button" data-days="90">90d</button>
+                        <button class="tab-button active" data-days="365">1y</button>
+                        <button class="tab-button" data-days="0">All</button>
+                    </div>
+                </div>
+                <div class="analytics-filter-group">
+                    <span class="analytics-filter-label">Chain</span>
+                    <div class="tabs" id="analytics-chain-tabs">
+                        <button class="tab-button active" data-chain="all">All</button>
+                        <button class="tab-button" data-chain="hyperevm">HyperEVM</button>
+                        <button class="tab-button" data-chain="ethereum">Ethereum</button>
+                    </div>
+                </div>
+                <div class="analytics-data-status" id="analytics-data-status">Loading research set…</div>
+            </div>
+
+            <div class="act-divider" id="act-flow">
+                <div class="act-title">Protocol Flow</div>
+                <div class="act-subtitle">See which underlyings are absorbing notional—and when the mix changes</div>
+            </div>
+
+            <section class="card analytics-chart-card analytics-feature-card">
+                <div class="chart-title-row">
+                    <div>
+                        <div class="analytics-eyebrow">CAPITAL ROTATION</div>
+                        <h2>Notional Stream</h2>
+                        <p class="card-subtitle">Executed strike notional, stacked by underlying. Weekly buckets in longer views.</p>
+                    </div>
+                    <div class="chart-stat" id="stream-leader">—</div>
+                </div>
+                <div id="notional-stream-loading" class="loading">Building notional stream…</div>
+                <div id="notional-stream-chart" class="chart-container analytics-tall-chart"></div>
+            </section>
+
+            <div class="analytics-grid analytics-grid-2">
+                <section class="card analytics-chart-card">
+                    <div class="analytics-eyebrow">CAPITAL EFFICIENCY</div>
+                    <h2>Premium Efficiency</h2>
+                    <p class="card-subtitle">Premium yield by asset; bubble size is observed notional.</p>
+                    <div id="efficiency-chart" class="chart-container analytics-medium-chart"></div>
+                </section>
+                <section class="card analytics-chart-card">
+                    <div class="analytics-eyebrow">TERM STRUCTURE</div>
+                    <h2>APR by Tenor</h2>
+                    <p class="card-subtitle">Notional-weighted executed APR across entry DTE buckets.</p>
+                    <div id="tenor-chart" class="chart-container analytics-medium-chart"></div>
+                </section>
+            </div>
+
+            <div class="act-divider" id="act-surface">
+                <div class="act-title">Historical Premium Surface</div>
+                <div class="act-subtitle">Translate a target strike into an observed APR benchmark</div>
+            </div>
+
+            <section class="card premium-lab">
+                <div class="premium-lab-header">
+                    <div>
+                        <div class="analytics-eyebrow">RFQ MEMORY // NOT A LIVE QUOTE</div>
+                        <h2>Strike Target Lab</h2>
+                        <p class="card-subtitle">“If spot is $60 and I want $63, what did comparable 5% OTM calls historically earn?”</p>
+                    </div>
+                    <div class="historical-badge"><span></span> Historical benchmark</div>
+                </div>
+                <div class="premium-lab-layout">
+                    <div class="premium-lab-controls">
+                        <label class="analytics-field">
+                            <span>Underlying</span>
+                            <select id="surface-asset" class="chart-select"><option value="HYPE">HYPE</option></select>
+                        </label>
+                        <div class="analytics-field">
+                            <span>Strategy</span>
+                            <div class="tabs surface-type-tabs" id="surface-type-tabs">
+                                <button class="tab-button active" data-option-type="call">Covered Call</button>
+                                <button class="tab-button" data-option-type="put">Cash-Secured Put</button>
+                            </div>
+                        </div>
+                        <label class="analytics-field">
+                            <span>Entry tenor</span>
+                            <select id="surface-dte" class="chart-select">
+                                <option value="all">All tenors</option>
+                                <option value="0,7">0–7 days</option>
+                                <option value="7,14">8–14 days</option>
+                                <option value="14,30" selected>15–30 days</option>
+                                <option value="30,60">31–60 days</option>
+                                <option value="60,">60+ days</option>
+                            </select>
+                        </label>
+                        <div class="surface-price-grid">
+                            <label class="analytics-field">
+                                <span>Reference spot</span>
+                                <div class="input-with-prefix"><b>$</b><input id="surface-spot" type="number" min="0" step="any" placeholder="60"></div>
+                            </label>
+                            <label class="analytics-field">
+                                <span>Target strike</span>
+                                <div class="input-with-prefix"><b>$</b><input id="surface-strike" type="number" min="0" step="any" placeholder="63"></div>
+                            </label>
+                        </div>
+                        <div class="surface-formula" id="surface-formula">Enter a spot and strike to map your target.</div>
+                    </div>
+                    <div class="premium-lab-result" id="surface-result">
+                        <div class="result-kicker">YOUR TARGET</div>
+                        <div class="result-otm" id="result-otm">—</div>
+                        <div class="result-bucket" id="result-bucket">Waiting for historical surface</div>
+                        <div class="result-metrics">
+                            <div><span>Weighted APR</span><strong id="result-apr">—</strong></div>
+                            <div><span>Median APR</span><strong id="result-median">—</strong></div>
+                            <div><span>Premium yield</span><strong id="result-yield">—</strong></div>
+                            <div><span>Returned</span><strong id="result-returned">—</strong></div>
+                        </div>
+                        <div class="result-confidence" id="result-confidence">— observed executions</div>
+                    </div>
+                </div>
+                <div id="surface-loading" class="loading">Reconstructing historical moneyness…</div>
+                <div id="otm-apr-chart" class="chart-container analytics-tall-chart"></div>
+                <div class="methodology-strip">
+                    <span class="methodology-icon">i</span>
+                    <p><strong>How to read this:</strong> moneyness uses the previous Hyperliquid daily close before each trade. It avoids same-day lookahead, but it is still a historical reference—not an RFQ or guaranteed executable premium.</p>
+                    <span id="surface-coverage">—</span>
+                </div>
+            </section>
+
+            <div class="act-divider" id="act-volatility">
+                <div class="act-title">Volatility Regimes</div>
+                <div class="act-subtitle">Compare realized volatility across the protocol's core underlyings</div>
+            </div>
+
+            <section class="card analytics-chart-card analytics-feature-card">
+                <div class="chart-title-row">
+                    <div>
+                        <div class="analytics-eyebrow">REALIZED VOLATILITY</div>
+                        <h2>HYPE / BTC / ETH</h2>
+                        <p class="card-subtitle">Annualized daily close-to-close volatility. Switch the focus to inspect shorter regimes.</p>
+                    </div>
+                    <div class="tabs" id="vol-window-tabs">
+                        <button class="tab-button" data-vol-window="3">3d</button>
+                        <button class="tab-button" data-vol-window="7">7d</button>
+                        <button class="tab-button active" data-vol-window="30">30d</button>
+                    </div>
+                </div>
+                <div id="volatility-snapshot" class="volatility-snapshot"></div>
+                <div id="volatility-loading" class="loading">Loading volatility regimes…</div>
+                <div id="volatility-chart" class="chart-container analytics-tall-chart"></div>
+            </section>
+
+            <div class="act-divider" id="act-outcomes">
+                <div class="act-title">Risk / Reward</div>
+                <div class="act-subtitle">Premium efficiency is only useful when you can see the assignment cost</div>
+            </div>
+
+            <div class="analytics-grid analytics-grid-risk">
+                <section class="card analytics-chart-card">
+                    <div class="analytics-eyebrow">OUTCOME FRONTIER</div>
+                    <h2>Yield vs Assignment</h2>
+                    <p class="card-subtitle">Settled assignment rate against premium yield. Bubble size is notional.</p>
+                    <div id="outcome-frontier-chart" class="chart-container analytics-tall-chart"></div>
+                </section>
+                <section class="card analytics-rank-card">
+                    <div class="analytics-eyebrow">ASSET SCORECARD</div>
+                    <h2>Observed Leaders</h2>
+                    <p class="card-subtitle">Ranked by protocol notional in the selected window.</p>
+                    <div id="asset-scorecard" class="analytics-scorecard"></div>
+                </section>
+            </div>
+
+            <div class="analytics-footer-note">
+                <span>RYSK://RESEARCH</span>
+                <p>Executed trade history describes the market Rysk cleared. It does not manufacture liquidity where an RFQ has not been requested.</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+</body>
+</html>

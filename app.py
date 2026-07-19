@@ -4,6 +4,7 @@ Flask application for Rysk Options Dashboard.
 
 from flask import Flask, render_template, jsonify, request
 import os
+from analytics_services import get_analytics_overview, get_otm_apr_surface
 from chain_metadata import parse_chain_filter
 from dashboard_services import (
     build_assignment_backtest,
@@ -99,6 +100,12 @@ def index():
 def account():
     """Per-wallet dashboard"""
     return render_template('dashboard.html', account_address=ACCOUNT_ADDRESS)
+
+
+@app.route('/analytics')
+def analytics():
+    """Protocol research desk."""
+    return render_template('analytics.html')
 
 
 @app.route('/docs')
@@ -460,6 +467,52 @@ def api_global_volatility():
         days = request.args.get("days", 365, type=int)
         data = get_asset_volatility(asset=asset, days=days)
         return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/analytics/overview')
+def api_analytics_overview():
+    """Time-series, tenor, efficiency, and outcome research datasets."""
+    try:
+        days = request.args.get("days", 365, type=int)
+        chain_id = resolve_chain_filter()
+        conn = get_db()
+        try:
+            data = get_analytics_overview(conn, days=days, chain_id=chain_id)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/analytics/otm-apr')
+def api_analytics_otm_apr():
+    """Historical APR by strike distance from the prior daily close."""
+    try:
+        asset = request.args.get("asset", "HYPE").strip().upper() or "HYPE"
+        days = request.args.get("days", 365, type=int)
+        option_type = request.args.get("option_type", "call").strip().lower() or "call"
+        dte_min = request.args.get("dte_min", None, type=float)
+        dte_max = request.args.get("dte_max", None, type=float)
+        chain_id = resolve_chain_filter()
+        conn = get_db()
+        try:
+            data = get_otm_apr_surface(
+                conn,
+                asset=asset,
+                days=days,
+                option_type=option_type,
+                dte_min=dte_min,
+                dte_max=dte_max,
+                chain_id=chain_id,
+            )
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
