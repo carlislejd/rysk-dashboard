@@ -3,6 +3,7 @@
 let analyticsDays = 365;
 let analyticsChain = 'all';
 let analyticsOverview = null;
+let strategyMixMode = 'notional';
 let surfaceData = null;
 let surfaceOptionType = 'call';
 let surfaceRequestId = 0;
@@ -134,6 +135,87 @@ function renderNotionalStream(data) {
     setText('stream-leader', leader ? `${leader.asset} leads · ${compactCurrency(leader.notional)}` : '—');
 }
 
+function renderStrategyMix(data) {
+    const points = data.strategy_mix_series || [];
+    const loading = document.getElementById('strategy-mix-loading');
+    const chart = document.getElementById('strategy-mix-chart');
+    if (loading) loading.style.display = 'none';
+
+    if (!points.length) {
+        if (loading) {
+            loading.textContent = 'No covered-call or cash-secured-put executions in this window.';
+            loading.style.display = 'block';
+        }
+        if (chart) Plotly.purge(chart);
+        setText('strategy-mix-summary', '—');
+        return;
+    }
+
+    const isNotional = strategyMixMode === 'notional';
+    const totalKey = isNotional ? 'total_notional' : 'total_count';
+    const callKey = isNotional ? 'call_notional' : 'call_count';
+    const putKey = isNotional ? 'put_notional' : 'put_count';
+    const dates = points.map(point => point.date);
+    const callShares = points.map(point => point[totalKey] > 0 ? point[callKey] / point[totalKey] * 100 : 0);
+    const putShares = points.map(point => point[totalKey] > 0 ? point[putKey] / point[totalKey] * 100 : 0);
+    const valueFormat = isNotional ? '$,.0f' : ',.0f';
+    const valueLabel = isNotional ? 'strike notional' : 'executions';
+
+    const traces = [
+        {
+            x: dates,
+            y: callShares,
+            customdata: points.map(point => [point[callKey], point[totalKey]]),
+            type: 'scatter',
+            mode: 'lines',
+            stackgroup: 'strategy-share',
+            name: 'Covered calls',
+            line: { color: '#00d4ff', width: 1.8 },
+            fillcolor: 'rgba(0, 212, 255, 0.38)',
+            hovertemplate: `<b>Covered calls</b><br>%{x}<br>%{y:.1f}% of ${valueLabel}<br>%{customdata[0]:${valueFormat}} of %{customdata[1]:${valueFormat}}<extra></extra>`,
+        },
+        {
+            x: dates,
+            y: putShares,
+            customdata: points.map(point => [point[putKey], point[totalKey]]),
+            type: 'scatter',
+            mode: 'lines',
+            stackgroup: 'strategy-share',
+            name: 'Cash-secured puts',
+            line: { color: '#ff4d8d', width: 1.8 },
+            fillcolor: 'rgba(255, 77, 141, 0.42)',
+            hovertemplate: `<b>Cash-secured puts</b><br>%{x}<br>%{y:.1f}% of ${valueLabel}<br>%{customdata[0]:${valueFormat}} of %{customdata[1]:${valueFormat}}<extra></extra>`,
+        },
+    ];
+
+    Plotly.newPlot('strategy-mix-chart', traces, analyticsPlotLayout({
+        margin: { l: 58, r: 28, t: 20, b: 56 },
+        xaxis: { showgrid: false, fixedrange: true },
+        yaxis: { title: `${isNotional ? 'Notional' : 'Execution'} share`, ticksuffix: '%', range: [0, 100], gridcolor: getPlotlyTheme().gridColor, fixedrange: true },
+        legend: { orientation: 'h', y: -0.16, x: 0 },
+        hovermode: 'x unified',
+        shapes: [{
+            type: 'line', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 50, y1: 50,
+            line: { color: 'rgba(255,255,255,0.3)', width: 1, dash: 'dot' },
+        }],
+        annotations: [{
+            xref: 'paper', yref: 'y', x: 1, y: 50, text: '50 / 50', showarrow: false,
+            font: { size: 9, color: getPlotlyTheme().annotationColor }, xanchor: 'right', yanchor: 'bottom',
+        }],
+    }), ANALYTICS_PLOT_CONFIG);
+
+    const totals = data.totals || {};
+    const callTotal = Number(totals[isNotional ? 'call_notional' : 'call_count']) || 0;
+    const putTotal = Number(totals[isNotional ? 'put_notional' : 'put_count']) || 0;
+    const combined = callTotal + putTotal;
+    const putShare = combined > 0 ? putTotal / combined * 100 : 0;
+    const ratio = callTotal > 0 ? putTotal / callTotal : null;
+    setText(
+        'strategy-mix-summary',
+        `CSP ${formatPercentage(putShare, 1)} · ${ratio != null ? `${formatNumber(ratio, 2)}× CC` : 'no CC baseline'}`,
+    );
+}
+
 function bubbleSizes(rows, min = 16, max = 54) {
     const values = rows.map(row => Math.sqrt(Math.max(Number(row.notional) || 0, 0)));
     const peak = Math.max(...values, 1);
@@ -263,6 +345,7 @@ async function loadAnalyticsOverview() {
     analyticsOverview = data;
     renderAnalyticsKpis(data);
     renderNotionalStream(data);
+    renderStrategyMix(data);
     renderEfficiency(data);
     renderTenorSurface(data);
     renderStrategyYield(data);
@@ -522,6 +605,14 @@ document.addEventListener('DOMContentLoaded', () => {
         analyticsChain = button.dataset.chain || 'all';
         document.querySelectorAll('#analytics-chain-tabs .tab-button').forEach(item => item.classList.toggle('active', item === button));
         refreshAnalytics({ resetSurface: true });
+    });
+
+    document.getElementById('strategy-mix-tabs').addEventListener('click', event => {
+        const button = event.target.closest('[data-strategy-mix]');
+        if (!button) return;
+        strategyMixMode = button.dataset.strategyMix;
+        document.querySelectorAll('#strategy-mix-tabs .tab-button').forEach(item => item.classList.toggle('active', item === button));
+        if (analyticsOverview) renderStrategyMix(analyticsOverview);
     });
 
     document.getElementById('surface-type-tabs').addEventListener('click', event => {

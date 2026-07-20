@@ -212,6 +212,14 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
     by_date: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: {"notional": 0.0, "premium": 0.0, "trade_count": 0})
     )
+    strategy_by_date: Dict[str, Dict[str, float]] = defaultdict(
+        lambda: {
+            "call_count": 0,
+            "put_count": 0,
+            "call_notional": 0.0,
+            "put_notional": 0.0,
+        }
+    )
     tenor: Dict[Tuple[str, str], Dict[str, Any]] = defaultdict(_new_aggregate)
 
     for row in records:
@@ -227,6 +235,9 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
         point["notional"] += float(row.get("notional_f") or 0)
         point["premium"] += float(row.get("premium_f") or 0)
         point["trade_count"] += 1
+        strategy_point = strategy_by_date[bucket]
+        strategy_point[f"{option_type}_count"] += 1
+        strategy_point[f"{option_type}_notional"] += float(row.get("notional_f") or 0)
 
         expiry = row.get("expiry")
         dte = ((float(expiry) - float(row["created_at"])) / SECONDS_PER_DAY) if expiry else None
@@ -278,6 +289,16 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
     if any("OTHER" in point["assets"] for point in stream_points):
         stream_assets.append("OTHER")
 
+    strategy_mix_series = []
+    for date in sorted(strategy_by_date):
+        strategy_point = strategy_by_date[date]
+        strategy_mix_series.append({
+            "date": date,
+            **strategy_point,
+            "total_count": strategy_point["call_count"] + strategy_point["put_count"],
+            "total_notional": strategy_point["call_notional"] + strategy_point["put_notional"],
+        })
+
     tenor_surface = []
     tenor_order = {label: idx for idx, (_, _, label) in enumerate(TENOR_BUCKETS)}
     for (asset, label), aggregate in tenor.items():
@@ -299,6 +320,7 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
         "by_asset_option_type": finished_asset_option_types,
         "stream_assets": stream_assets,
         "notional_series": stream_points,
+        "strategy_mix_series": strategy_mix_series,
         "tenor_buckets": [label for _, _, label in TENOR_BUCKETS],
         "tenor_surface": tenor_surface,
         "methodology": {

@@ -136,6 +136,25 @@
                 <div id="notional-stream-chart" class="chart-container analytics-tall-chart"></div>
             </section>
 
+            <section class="card analytics-chart-card analytics-feature-card">
+                <div class="chart-title-row">
+                    <div>
+                        <div class="analytics-eyebrow">POSITIONING REGIME</div>
+                        <h2>Strategy Share Over Time</h2>
+                        <p class="card-subtitle">100% mix of covered calls and cash-secured puts. Compare participation with strike-notional allocation.</p>
+                    </div>
+                    <div class="chart-title-controls">
+                        <div class="chart-stat" id="strategy-mix-summary">—</div>
+                        <div class="tabs" id="strategy-mix-tabs">
+                            <button class="tab-button" data-strategy-mix="count">Count</button>
+                            <button class="tab-button active" data-strategy-mix="notional">Notional</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="strategy-mix-loading" class="loading">Building strategy mix…</div>
+                <div id="strategy-mix-chart" class="chart-container analytics-medium-chart"></div>
+            </section>
+
             <div class="analytics-grid analytics-grid-2">
                 <section class="card analytics-chart-card">
                     <div class="analytics-eyebrow">CAPITAL EFFICIENCY</div>

@@ -3075,6 +3075,14 @@ code {
         var(--bg-raised);
 }
 
+.chart-title-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
 .chart-title-row {
     display: flex;
     align-items: flex-start;

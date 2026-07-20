@@ -62,6 +62,14 @@ class TestAnalyticsServices(unittest.TestCase):
         self.assertEqual(len(result["by_asset_option_type"]), 3)
         self.assertEqual(result["totals"]["return_rate_pct"], 2 / 3 * 100)
         self.assertEqual(sum(point["total_notional"] for point in result["notional_series"]), 10_000)
+        self.assertEqual(len(result["strategy_mix_series"]), 1)
+        strategy_mix = result["strategy_mix_series"][0]
+        self.assertEqual(strategy_mix["call_count"], 2)
+        self.assertEqual(strategy_mix["put_count"], 1)
+        self.assertEqual(strategy_mix["call_notional"], 7_000)
+        self.assertEqual(strategy_mix["put_notional"], 3_000)
+        self.assertEqual(strategy_mix["total_count"], 3)
+        self.assertEqual(strategy_mix["total_notional"], 10_000)
         self.assertTrue(result["tenor_surface"])
 
         yield_metrics = {
