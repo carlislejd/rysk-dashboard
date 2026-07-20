@@ -91,12 +91,17 @@ def _new_aggregate() -> Dict[str, Any]:
         "trade_count": 0,
         "notional": 0.0,
         "premium": 0.0,
-        "apr_values": [],
-        "apr_notional": 0.0,
-        "apr_denominator": 0.0,
+        "yield_apr_values": [],
+        "annualizable_premium": 0.0,
+        "quoted_apr_notional": 0.0,
+        "quoted_apr_denominator": 0.0,
+        "dte_notional": 0.0,
+        "dte_denominator": 0.0,
         "assigned": 0,
         "returned": 0,
         "settled": 0,
+        "put_count": 0,
+        "call_count": 0,
         "put_notional": 0.0,
         "call_notional": 0.0,
     }
@@ -105,20 +110,38 @@ def _new_aggregate() -> Dict[str, Any]:
 def _add_row(aggregate: Dict[str, Any], row: Dict[str, Any]) -> None:
     notional = float(row.get("notional_f") or 0)
     premium = float(row.get("premium_f") or 0)
-    apr = row.get("apr_f")
     aggregate["trade_count"] += 1
     aggregate["notional"] += notional
     aggregate["premium"] += premium
     if row.get("is_put"):
+        aggregate["put_count"] += 1
         aggregate["put_notional"] += notional
     else:
+        aggregate["call_count"] += 1
         aggregate["call_notional"] += notional
-    if apr is not None:
-        apr_value = float(apr)
-        aggregate["apr_values"].append(apr_value)
+
+    # Use the same strike-notional capital basis for both raw premium yield and
+    # its annualized form. The APR supplied by the protocol can use a different
+    # basis for covered calls, so mixing it with premium / strike notional makes
+    # the two headline metrics look comparable when they are not.
+    created_at = row.get("created_at")
+    expiry = row.get("expiry")
+    dte = None
+    if created_at is not None and expiry is not None:
+        dte = (float(expiry) - float(created_at)) / SECONDS_PER_DAY
+    if dte is not None and dte > 0 and notional > 0:
+        yield_apr = premium / notional * 100.0 * 365.0 / dte
+        aggregate["yield_apr_values"].append(yield_apr)
+        aggregate["annualizable_premium"] += premium
+        aggregate["dte_notional"] += dte * notional
+        aggregate["dte_denominator"] += notional
+
+    quoted_apr = row.get("apr_f")
+    if quoted_apr is not None:
+        quoted_apr_value = float(quoted_apr)
         if notional > 0:
-            aggregate["apr_notional"] += apr_value * notional
-            aggregate["apr_denominator"] += notional
+            aggregate["quoted_apr_notional"] += quoted_apr_value * notional
+            aggregate["quoted_apr_denominator"] += notional
     outcome = row.get("outcome")
     if outcome in ("Assigned", "Returned"):
         aggregate["settled"] += 1
@@ -128,22 +151,32 @@ def _add_row(aggregate: Dict[str, Any], row: Dict[str, Any]) -> None:
 def _finish_aggregate(aggregate: Dict[str, Any]) -> Dict[str, Any]:
     notional = aggregate["notional"]
     settled = aggregate["settled"]
-    apr_values = aggregate["apr_values"]
+    yield_apr_values = aggregate["yield_apr_values"]
     return {
         "trade_count": aggregate["trade_count"],
         "notional": notional,
         "premium": aggregate["premium"],
         "premium_yield_pct": (aggregate["premium"] / notional * 100.0) if notional > 0 else None,
-        "median_apr": median(apr_values) if apr_values else None,
+        "median_apr": median(yield_apr_values) if yield_apr_values else None,
         "weighted_apr": (
-            aggregate["apr_notional"] / aggregate["apr_denominator"]
-            if aggregate["apr_denominator"] > 0 else None
+            aggregate["annualizable_premium"] * 36500.0 / aggregate["dte_notional"]
+            if aggregate["dte_notional"] > 0 else None
+        ),
+        "quoted_weighted_apr": (
+            aggregate["quoted_apr_notional"] / aggregate["quoted_apr_denominator"]
+            if aggregate["quoted_apr_denominator"] > 0 else None
+        ),
+        "weighted_dte_days": (
+            aggregate["dte_notional"] / aggregate["dte_denominator"]
+            if aggregate["dte_denominator"] > 0 else None
         ),
         "assigned": aggregate["assigned"],
         "returned": aggregate["returned"],
         "settled": settled,
         "assignment_rate_pct": aggregate["assigned"] / settled * 100.0 if settled else None,
         "return_rate_pct": aggregate["returned"] / settled * 100.0 if settled else None,
+        "put_count": aggregate["put_count"],
+        "call_count": aggregate["call_count"],
         "put_notional": aggregate["put_notional"],
         "call_notional": aggregate["call_notional"],
     }
@@ -174,6 +207,8 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
 
     totals = _new_aggregate()
     by_asset: Dict[str, Dict[str, Any]] = defaultdict(_new_aggregate)
+    by_option_type: Dict[str, Dict[str, Any]] = defaultdict(_new_aggregate)
+    by_asset_option_type: Dict[Tuple[str, str], Dict[str, Any]] = defaultdict(_new_aggregate)
     by_date: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(
         lambda: defaultdict(lambda: {"notional": 0.0, "premium": 0.0, "trade_count": 0})
     )
@@ -181,8 +216,11 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
 
     for row in records:
         asset = normalize_underlying(row.get("symbol"))
+        option_type = "put" if row.get("is_put") else "call"
         _add_row(totals, row)
         _add_row(by_asset[asset], row)
+        _add_row(by_option_type[option_type], row)
+        _add_row(by_asset_option_type[(asset, option_type)], row)
 
         bucket = _date_bucket(int(row["created_at"]), days)
         point = by_date[bucket][asset]
@@ -201,8 +239,19 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
         finished_assets.append({"asset": asset, **_finish_aggregate(aggregate)})
     finished_assets.sort(key=lambda item: item["notional"], reverse=True)
 
+    finished_option_types = [
+        {"option_type": option_type, **_finish_aggregate(by_option_type[option_type])}
+        for option_type in ("call", "put")
+        if option_type in by_option_type
+    ]
+    finished_asset_option_types = [
+        {"asset": asset, "option_type": option_type, **_finish_aggregate(aggregate)}
+        for (asset, option_type), aggregate in by_asset_option_type.items()
+    ]
+    finished_asset_option_types.sort(key=lambda item: item["notional"], reverse=True)
+
     # Keep the stream readable. Long-tail assets are still included in the
-    # efficiency/outcome datasets and filters.
+    # efficiency and strategy-yield datasets and filters.
     stream_assets = [item["asset"] for item in finished_assets[:7]]
     stream_points = []
     for date in sorted(by_date):
@@ -246,14 +295,17 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
         "totals": _finish_aggregate(totals),
         "assets": [item["asset"] for item in finished_assets],
         "by_asset": finished_assets,
+        "by_option_type": finished_option_types,
+        "by_asset_option_type": finished_asset_option_types,
         "stream_assets": stream_assets,
         "notional_series": stream_points,
         "tenor_buckets": [label for _, _, label in TENOR_BUCKETS],
         "tenor_surface": tenor_surface,
         "methodology": {
-            "apr": "Notional-weighted APR from executed Rysk trades.",
-            "premium_yield": "Observed premium divided by strike notional.",
-            "outcomes": "Assignment and return rates use settled positions only.",
+            "scope": "All observed covered-call and cash-secured-put executions, regardless of assignment outcome.",
+            "notional": "Quantity multiplied by strike; used as a consistent capital proxy without inferring holder cost basis.",
+            "premium_yield": "Total observed premium divided by total strike notional; not annualized.",
+            "apr": "Total premium divided by total strike-notional-days, annualized on a 365-day basis.",
         },
     }
 
@@ -287,7 +339,7 @@ def get_otm_apr_surface(
     if option_type not in ("call", "put", "all"):
         raise ValueError("option_type must be call, put, or all")
 
-    parts = ["symbol != ''", "strike_f > 0", "apr_f IS NOT NULL", "expiry > created_at"]
+    parts = ["symbol != ''", "strike_f > 0", "notional_f > 0", "expiry > created_at"]
     params: List[Any] = []
     if days > 0:
         parts.append("created_at >= ?")
@@ -367,7 +419,7 @@ def get_otm_apr_surface(
             "spot_reference": spot,
             "spot_reference_date": price_points[price_idx]["date"],
             "otm_pct": otm_pct,
-            "apr": float(row["apr_f"]),
+            "apr": float(row["premium_f"] or 0) / float(row["notional_f"]) * 100.0 * 365.0 / dte,
             "premium_yield_pct": (
                 float(row["premium_f"] or 0) / float(row["notional_f"] or 0) * 100.0
                 if float(row["notional_f"] or 0) > 0 else None
@@ -416,6 +468,7 @@ def get_otm_apr_surface(
         "methodology": {
             "spot_reference": "Previous Hyperliquid daily close before the trade date.",
             "otm": "Calls: strike / reference - 1. Puts: 1 - strike / reference.",
+            "apr": "Total premium divided by total strike-notional-days, annualized on a 365-day basis; assignment outcome is not a filter.",
             "warning": "Historical execution benchmark only. This is not a live RFQ or executable premium quote.",
         },
     }

@@ -39,9 +39,9 @@ class TestAnalyticsServices(unittest.TestCase):
         conn.executemany(
             "INSERT INTO trades VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
-                (1_700_000_000, 1_701_000_000, "WHYPE", 999, 100, 1000, 20, 40, 0, "Returned"),
-                (1_700_086_400, 1_701_086_400, "kHYPE", 999, 105, 3000, 30, 20, 1, "Assigned"),
-                (1_700_172_800, 1_701_172_800, "UBTC", 999, 50_000, 6000, 60, 10, 0, "Returned"),
+                (1_700_000_000, 1_700_864_000, "WHYPE", 999, 100, 1000, 20, 400, 0, "Returned"),
+                (1_700_086_400, 1_701_814_400, "kHYPE", 999, 105, 3000, 30, 200, 1, "Assigned"),
+                (1_700_172_800, 1_702_764_800, "UBTC", 999, 50_000, 6000, 60, 100, 0, "Returned"),
             ],
         )
 
@@ -49,11 +49,31 @@ class TestAnalyticsServices(unittest.TestCase):
 
         self.assertEqual(result["assets"], ["BTC", "HYPE"])
         self.assertEqual(result["totals"]["trade_count"], 3)
-        self.assertAlmostEqual(result["totals"]["weighted_apr"], 16.0)
+        # APR uses the same premium / strike-notional basis as headline yield,
+        # capital-day weighted across 10d, 20d, and 30d observations. It does
+        # not use the deliberately different quoted APRs.
+        self.assertAlmostEqual(result["totals"]["weighted_apr"], 16.06)
+        self.assertAlmostEqual(result["totals"]["quoted_weighted_apr"], 160.0)
+        self.assertAlmostEqual(result["totals"]["weighted_dte_days"], 25.0)
         self.assertAlmostEqual(result["totals"]["premium_yield_pct"], 1.1)
+        self.assertEqual(result["totals"]["call_count"], 2)
+        self.assertEqual(result["totals"]["put_count"], 1)
+        self.assertEqual(len(result["by_option_type"]), 2)
+        self.assertEqual(len(result["by_asset_option_type"]), 3)
         self.assertEqual(result["totals"]["return_rate_pct"], 2 / 3 * 100)
         self.assertEqual(sum(point["total_notional"] for point in result["notional_series"]), 10_000)
         self.assertTrue(result["tenor_surface"])
+
+        yield_metrics = {
+            key: result["totals"][key]
+            for key in ("notional", "premium", "premium_yield_pct", "weighted_apr", "weighted_dte_days")
+        }
+        conn.execute("UPDATE trades SET outcome = 'Assigned'")
+        outcome_changed = get_analytics_overview(conn, days=0)
+        self.assertEqual(
+            yield_metrics,
+            {key: outcome_changed["totals"][key] for key in yield_metrics},
+        )
         conn.close()
 
     @patch("analytics_services.get_asset_volatility")
@@ -94,7 +114,7 @@ class TestAnalyticsServices(unittest.TestCase):
         self.assertAlmostEqual(samples[0]["otm_pct"], 5.0)
         five_percent = next(bucket for bucket in result["buckets"] if bucket["label"] == "5 to 7.5%")
         self.assertEqual(five_percent["trade_count"], 1)
-        self.assertEqual(five_percent["weighted_apr"], 40)
+        self.assertAlmostEqual(five_percent["weighted_apr"], 2 / 21 * 365)
         conn.close()
 
 

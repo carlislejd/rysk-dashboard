@@ -473,7 +473,7 @@ def api_global_volatility():
 
 @app.route('/api/analytics/overview')
 def api_analytics_overview():
-    """Time-series, tenor, efficiency, and outcome research datasets."""
+    """Time-series, tenor, and execution-yield research datasets."""
     try:
         days = request.args.get("days", 365, type=int)
         chain_id = resolve_chain_filter()

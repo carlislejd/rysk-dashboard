@@ -28,7 +28,7 @@
                 <a href="#act-flow" class="side-nav-item compact">Protocol Flow</a>
                 <a href="#act-surface" class="side-nav-item compact">Premium Surface</a>
                 <a href="#act-volatility" class="side-nav-item compact">Volatility</a>
-                <a href="#act-outcomes" class="side-nav-item compact">Risk / Reward</a>
+                <a href="#act-yield" class="side-nav-item compact">Yield Mix</a>
             </div>
             <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
         </aside>
@@ -57,7 +57,7 @@
                 <div class="analytics-masthead-aside">
                     <span class="method-chip">Historical executions</span>
                     <span class="method-chip">Prior-close moneyness</span>
-                    <span class="method-chip">Settled outcomes</span>
+                    <span class="method-chip">Calls + puts</span>
                     <div class="signal-line"><span></span> No synthetic live quotes</div>
                 </div>
             </section>
@@ -76,7 +76,7 @@
                 <div class="hero-kpi">
                     <div class="hero-kpi-label">Premium Yield</div>
                     <div class="hero-kpi-value" id="analytics-yield">—</div>
-                    <div class="hero-kpi-sub">premium / notional</div>
+                    <div class="hero-kpi-sub" id="analytics-yield-sub">premium / strike notional</div>
                 </div>
                 <div class="hero-kpi">
                     <div class="hero-kpi-label">Weighted APR</div>
@@ -84,9 +84,9 @@
                     <div class="hero-kpi-sub" id="analytics-apr-sub">&nbsp;</div>
                 </div>
                 <div class="hero-kpi">
-                    <div class="hero-kpi-label">Returned</div>
-                    <div class="hero-kpi-value" id="analytics-returned">—</div>
-                    <div class="hero-kpi-sub" id="analytics-returned-sub">settled positions</div>
+                    <div class="hero-kpi-label">Weighted Tenor</div>
+                    <div class="hero-kpi-value" id="analytics-tenor">—</div>
+                    <div class="hero-kpi-sub">entry to expiry</div>
                 </div>
             </section>
 
@@ -94,7 +94,7 @@
                 <a href="#act-flow" data-act="act-flow" class="active">Protocol Flow</a>
                 <a href="#act-surface" data-act="act-surface">Premium Surface</a>
                 <a href="#act-volatility" data-act="act-volatility">Volatility</a>
-                <a href="#act-outcomes" data-act="act-outcomes">Risk / Reward</a>
+                <a href="#act-yield" data-act="act-yield">Yield Mix</a>
             </nav>
 
             <div class="analytics-toolbar card">
@@ -145,15 +145,15 @@
                 </section>
                 <section class="card analytics-chart-card">
                     <div class="analytics-eyebrow">TERM STRUCTURE</div>
-                    <h2>APR by Tenor</h2>
-                    <p class="card-subtitle">Notional-weighted executed APR across entry DTE buckets.</p>
+                    <h2>Annualized Yield by Tenor</h2>
+                    <p class="card-subtitle">Premium divided by strike-notional-days across entry DTE buckets.</p>
                     <div id="tenor-chart" class="chart-container analytics-medium-chart"></div>
                 </section>
             </div>
 
             <div class="act-divider" id="act-surface">
                 <div class="act-title">Historical Premium Surface</div>
-                <div class="act-subtitle">Translate a target strike into an observed APR benchmark</div>
+                <div class="act-subtitle">Translate a target strike into an observed annualized-yield benchmark</div>
             </div>
 
             <section class="card premium-lab">
@@ -206,10 +206,10 @@
                         <div class="result-otm" id="result-otm">—</div>
                         <div class="result-bucket" id="result-bucket">Waiting for historical surface</div>
                         <div class="result-metrics">
-                            <div><span>Weighted APR</span><strong id="result-apr">—</strong></div>
-                            <div><span>Median APR</span><strong id="result-median">—</strong></div>
+                            <div><span>Annualized yield</span><strong id="result-apr">—</strong></div>
+                            <div><span>Median annualized</span><strong id="result-median">—</strong></div>
                             <div><span>Premium yield</span><strong id="result-yield">—</strong></div>
-                            <div><span>Returned</span><strong id="result-returned">—</strong></div>
+                            <div><span>Weighted tenor</span><strong id="result-tenor">—</strong></div>
                         </div>
                         <div class="result-confidence" id="result-confidence">— observed executions</div>
                     </div>
@@ -246,17 +246,17 @@
                 <div id="volatility-chart" class="chart-container analytics-tall-chart"></div>
             </section>
 
-            <div class="act-divider" id="act-outcomes">
-                <div class="act-title">Risk / Reward</div>
-                <div class="act-subtitle">Premium efficiency is only useful when you can see the assignment cost</div>
+            <div class="act-divider" id="act-yield">
+                <div class="act-title">Yield Mix</div>
+                <div class="act-subtitle">Compare every covered call and cash-secured put on the same strike-notional basis</div>
             </div>
 
             <div class="analytics-grid analytics-grid-risk">
                 <section class="card analytics-chart-card">
-                    <div class="analytics-eyebrow">OUTCOME FRONTIER</div>
-                    <h2>Yield vs Assignment</h2>
-                    <p class="card-subtitle">Settled assignment rate against premium yield. Bubble size is notional.</p>
-                    <div id="outcome-frontier-chart" class="chart-container analytics-tall-chart"></div>
+                    <div class="analytics-eyebrow">STRATEGY MIX</div>
+                    <h2>Yield by Strategy</h2>
+                    <p class="card-subtitle">Premium / strike notional for all executions. Assignment and cost basis are not inputs.</p>
+                    <div id="strategy-yield-chart" class="chart-container analytics-tall-chart"></div>
                 </section>
                 <section class="card analytics-rank-card">
                     <div class="analytics-eyebrow">ASSET SCORECARD</div>

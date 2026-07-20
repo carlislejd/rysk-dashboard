@@ -77,12 +77,12 @@ function renderAnalyticsKpis(data) {
     setText('analytics-notional', compactCurrency(totals.notional));
     setText('analytics-notional-sub', `${formatNumber(totals.trade_count || 0, 0)} executions · ${windowLabel()}`);
     setText('analytics-premium', compactCurrency(totals.premium));
-    setText('analytics-premium-sub', `${formatNumber(totals.returned || 0, 0)} returned positions`);
+    setText('analytics-premium-sub', `${formatNumber(totals.call_count || 0, 0)} calls · ${formatNumber(totals.put_count || 0, 0)} puts`);
     setText('analytics-yield', formatPercentage(totals.premium_yield_pct, 2));
+    setText('analytics-yield-sub', 'all executions · not annualized');
     setText('analytics-apr', formatPercentage(totals.weighted_apr, 1));
-    setText('analytics-apr-sub', `median ${formatPercentage(totals.median_apr, 1)}`);
-    setText('analytics-returned', formatPercentage(totals.return_rate_pct, 1));
-    setText('analytics-returned-sub', `${formatNumber(totals.settled || 0, 0)} settled positions`);
+    setText('analytics-apr-sub', `premium ÷ capital-days · median ${formatPercentage(totals.median_apr, 1)}`);
+    setText('analytics-tenor', totals.weighted_dte_days != null ? `${formatNumber(totals.weighted_dte_days, 1)}d` : '—');
 }
 
 function renderNotionalStream(data) {
@@ -157,10 +157,10 @@ function renderEfficiency(data) {
             opacity: 0.76,
             line: { color: 'rgba(255,255,255,0.38)', width: 1 },
         },
-        hovertemplate: '<b>%{text}</b><br>Weighted APR %{x:.1f}%<br>Premium yield %{y:.2f}%<br>Notional %{customdata[0]:$,.0f}<br>%{customdata[1]} trades<extra></extra>',
+        hovertemplate: '<b>%{text}</b><br>Annualized yield %{x:.1f}%<br>Premium yield %{y:.2f}%<br>Notional %{customdata[0]:$,.0f}<br>%{customdata[1]} trades<extra></extra>',
     }], analyticsPlotLayout({
         margin: { l: 58, r: 24, t: 26, b: 54 },
-        xaxis: { title: 'Notional-weighted APR', ticksuffix: '%', showgrid: false, fixedrange: true },
+        xaxis: { title: 'Capital-day annualized yield', ticksuffix: '%', showgrid: false, fixedrange: true },
         yaxis: { title: 'Premium / notional', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, fixedrange: true },
         showlegend: false,
     }), ANALYTICS_PLOT_CONFIG);
@@ -189,7 +189,7 @@ function renderTenorSurface(data) {
             [1, '#d4ff66'],
         ],
         hovertemplate: '<b>%{y} · %{x}</b><br>%{text}<extra></extra>',
-        colorbar: { title: 'APR %', thickness: 10, len: 0.78, outlinewidth: 0 },
+        colorbar: { title: 'Annualized %', thickness: 10, len: 0.78, outlinewidth: 0 },
         hoverongaps: false,
     }], analyticsPlotLayout({
         margin: { l: 60, r: 72, t: 22, b: 48 },
@@ -199,36 +199,31 @@ function renderTenorSurface(data) {
     }), ANALYTICS_PLOT_CONFIG);
 }
 
-function renderOutcomeFrontier(data) {
-    const rows = (data.by_asset || []).filter(row => row.assignment_rate_pct != null && row.premium_yield_pct != null);
-    Plotly.newPlot('outcome-frontier-chart', [{
-        x: rows.map(row => row.assignment_rate_pct),
-        y: rows.map(row => row.premium_yield_pct),
-        text: rows.map(row => row.asset),
-        customdata: rows.map(row => [row.return_rate_pct, row.notional, row.settled, row.weighted_apr]),
-        mode: 'markers+text',
-        type: 'scatter',
-        textposition: 'top center',
-        marker: {
-            size: bubbleSizes(rows, 18, 62),
-            color: rows.map((row, index) => analyticsColor(row.asset, index)),
-            opacity: 0.78,
-            line: { color: 'rgba(255,255,255,0.4)', width: 1 },
-        },
-        hovertemplate: '<b>%{text}</b><br>Assignment %{x:.1f}%<br>Premium yield %{y:.2f}%<br>Returned %{customdata[0]:.1f}%<br>Notional %{customdata[1]:$,.0f}<br>%{customdata[2]} settled<extra></extra>',
-    }], analyticsPlotLayout({
+function renderStrategyYield(data) {
+    const leadingAssets = (data.by_asset || []).slice(0, 8).map(row => row.asset);
+    const rows = data.by_asset_option_type || [];
+    const lookup = new Map(rows.map(row => [`${row.asset}|${row.option_type}`, row]));
+    const traces = [
+        { optionType: 'call', name: 'Covered calls', color: '#00d4ff' },
+        { optionType: 'put', name: 'Cash-secured puts', color: '#ff4d8d' },
+    ].map(strategy => ({
+        x: leadingAssets,
+        y: leadingAssets.map(asset => lookup.get(`${asset}|${strategy.optionType}`)?.premium_yield_pct ?? null),
+        customdata: leadingAssets.map(asset => {
+            const row = lookup.get(`${asset}|${strategy.optionType}`) || {};
+            return [row.weighted_apr, row.weighted_dte_days, row.notional, row.trade_count];
+        }),
+        type: 'bar',
+        name: strategy.name,
+        marker: { color: strategy.color, opacity: 0.8 },
+        hovertemplate: `<b>%{x} · ${strategy.name}</b><br>Premium yield %{y:.2f}%<br>Annualized %{customdata[0]:.1f}%<br>Weighted tenor %{customdata[1]:.1f}d<br>Notional %{customdata[2]:$,.0f}<br>%{customdata[3]} executions<extra></extra>`,
+    }));
+    Plotly.newPlot('strategy-yield-chart', traces, analyticsPlotLayout({
         margin: { l: 62, r: 28, t: 24, b: 56 },
-        xaxis: { title: 'Assignment rate', ticksuffix: '%', showgrid: false, rangemode: 'tozero', fixedrange: true },
-        yaxis: { title: 'Premium / notional', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, rangemode: 'tozero', fixedrange: true },
-        showlegend: false,
-        shapes: [{
-            type: 'rect', xref: 'paper', yref: 'paper', x0: 0, x1: 0.4, y0: 0.6, y1: 1,
-            fillcolor: 'rgba(0,255,157,0.035)', line: { width: 0 }, layer: 'below',
-        }],
-        annotations: [{
-            xref: 'paper', yref: 'paper', x: 0.02, y: 0.98, text: 'EFFICIENCY ZONE', showarrow: false,
-            font: { size: 9, color: '#00ff9d' }, xanchor: 'left', yanchor: 'top',
-        }],
+        barmode: 'group',
+        xaxis: { title: 'Underlying', showgrid: false, fixedrange: true },
+        yaxis: { title: 'Premium / strike notional', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, rangemode: 'tozero', fixedrange: true },
+        legend: { orientation: 'h', y: -0.16, x: 0 },
     }), ANALYTICS_PLOT_CONFIG);
 }
 
@@ -245,7 +240,7 @@ function renderScorecard(data) {
             </div>
             <div class="scorecard-values">
                 <strong>${compactCurrency(row.notional)}</strong>
-                <span>${formatPercentage(row.weighted_apr, 1)} APR · ${formatPercentage(row.return_rate_pct, 0)} returned</span>
+                <span>${formatPercentage(row.premium_yield_pct, 2)} yield · ${formatPercentage(row.weighted_apr, 1)} annualized</span>
             </div>
         </div>
     `).join('') || '<div class="analytics-empty">No asset observations in this window.</div>';
@@ -270,7 +265,7 @@ async function loadAnalyticsOverview() {
     renderNotionalStream(data);
     renderEfficiency(data);
     renderTenorSurface(data);
-    renderOutcomeFrontier(data);
+    renderStrategyYield(data);
     renderScorecard(data);
     populateSurfaceAssets(data);
     status.textContent = `${formatNumber(data.totals?.trade_count || 0, 0)} executions · ${windowLabel()}`;
@@ -309,37 +304,37 @@ function renderSurfaceChart(data) {
         x: samples.map(sample => sample.otm_pct),
         y: samples.map(sample => sample.apr),
         text: samples.map(sample => sample.symbol),
-        customdata: samples.map(sample => [sample.strike, sample.spot_reference, sample.dte, sample.notional, sample.outcome || 'Open']),
+        customdata: samples.map(sample => [sample.strike, sample.spot_reference, sample.dte, sample.notional]),
         type: 'scattergl',
         mode: 'markers',
         name: 'Executions',
         marker: { size: 6, color: callColor, opacity: 0.18 },
-        hovertemplate: '<b>%{text}</b><br>%{x:.2f}% OTM<br>APR %{y:.1f}%<br>Strike %{customdata[0]:$,.2f}<br>Prior close %{customdata[1]:$,.2f}<br>%{customdata[2]:.1f} DTE<br>Notional %{customdata[3]:$,.0f}<br>%{customdata[4]}<extra></extra>',
+        hovertemplate: '<b>%{text}</b><br>%{x:.2f}% OTM<br>Annualized yield %{y:.1f}%<br>Strike %{customdata[0]:$,.2f}<br>Prior close %{customdata[1]:$,.2f}<br>%{customdata[2]:.1f} DTE<br>Notional %{customdata[3]:$,.0f}<extra></extra>',
     }, {
         x: buckets.map(bucket => bucket.midpoint),
         y: buckets.map(bucket => bucket.weighted_apr),
         text: buckets.map(bucket => bucket.label),
-        customdata: buckets.map(bucket => [bucket.trade_count, bucket.median_apr, bucket.premium_yield_pct, bucket.return_rate_pct]),
+        customdata: buckets.map(bucket => [bucket.trade_count, bucket.median_apr, bucket.premium_yield_pct, bucket.weighted_dte_days]),
         type: 'scatter',
         mode: 'lines+markers',
-        name: 'Weighted APR',
+        name: 'Weighted annualized yield',
         line: { color: '#00ff9d', width: 3, shape: 'spline' },
         marker: { size: 10, color: '#00ff9d', line: { color: '#06110d', width: 2 } },
-        hovertemplate: '<b>%{text}</b><br>Weighted APR %{y:.1f}%<br>Median APR %{customdata[1]:.1f}%<br>Premium yield %{customdata[2]:.2f}%<br>Returned %{customdata[3]:.1f}%<br>%{customdata[0]} trades<extra></extra>',
+        hovertemplate: '<b>%{text}</b><br>Weighted annualized yield %{y:.1f}%<br>Median %{customdata[1]:.1f}%<br>Premium yield %{customdata[2]:.2f}%<br>Weighted tenor %{customdata[3]:.1f}d<br>%{customdata[0]} trades<extra></extra>',
     }, {
         x: buckets.map(bucket => bucket.midpoint),
         y: buckets.map(bucket => bucket.median_apr),
         type: 'scatter',
         mode: 'lines',
-        name: 'Median APR',
+        name: 'Median annualized yield',
         line: { color: '#ffc53d', width: 1.7, dash: 'dot', shape: 'spline' },
-        hovertemplate: 'Median APR %{y:.1f}%<extra></extra>',
+        hovertemplate: 'Median annualized yield %{y:.1f}%<extra></extra>',
     }];
 
     Plotly.newPlot('otm-apr-chart', traces, analyticsPlotLayout({
         margin: { l: 62, r: 30, t: 30, b: 58 },
         xaxis: { title: 'Strike distance at entry (OTM)', ticksuffix: '%', zeroline: true, zerolinecolor: 'rgba(255,255,255,0.2)', showgrid: false, range: [-12, 32], fixedrange: true },
-        yaxis: { title: 'Executed APR', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, range: [0, focusedAprMax], fixedrange: true },
+        yaxis: { title: 'Annualized premium yield', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, range: [0, focusedAprMax], fixedrange: true },
         legend: { orientation: 'h', y: -0.18, x: 0 },
         hovermode: 'closest',
         shapes: [{ type: 'line', x0: 5, x1: 5, y0: 0, y1: 1, yref: 'paper', line: { color: '#ffffff', width: 1, dash: 'dash' } }],
@@ -377,7 +372,7 @@ function updateSurfaceTarget() {
     setText('result-apr', bucket ? formatPercentage(bucket.weighted_apr, 1) : '—');
     setText('result-median', bucket ? formatPercentage(bucket.median_apr, 1) : '—');
     setText('result-yield', bucket ? formatPercentage(bucket.premium_yield_pct, 2) : '—');
-    setText('result-returned', bucket ? formatPercentage(bucket.return_rate_pct, 1) : '—');
+    setText('result-tenor', bucket?.weighted_dte_days != null ? `${formatNumber(bucket.weighted_dte_days, 1)}d` : '—');
     setText('result-confidence', bucket ? `${formatNumber(bucket.trade_count, 0)} observed executions · ${compactCurrency(bucket.notional)}` : 'No directly comparable executions');
 
     const result = document.getElementById('surface-result');
