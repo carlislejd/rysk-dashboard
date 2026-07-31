@@ -122,20 +122,20 @@ function formatCurrency(num, decimals = 2) {
     return `${sign}$${formatNumber(absValue, decimals)}`;
 }
 
-function compactCurrency(num) {
+function compactCurrency(num, decimals = null) {
     if (num === null || num === undefined) return '$0';
     const value = Number(num) || 0;
     const abs = Math.abs(value);
     const sign = value < 0 ? '-' : '';
-    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
-    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(decimals ?? 1)}B`;
+    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(decimals ?? 1)}M`;
+    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(decimals ?? 0)}K`;
     return formatCurrency(num, 0);
 }
 
-function formatTileCurrency(num) {
+function formatTileCurrency(num, compactDecimals = null) {
     const value = Number(num) || 0;
-    return Math.abs(value) >= 10000 ? compactCurrency(value) : formatCurrency(value);
+    return Math.abs(value) >= 10000 ? compactCurrency(value, compactDecimals) : formatCurrency(value);
 }
 
 function formatPercentage(value, decimals = 2) {
@@ -251,11 +251,13 @@ function parseSortValue(raw, key) {
     }
 
     if (key === 'created' || key === 'expiry') {
+        const numeric = Number(text);
+        if (Number.isFinite(numeric)) return numeric;
         const ts = Date.parse(text);
         return Number.isNaN(ts) ? null : ts;
     }
 
-    if (['quantity', 'strike', 'premium', 'apr', 'volume', 'notional'].includes(key)) {
+    if (['quantity', 'strike', 'premium', 'apr', 'volume', 'notional', 'orders', 'distance'].includes(key)) {
         const normalized = text.replace(/[$,%\s,]/g, '');
         const num = Number(normalized);
         return Number.isFinite(num) ? num : null;

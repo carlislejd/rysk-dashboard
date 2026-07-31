@@ -307,15 +307,44 @@
                         <input id="strike-min-notional" type="number" min="0" step="1000" value="0">
                     </label>
                 </div>
-                <div id="strike-modal-summary" class="summary-grid modal-grid"></div>
-                <div id="strike-modal-chart" class="chart-container strike-modal-chart"></div>
+                <section class="strike-chart-shell" aria-labelledby="strike-chart-heading">
+                    <div class="strike-chart-header">
+                        <div>
+                            <div class="strike-chart-kicker">Position map</div>
+                            <h3 id="strike-chart-heading">Notional by strike</h3>
+                            <p id="strike-chart-note">Calls and puts are grouped side by side for a true comparison.</p>
+                        </div>
+                        <div class="strike-metric-control">
+                            <span>Chart metric</span>
+                            <div class="tabs strike-metric-tabs" id="strike-metric-tabs">
+                                <button class="tab-button active" data-strike-metric="volume">Notional</button>
+                                <button class="tab-button" data-strike-metric="orders">Orders</button>
+                                <button class="tab-button" data-strike-metric="premium">Premium</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="strike-modal-chart" class="chart-container strike-modal-chart"></div>
+                </section>
+                <div id="strike-modal-summary" class="strike-story-grid" aria-label="Strike Lens summary"></div>
                 <div class="strike-lens-grid">
                     <section class="modal-section">
-                        <h3>Target Levels</h3>
+                        <div class="strike-table-heading">
+                            <div>
+                                <h3>Target Levels</h3>
+                                <p>Click any column to sort the strike map.</p>
+                            </div>
+                            <span id="strike-level-count" class="strike-row-count">—</span>
+                        </div>
                         <div id="strike-modal-levels" class="modal-table-wrapper"></div>
                     </section>
                     <section class="modal-section">
-                        <h3>Recent Orders</h3>
+                        <div class="strike-table-heading">
+                            <div>
+                                <h3>Recent Orders</h3>
+                                <p>Latest matching orders, sortable by every field.</p>
+                            </div>
+                            <span id="strike-order-count" class="strike-row-count">—</span>
+                        </div>
                         <div id="strike-modal-orders" class="modal-table-wrapper"></div>
                     </section>
                 </div>

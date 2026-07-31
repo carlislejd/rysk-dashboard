@@ -1578,23 +1578,23 @@ function renderAccountPnl(historyData, openPositions) {
     pnlGrid.innerHTML = `
         <div class="summary-card">
             <div class="summary-label">Total Premium Collected</div>
-            <div class="summary-value" title="${formatCurrency(totalPremium)}">${formatTileCurrency(totalPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(totalPremium)}">${formatTileCurrency(totalPremium, 2)}</div>
             <div class="summary-subtext">${filtered.length} positions${activeLabel}${pendingLabel}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired OTM</div>
-            <div class="summary-value" title="${formatCurrency(otmPremium)}">${formatTileCurrency(otmPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(otmPremium)}">${formatTileCurrency(otmPremium, 2)}</div>
             <div class="summary-subtext">${otmPositions.length} positions</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired ITM</div>
-            <div class="summary-value" title="${formatCurrency(itmPremium)}">${formatTileCurrency(itmPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(itmPremium)}">${formatTileCurrency(itmPremium, 2)}</div>
             <div class="summary-subtext">${itmPositions.length} positions</div>
         </div>
         ${pendingPositions.length > 0 ? `
         <div class="summary-card">
             <div class="summary-label">Awaiting Settlement</div>
-            <div class="summary-value" title="${formatCurrency(pendingPremium)}">${formatTileCurrency(pendingPremium)}</div>
+            <div class="summary-value" title="${formatCurrency(pendingPremium)}">${formatTileCurrency(pendingPremium, 2)}</div>
             <div class="summary-subtext">${pendingPositions.length} expired, outcome pending</div>
         </div>` : ''}
         <div class="summary-card">
@@ -1604,7 +1604,7 @@ function renderAccountPnl(historyData, openPositions) {
         </div>
         <div class="summary-card">
             <div class="summary-label">Total Notional</div>
-            <div class="summary-value" title="${formatCurrency(totalNotional)}">${formatTileCurrency(totalNotional)}</div>
+            <div class="summary-value" title="${formatCurrency(totalNotional)}">${formatTileCurrency(totalNotional, 2)}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Avg APR</div>
@@ -1617,7 +1617,7 @@ function renderAccountPnl(historyData, openPositions) {
         </div>
         <div class="summary-card">
             <div class="summary-label">Net PnL</div>
-            <div class="summary-value" title="${formatCurrency(endingPnl)}" style="color: ${endingPnlColor};">${formatTileCurrency(endingPnl)}</div>
+            <div class="summary-value" title="${formatCurrency(endingPnl)}" style="color: ${endingPnlColor};">${formatTileCurrency(endingPnl, 2)}</div>
             <div class="summary-subtext">${assignmentNote}</div>
         </div>
     `;

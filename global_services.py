@@ -393,7 +393,9 @@ def get_asset_detail(conn, symbol, expiry=None, chain_id=None):
                SUM(CASE WHEN is_put = 1 THEN 1 ELSE 0 END) as put_count,
                SUM(CASE WHEN is_put = 0 THEN 1 ELSE 0 END) as call_count,
                SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END) as put_volume,
-               SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END) as call_volume
+               SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END) as call_volume,
+               SUM(CASE WHEN is_put = 1 THEN premium_f ELSE 0 END) as put_premium,
+               SUM(CASE WHEN is_put = 0 THEN premium_f ELSE 0 END) as call_premium
         FROM trades
         {where}
         GROUP BY strike_f
@@ -438,6 +440,8 @@ def get_asset_detail(conn, symbol, expiry=None, chain_id=None):
                 "call_count": r["call_count"],
                 "put_volume": r["put_volume"],
                 "call_volume": r["call_volume"],
+                "put_premium": r["put_premium"],
+                "call_premium": r["call_premium"],
             }
             for r in strikes
         ],

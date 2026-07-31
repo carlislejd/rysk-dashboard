@@ -47,6 +47,8 @@ class TestGlobalServices(unittest.TestCase):
         self.assertEqual(strike["call_count"], 1)
         self.assertEqual(strike["put_volume"], 300.0)
         self.assertEqual(strike["call_volume"], 300.0)
+        self.assertEqual(strike["put_premium"], 13.0)
+        self.assertEqual(strike["call_premium"], 9.0)
 
 
 if __name__ == "__main__":

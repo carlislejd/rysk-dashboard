@@ -290,6 +290,7 @@ let strikeLensState = {
     referencePrice: null,
     defaultReferencePrice: null,
     side: 'all',
+    metric: 'volume',
     minNotional: 0,
     orders: [],
 };
@@ -503,15 +504,37 @@ function getStrikeReference(detail, overridePrice = null) {
     };
 }
 
-function getStrikeMetric(row, side, metric) {
+function getStrikeMetricConfig(mode = 'volume') {
+    if (mode === 'orders') {
+        return { mode, field: 'count', label: 'Orders', yTitle: 'Orders', heading: 'Order count by strike' };
+    }
+    if (mode === 'premium') {
+        return { mode, field: 'premium', label: 'Premium', yTitle: 'Premium Paid ($)', heading: 'Premium paid by strike' };
+    }
+    return { mode: 'volume', field: 'volume', label: 'Notional', yTitle: 'Notional ($)', heading: 'Notional by strike' };
+}
+
+function getStrikeMetric(row, side, mode = 'volume') {
     const prefix = side === 'call' ? 'call' : 'put';
-    const source = `${prefix}_${metric}`;
-    return Number(row[source] || 0);
+    const metric = getStrikeMetricConfig(mode);
+    return Number(row[`${prefix}_${metric.field}`] || 0);
+}
+
+function formatStrikeMetric(value, mode = 'volume') {
+    return mode === 'orders' ? formatNumber(value, 0) : compactCurrency(value);
+}
+
+function buildStrikeValueLabels(values, mode, limit = 4) {
+    const ranked = values
+        .map((value, index) => ({ value: Number(value || 0), index }))
+        .filter(item => item.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, limit);
+    const visible = new Set(ranked.map(item => item.index));
+    return values.map((value, index) => visible.has(index) ? formatStrikeMetric(value, mode) : '');
 }
 
 function summarizeStrikeExposure(strikes, referencePrice, mode = 'volume') {
-    const putMetric = mode === 'notional' ? 'notional' : 'volume';
-    const callMetric = mode === 'notional' ? 'notional' : 'volume';
     const summary = {
         callLevels: 0,
         putLevels: 0,
@@ -523,8 +546,8 @@ function summarizeStrikeExposure(strikes, referencePrice, mode = 'volume') {
     };
 
     for (const s of strikes) {
-        const callValue = getStrikeMetric(s, 'call', callMetric);
-        const putValue = getStrikeMetric(s, 'put', putMetric);
+        const callValue = getStrikeMetric(s, 'call', mode);
+        const putValue = getStrikeMetric(s, 'put', mode);
         summary.totalCall += callValue;
         summary.totalPut += putValue;
         if (referencePrice !== null && referencePrice !== undefined) {
@@ -550,22 +573,26 @@ function buildStrikeChart(detail, options = {}) {
     const reference = getStrikeReference(detail, options.referencePrice);
     const shapes = [];
     const annotations = [];
-    const mode = options.metricMode || 'volume';
+    const metric = getStrikeMetricConfig(options.metricMode || 'volume');
+    const mode = metric.mode;
     const side = options.side || 'all';
     const minNotional = Math.max(0, Number(options.minNotional || 0));
-    const putField = mode === 'notional' ? 'put_notional' : 'put_volume';
-    const callField = mode === 'notional' ? 'call_notional' : 'call_volume';
-    const yTitle = mode === 'notional' ? 'Open Notional ($)' : 'Notional ($)';
     const compact = options.compact !== false;
     const showPuts = side === 'all' || side === 'put';
     const showCalls = side === 'all' || side === 'call';
     const visibleStrikes = strikes.map(s => {
-        const putValue = Number(s[putField] || 0);
-        const callValue = Number(s[callField] || 0);
+        const putNotional = Number(s.put_volume || 0);
+        const callNotional = Number(s.call_volume || 0);
+        const putVisible = showPuts && putNotional >= minNotional && putNotional > 0;
+        const callVisible = showCalls && callNotional >= minNotional && callNotional > 0;
         return {
             ...s,
-            [putField]: showPuts && putValue >= minNotional ? putValue : 0,
-            [callField]: showCalls && callValue >= minNotional ? callValue : 0,
+            put_volume: putVisible ? putNotional : 0,
+            call_volume: callVisible ? callNotional : 0,
+            put_count: putVisible ? Number(s.put_count || 0) : 0,
+            call_count: callVisible ? Number(s.call_count || 0) : 0,
+            put_premium: putVisible ? Number(s.put_premium || 0) : 0,
+            call_premium: callVisible ? Number(s.call_premium || 0) : 0,
         };
     });
 
@@ -590,7 +617,7 @@ function buildStrikeChart(detail, options = {}) {
         if (exposure.callLevels > 0 || exposure.callExposure > 0) {
             annotations.push({
                 x: (xMin + reference.price) / 2, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${compactCurrency(exposure.callExposure)} call exposure</b><br>${exposure.callLevels} target level${exposure.callLevels !== 1 ? 's' : ''}${suffix}`,
+                text: `<b>${formatStrikeMetric(exposure.callExposure, mode)} call ${metric.label.toLowerCase()}</b><br>${exposure.callLevels} target level${exposure.callLevels !== 1 ? 's' : ''}${suffix}`,
                 showarrow: false,
                 font: { size: compact ? 10 : 12, color: 'rgba(0, 212, 255, 0.88)', family: 'JetBrains Mono, monospace' },
                 bgcolor: theme.annotationBg, borderpad: compact ? 4 : 6,
@@ -600,7 +627,7 @@ function buildStrikeChart(detail, options = {}) {
         if (exposure.putLevels > 0 || exposure.putExposure > 0) {
             annotations.push({
                 x: (reference.price + xMax) / 2, y: 1.0, yref: 'paper', yanchor: 'bottom',
-                text: `<b>${compactCurrency(exposure.putExposure)} put exposure</b><br>${exposure.putLevels} target level${exposure.putLevels !== 1 ? 's' : ''}${suffix}`,
+                text: `<b>${formatStrikeMetric(exposure.putExposure, mode)} put ${metric.label.toLowerCase()}</b><br>${exposure.putLevels} target level${exposure.putLevels !== 1 ? 's' : ''}${suffix}`,
                 showarrow: false,
                 font: { size: compact ? 10 : 12, color: 'rgba(255, 77, 109, 0.88)', family: 'JetBrains Mono, monospace' },
                 bgcolor: theme.annotationBg, borderpad: compact ? 4 : 6,
@@ -623,39 +650,69 @@ function buildStrikeChart(detail, options = {}) {
 
     const data = [];
     if (showPuts) {
+        const putValues = visibleStrikes.map(s => getStrikeMetric(s, 'put', mode));
         data.push({
             x: strikeValues,
-            y: visibleStrikes.map(s => Number(s[putField] || 0)),
-            customdata: strikes.map(s => [s.put_count || 0, s.trade_count || 0, s.premium || 0]),
+            y: putValues,
+            customdata: visibleStrikes.map(s => [s.put_volume || 0, s.put_count || 0, s.put_premium || 0]),
             type: 'bar',
             name: 'Put',
-            marker: { color: 'rgba(255, 77, 109, 0.72)' },
-            width: barWidth,
-            hovertemplate: 'Put target %{x:$,.2f}<br>Notional %{y:$,.0f}<br>Put orders %{customdata[0]}<br>Premium %{customdata[2]:$,.0f}<extra></extra>',
+            offsetgroup: 'put',
+            marker: { color: 'rgba(255, 77, 109, 0.72)', line: { color: 'rgba(255, 77, 109, 1)', width: 1 } },
+            text: compact ? undefined : buildStrikeValueLabels(putValues, mode),
+            textposition: 'outside',
+            textfont: { color: 'rgba(255, 104, 132, 0.95)', family: 'JetBrains Mono, monospace', size: 10 },
+            cliponaxis: false,
+            hovertemplate: `Put target %{x:$,.2f}<br>${metric.label} %{y:${mode === 'orders' ? ',.0f' : '$,.0f'}}<br>Notional %{customdata[0]:$,.0f}<br>Orders %{customdata[1]:,.0f}<br>Premium %{customdata[2]:$,.2f}<extra></extra>`,
         });
     }
     if (showCalls) {
+        const callValues = visibleStrikes.map(s => getStrikeMetric(s, 'call', mode));
         data.push({
             x: strikeValues,
-            y: visibleStrikes.map(s => Number(s[callField] || 0)),
-            customdata: strikes.map(s => [s.call_count || 0, s.trade_count || 0, s.premium || 0]),
+            y: callValues,
+            customdata: visibleStrikes.map(s => [s.call_volume || 0, s.call_count || 0, s.call_premium || 0]),
             type: 'bar',
             name: 'Call',
-            marker: { color: 'rgba(0, 212, 255, 0.72)' },
-            width: barWidth,
-            hovertemplate: 'Call target %{x:$,.2f}<br>Notional %{y:$,.0f}<br>Call orders %{customdata[0]}<br>Premium %{customdata[2]:$,.0f}<extra></extra>',
+            offsetgroup: 'call',
+            marker: { color: 'rgba(0, 212, 255, 0.72)', line: { color: 'rgba(0, 212, 255, 1)', width: 1 } },
+            text: compact ? undefined : buildStrikeValueLabels(callValues, mode),
+            textposition: 'outside',
+            textfont: { color: 'rgba(43, 220, 255, 0.95)', family: 'JetBrains Mono, monospace', size: 10 },
+            cliponaxis: false,
+            hovertemplate: `Call target %{x:$,.2f}<br>${metric.label} %{y:${mode === 'orders' ? ',.0f' : '$,.0f'}}<br>Notional %{customdata[0]:$,.0f}<br>Orders %{customdata[1]:,.0f}<br>Premium %{customdata[2]:$,.2f}<extra></extra>`,
         });
     }
 
     const layout = {
-        barmode: 'stack',
+        barmode: 'group',
+        bargap: compact ? 0.16 : 0.2,
+        bargroupgap: 0.08,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: compact ? 12 : 13 },
-        margin: compact ? { l: 60, r: 20, t: 48, b: 60 } : { l: 78, r: 28, t: 58, b: 70 },
-        xaxis: { title: 'Strike Target', showgrid: false, tickfont: { size: compact ? 10 : 11 }, tickprefix: '$', tickangle: -45 },
-        yaxis: { title: yTitle, gridcolor: theme.gridColor, tickprefix: '$' },
+        margin: compact ? { l: 60, r: 20, t: 48, b: 60 } : { l: 78, r: 28, t: 76, b: 70 },
+        xaxis: {
+            title: 'Strike Target',
+            showgrid: !compact,
+            gridcolor: theme.gridColor,
+            nticks: compact ? 8 : 14,
+            tickfont: { size: compact ? 10 : 11 },
+            tickprefix: '$',
+            tickangle: -35,
+            automargin: true,
+        },
+        yaxis: {
+            title: metric.yTitle,
+            gridcolor: theme.gridColor,
+            tickprefix: mode === 'orders' ? '' : '$',
+            tickformat: mode === 'orders' ? ',.0f' : '~s',
+            rangemode: 'tozero',
+            automargin: true,
+        },
         legend: { orientation: 'h', y: compact ? -0.12 : -0.1, font: { size: compact ? 11 : 12 } },
+        hovermode: 'closest',
+        uniformtext: { minsize: 9, mode: 'hide' },
         hoverlabel: {
             bgcolor: '#0c0e13',
             font: { color: '#f2fff7', family: 'JetBrains Mono, monospace' },
@@ -665,7 +722,15 @@ function buildStrikeChart(detail, options = {}) {
         annotations,
     };
 
-    return { data, layout, strikes: visibleStrikes, reference, exposure: summarizeStrikeExposure(visibleStrikes, reference.price, mode) };
+    return {
+        data,
+        layout,
+        strikes: visibleStrikes,
+        reference,
+        metric,
+        exposure: summarizeStrikeExposure(visibleStrikes, reference.price, mode),
+        notionalExposure: summarizeStrikeExposure(visibleStrikes, reference.price, 'volume'),
+    };
 }
 
 function updateStrikeCaption(detail, chartModel) {
@@ -809,6 +874,7 @@ function openStrikeLens() {
         referencePrice: null,
         defaultReferencePrice: null,
         side: 'all',
+        metric: 'volume',
         minNotional: 0,
         orders: [],
     };
@@ -821,8 +887,13 @@ function openStrikeLens() {
     document.querySelectorAll('#strike-type-tabs .tab-button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.strikeType === 'all');
     });
+    document.querySelectorAll('#strike-metric-tabs .tab-button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.strikeMetric === 'volume');
+    });
 
     modal.style.display = 'flex';
+    const modalBody = modal.querySelector('.strike-modal-body');
+    if (modalBody) modalBody.scrollTop = 0;
     document.body.style.overflow = 'hidden';
     renderStrikeLens();
     fetchStrikeLensOrders();
@@ -844,8 +915,8 @@ function filteredStrikeRows(detail) {
         const call = Number(s.call_volume || 0);
         const includePut = (side === 'all' || side === 'put') && put >= minNotional && put > 0;
         const includeCall = (side === 'all' || side === 'call') && call >= minNotional && call > 0;
-        if (includePut) rows.push({ side: 'Put', strike: s.strike, notional: put, orders: s.put_count || 0, premium: s.premium || 0 });
-        if (includeCall) rows.push({ side: 'Call', strike: s.strike, notional: call, orders: s.call_count || 0, premium: s.premium || 0 });
+        if (includePut) rows.push({ side: 'Put', strike: s.strike, notional: put, orders: s.put_count || 0, premium: s.put_premium || 0 });
+        if (includeCall) rows.push({ side: 'Call', strike: s.strike, notional: call, orders: s.call_count || 0, premium: s.call_premium || 0 });
     }
     const ref = Number(strikeLensState.referencePrice);
     rows.sort((a, b) => Math.abs(a.strike - ref) - Math.abs(b.strike - ref) || b.notional - a.notional);
@@ -857,8 +928,85 @@ function filteredStrikeOrders() {
     const minNotional = Number(strikeLensState.minNotional || 0);
     return (strikeLensState.orders || [])
         .filter(order => side === 'all' || String(order.type || '').toLowerCase() === side)
-        .filter(order => Number(order.notional || 0) >= minNotional)
-        .slice(0, 80);
+        .filter(order => Number(order.notional || 0) >= minNotional);
+}
+
+function summarizeStrikeRows(rows, side) {
+    const selected = rows.filter(row => row.side.toLowerCase() === side);
+    const largest = selected.reduce((best, row) => !best || row.notional > best.notional ? row : best, null);
+    return {
+        levels: selected.length,
+        notional: selected.reduce((sum, row) => sum + Number(row.notional || 0), 0),
+        orders: selected.reduce((sum, row) => sum + Number(row.orders || 0), 0),
+        premium: selected.reduce((sum, row) => sum + Number(row.premium || 0), 0),
+        largest,
+    };
+}
+
+function formatLensCurrency(value) {
+    const numeric = Number(value || 0);
+    return Math.abs(numeric) >= 1000 ? compactCurrency(numeric, 2) : formatCurrency(numeric);
+}
+
+function renderStrikeStory(rows, chartModel, referencePrice) {
+    const calls = summarizeStrikeRows(rows, 'call');
+    const puts = summarizeStrikeRows(rows, 'put');
+    const totalNotional = calls.notional + puts.notional;
+    const totalOrders = calls.orders + puts.orders;
+    const totalPremium = calls.premium + puts.premium;
+    const callShare = totalNotional > 0 ? (calls.notional / totalNotional) * 100 : 0;
+    const putShare = totalNotional > 0 ? 100 - callShare : 0;
+    const larger = calls.notional >= puts.notional ? calls : puts;
+    const smaller = calls.notional >= puts.notional ? puts : calls;
+    const dominantSide = calls.notional === puts.notional ? 'Balanced' : calls.notional > puts.notional ? 'Call-heavy' : 'Put-heavy';
+    const dominance = smaller.notional > 0 ? larger.notional / smaller.notional : larger.notional > 0 ? null : 1;
+    const dominanceLabel = dominantSide === 'Balanced'
+        ? 'Balanced book'
+        : `${dominantSide}${dominance ? ` · ${formatNumber(dominance, 1)}×` : ' only'}`;
+    const risk = chartModel.notionalExposure || { totalExposure: 0, callExposure: 0, putExposure: 0 };
+    const atRiskShare = totalNotional > 0 ? (risk.totalExposure / totalNotional) * 100 : 0;
+
+    const sideCard = (name, summary, share, tone) => {
+        const topTarget = summary.largest
+            ? `${formatStrike(summary.largest.strike)} · ${formatLensCurrency(summary.largest.notional)}`
+            : 'No matching target';
+        return `
+            <article class="strike-story-card ${tone}">
+                <div class="strike-story-card-header">
+                    <span><i></i>${name} book</span>
+                    <strong>${formatNumber(share, 0)}% of notional</strong>
+                </div>
+                <div class="strike-story-hero">${formatLensCurrency(summary.notional)}</div>
+                <div class="strike-story-caption">notional across ${formatNumber(summary.levels, 0)} target level${summary.levels !== 1 ? 's' : ''}</div>
+                <div class="strike-story-stats">
+                    <div><span>Orders</span><strong>${formatNumber(summary.orders, 0)}</strong></div>
+                    <div><span>Premium paid</span><strong>${formatLensCurrency(summary.premium)}</strong></div>
+                    <div><span>Largest target</span><strong>${topTarget}</strong></div>
+                </div>
+            </article>`;
+    };
+
+    return `
+        ${sideCard('Call', calls, callShare, 'call')}
+        <article class="strike-story-card thesis">
+            <div class="strike-story-card-header">
+                <span><i></i>The read</span>
+                <strong>${formatNumber(totalOrders, 0)} orders</strong>
+            </div>
+            <div class="strike-story-hero">${dominanceLabel}</div>
+            <div class="strike-story-caption">${formatLensCurrency(totalNotional)} total notional · ${formatLensCurrency(totalPremium)} premium paid</div>
+            <div class="strike-book-balance" aria-label="${formatNumber(callShare, 0)} percent calls and ${formatNumber(putShare, 0)} percent puts">
+                <span class="call" style="width: ${callShare}%"></span>
+                <span class="put" style="width: ${putShare}%"></span>
+            </div>
+            <div class="strike-story-stats">
+                <div><span>Reference</span><strong>${formatStrike(referencePrice)}</strong></div>
+                <div><span>At risk</span><strong>${formatLensCurrency(risk.totalExposure)}</strong></div>
+                <div><span>Book at risk</span><strong>${formatNumber(atRiskShare, 0)}%</strong></div>
+            </div>
+        </article>
+        ${sideCard('Put', puts, putShare, 'put')}
+    `;
 }
 
 function renderStrikeLens() {
@@ -868,68 +1016,100 @@ function renderStrikeLens() {
     const summaryEl = document.getElementById('strike-modal-summary');
     const levelsEl = document.getElementById('strike-modal-levels');
     const ordersEl = document.getElementById('strike-modal-orders');
+    const chartHeading = document.getElementById('strike-chart-heading');
+    const chartNote = document.getElementById('strike-chart-note');
+    const levelCount = document.getElementById('strike-level-count');
+    const orderCount = document.getElementById('strike-order-count');
     const referencePrice = Number(strikeLensState.referencePrice);
     const chartModel = buildStrikeChart(latestStrikeDetail, {
         compact: false,
         referencePrice,
         side: strikeLensState.side,
         minNotional: strikeLensState.minNotional,
+        metricMode: strikeLensState.metric,
     });
-    const exposure = chartModel.exposure;
+    const rows = filteredStrikeRows(latestStrikeDetail);
 
     if (readout) readout.textContent = formatStrike(referencePrice);
+    if (chartHeading) chartHeading.textContent = chartModel.metric.heading;
+    if (chartNote) {
+        const sideLabel = strikeLensState.side === 'all' ? 'Calls and puts' : `${strikeLensState.side === 'call' ? 'Calls' : 'Puts'}`;
+        chartNote.textContent = `${sideLabel} grouped by strike on one shared scale. The largest visible levels are labeled.`;
+    }
     if (summaryEl) {
-        summaryEl.innerHTML = `
-            <div class="summary-card"><div class="summary-label">Put Exposure Above</div><div class="summary-value">${compactCurrency(exposure.putExposure)}</div><div class="summary-subtext">${exposure.putLevels} target level${exposure.putLevels !== 1 ? 's' : ''}</div></div>
-            <div class="summary-card"><div class="summary-label">Call Exposure Below</div><div class="summary-value">${compactCurrency(exposure.callExposure)}</div><div class="summary-subtext">${exposure.callLevels} target level${exposure.callLevels !== 1 ? 's' : ''}</div></div>
-            <div class="summary-card"><div class="summary-label">Total At Reference</div><div class="summary-value">${compactCurrency(exposure.totalExposure)}</div><div class="summary-subtext">Around ${formatStrike(referencePrice)}</div></div>
-            <div class="summary-card"><div class="summary-label">Put / Call Book</div><div class="summary-value">${compactCurrency(exposure.totalPut)} / ${compactCurrency(exposure.totalCall)}</div></div>
-        `;
+        summaryEl.innerHTML = renderStrikeStory(rows, chartModel, referencePrice);
     }
 
     if (chartEl && typeof Plotly !== 'undefined') {
-        Plotly.newPlot(chartEl, chartModel.data, chartModel.layout, { responsive: true, displayModeBar: false }).then(() => Plotly.Plots.resize(chartEl));
+        const plot = chartEl.classList.contains('js-plotly-plot') ? Plotly.react : Plotly.newPlot;
+        plot(chartEl, chartModel.data, chartModel.layout, { responsive: true, displayModeBar: false })
+            .then(() => Plotly.Plots.resize(chartEl));
     }
 
-    const rows = filteredStrikeRows(latestStrikeDetail);
+    if (levelCount) levelCount.textContent = `${formatNumber(rows.length, 0)} level${rows.length !== 1 ? 's' : ''}`;
     if (levelsEl) {
         levelsEl.innerHTML = rows.length ? `
-            <table class="data-table">
-                <thead><tr><th>Side</th><th>Target</th><th>Distance</th><th>Notional</th><th>Orders</th></tr></thead>
+            <table class="data-table strike-data-table" id="strike-modal-levels-table">
+                <thead><tr>
+                    <th data-sort-key="side">Side</th>
+                    <th data-sort-key="strike">Target</th>
+                    <th data-sort-key="distance">Distance</th>
+                    <th data-sort-key="notional">Notional</th>
+                    <th data-sort-key="orders">Orders</th>
+                    <th data-sort-key="premium">Premium</th>
+                </tr></thead>
                 <tbody>${rows.map(row => {
                     const distance = referencePrice ? ((row.strike - referencePrice) / referencePrice) * 100 : 0;
                     const sideClass = row.side === 'Call' ? 'strike-side-call' : 'strike-side-put';
                     return `<tr>
-                        <td class="${sideClass}">${row.side}</td>
-                        <td>${formatStrike(row.strike)}</td>
-                        <td class="strike-distance">${distance >= 0 ? '+' : ''}${formatNumber(distance, 1)}%</td>
-                        <td>${compactCurrency(row.notional)}</td>
-                        <td>${formatNumber(row.orders, 0)}</td>
+                        <td class="${sideClass}" data-sort-key="side" data-sort-value="${row.side}"><span class="strike-side-dot"></span>${row.side}</td>
+                        <td data-sort-key="strike" data-sort-value="${row.strike}">${formatStrike(row.strike)}</td>
+                        <td class="strike-distance" data-sort-key="distance" data-sort-value="${distance}">${distance >= 0 ? '+' : ''}${formatNumber(distance, 1)}%</td>
+                        <td data-sort-key="notional" data-sort-value="${row.notional}">${formatLensCurrency(row.notional)}</td>
+                        <td data-sort-key="orders" data-sort-value="${row.orders}">${formatNumber(row.orders, 0)}</td>
+                        <td data-sort-key="premium" data-sort-value="${row.premium}">${formatLensCurrency(row.premium)}</td>
                     </tr>`;
                 }).join('')}</tbody>
             </table>
         ` : '<p class="empty-state">No target levels match the filters.</p>';
+        setupSortableTable('strike-modal-levels-table');
     }
 
-    const orders = filteredStrikeOrders();
+    const filteredOrders = filteredStrikeOrders();
+    const orders = filteredOrders.slice(0, 80);
+    if (orderCount) {
+        orderCount.textContent = filteredOrders.length > orders.length
+            ? `${formatNumber(orders.length, 0)} of ${formatNumber(filteredOrders.length, 0)} loaded`
+            : `${formatNumber(orders.length, 0)} order${orders.length !== 1 ? 's' : ''}`;
+    }
     if (ordersEl) {
         ordersEl.innerHTML = orders.length ? `
-            <table class="data-table">
-                <thead><tr><th>Date</th><th>Side</th><th>Type</th><th>Strike</th><th>Notional</th><th>Premium</th><th>APR</th><th>Expiry</th></tr></thead>
+            <table class="data-table strike-data-table" id="strike-modal-orders-table">
+                <thead><tr>
+                    <th data-sort-key="created">Date</th>
+                    <th data-sort-key="side">Side</th>
+                    <th data-sort-key="type">Type</th>
+                    <th data-sort-key="strike">Strike</th>
+                    <th data-sort-key="notional">Notional</th>
+                    <th data-sort-key="premium">Premium</th>
+                    <th data-sort-key="apr">APR</th>
+                    <th data-sort-key="expiry">Expiry</th>
+                </tr></thead>
                 <tbody>${orders.map(order => `
                     <tr>
-                        <td>${formatUnixDateTime(order.created_at)}</td>
-                        <td>${escapeHtml(order.side || '—')}</td>
-                        <td class="${String(order.type).toLowerCase() === 'call' ? 'strike-side-call' : 'strike-side-put'}">${escapeHtml(order.type || '—')}</td>
-                        <td>${formatStrike(order.strike)}</td>
-                        <td>${compactCurrency(order.notional || 0)}</td>
-                        <td>${formatCurrency(order.premium || 0)}</td>
-                        <td>${formatPercentage(order.apr)}</td>
-                        <td>${formatUnixDate(order.expiry)}</td>
+                        <td data-sort-key="created" data-sort-value="${order.created_at || 0}">${formatUnixDateTime(order.created_at)}</td>
+                        <td data-sort-key="side" data-sort-value="${escapeAttr(order.side || '')}">${escapeHtml(order.side || '—')}</td>
+                        <td class="${String(order.type).toLowerCase() === 'call' ? 'strike-side-call' : 'strike-side-put'}" data-sort-key="type" data-sort-value="${escapeAttr(order.type || '')}"><span class="strike-side-dot"></span>${escapeHtml(order.type || '—')}</td>
+                        <td data-sort-key="strike" data-sort-value="${order.strike || 0}">${formatStrike(order.strike)}</td>
+                        <td data-sort-key="notional" data-sort-value="${order.notional || 0}">${formatLensCurrency(order.notional || 0)}</td>
+                        <td data-sort-key="premium" data-sort-value="${order.premium || 0}">${formatCurrency(order.premium || 0)}</td>
+                        <td data-sort-key="apr" data-sort-value="${order.apr || 0}">${formatPercentage(order.apr)}</td>
+                        <td data-sort-key="expiry" data-sort-value="${order.expiry || 0}">${formatUnixDate(order.expiry)}</td>
                     </tr>
                 `).join('')}</tbody>
             </table>
         ` : '<p class="empty-state">No recent orders match the filters.</p>';
+        setupSortableTable('strike-modal-orders-table');
     }
 }
 
@@ -941,6 +1121,7 @@ function initStrikeLens() {
     const resetBtn = document.getElementById('strike-reference-reset');
     const minInput = document.getElementById('strike-min-notional');
     const tabs = document.getElementById('strike-type-tabs');
+    const metricTabs = document.getElementById('strike-metric-tabs');
     const assetSelect = document.getElementById('strike-asset-select');
     const expirySelect = document.getElementById('strike-expiry-select');
 
@@ -954,6 +1135,16 @@ function initStrikeLens() {
     if (slider) {
         slider.addEventListener('input', event => {
             strikeLensState.referencePrice = Number(event.target.value);
+            renderStrikeLens();
+        });
+    }
+    if (metricTabs) {
+        metricTabs.addEventListener('click', event => {
+            const btn = event.target.closest('.tab-button');
+            if (!btn) return;
+            metricTabs.querySelectorAll('.tab-button').forEach(tab => tab.classList.remove('active'));
+            btn.classList.add('active');
+            strikeLensState.metric = btn.dataset.strikeMetric || 'volume';
             renderStrikeLens();
         });
     }
