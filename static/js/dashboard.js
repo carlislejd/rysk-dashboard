@@ -2305,10 +2305,14 @@ function renderPositionsHeatmap(summary) {
     const minStrike = strikeValues[0];
     const maxStrike = strikeValues[strikeValues.length - 1];
 
-    const barWidth = getStrikeBarWidth(strikeValues);
+    // Account positions are sparse more often than the global distribution.
+    // Keep each bar visually anchored to its strike instead of letting it span
+    // most of the distance to the next strike (and cover the price marker).
+    const barWidth = getStrikeBarWidth(strikeValues, 0.4);
 
     const shapes = [];
     const annotations = [];
+    const theme = getPlotlyTheme();
 
     // Only show ITM zones for a specific active expiry, not "All Expiries"
     const isActiveExpiry = selectedAssetExpiry && Date.parse(selectedAssetExpiry) > Date.now();
@@ -2365,7 +2369,11 @@ function renderPositionsHeatmap(summary) {
     if (hasPrice) {
         shapes.push({
             type: 'line', x0: cp, x1: cp, y0: 0, y1: 1, yref: 'paper',
-            line: { color: isActiveExpiry ? 'rgba(242, 255, 247, 0.4)' : 'rgba(244, 244, 245, 0.15)', width: 1.5, dash: 'dot' }
+            line: {
+                color: isActiveExpiry ? theme.priceLineColor : theme.priceLineMutedColor,
+                width: 1.5,
+                dash: 'dot'
+            }
         });
         annotations.push({
             x: cp, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,

@@ -47,6 +47,8 @@ function getPlotlyTheme() {
         annotationColor: isLight ? '#54514a' : '#6b7387',
         zoneCallBg: isLight ? 'rgba(0,132,184,0.06)' : 'rgba(0,212,255,0.05)',
         zonePutBg: isLight ? 'rgba(227,39,93,0.06)' : 'rgba(255,77,109,0.05)',
+        priceLineColor: isLight ? 'rgba(0, 132, 91, 0.58)' : 'rgba(242, 255, 247, 0.4)',
+        priceLineMutedColor: isLight ? 'rgba(0, 132, 91, 0.38)' : 'rgba(244, 244, 245, 0.2)',
         // Marker colors stay consistent across themes (the accent/semantic colors handle contrast)
     };
 }
@@ -76,11 +78,16 @@ function formatStrike(value) {
     return '$' + formatNumber(value, decimals);
 }
 
-function getStrikeBarWidth(strikeValues) {
+function getStrikeBarWidth(strikeValues, gapRatio = 0.8) {
     const values = (strikeValues || [])
         .map(Number)
         .filter(Number.isFinite)
         .sort((a, b) => a - b);
+
+    const requestedRatio = Number(gapRatio);
+    const safeGapRatio = Number.isFinite(requestedRatio) && requestedRatio > 0
+        ? Math.min(requestedRatio, 1)
+        : 0.8;
 
     const fallbackWidth = (strike) => {
         const absStrike = Math.abs(Number(strike) || 0);
@@ -104,7 +111,7 @@ function getStrikeBarWidth(strikeValues) {
         return fallbackWidth(values[0]);
     }
 
-    return minGap * 0.8;
+    return minGap * safeGapRatio;
 }
 
 function formatNumber(num, decimals = 2) {
