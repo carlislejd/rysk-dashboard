@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from statistics import median
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -70,11 +70,9 @@ def _where_clause(parts: List[str]) -> str:
     return "WHERE " + " AND ".join(parts) if parts else ""
 
 
-def _date_bucket(timestamp: int, days: int) -> str:
-    dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-    if days == 0 or days > 120:
-        dt = dt - timedelta(days=dt.weekday())
-    return dt.strftime("%Y-%m-%d")
+def _date_bucket(timestamp: int) -> str:
+    """Return the UTC execution day used by Protocol Flow charts."""
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d")
 
 
 def _tenor_bucket(days: Optional[float]) -> Optional[str]:
@@ -230,7 +228,7 @@ def get_analytics_overview(conn, days: int = 365, chain_id: Optional[int] = None
         _add_row(by_option_type[option_type], row)
         _add_row(by_asset_option_type[(asset, option_type)], row)
 
-        bucket = _date_bucket(int(row["created_at"]), days)
+        bucket = _date_bucket(int(row["created_at"]))
         point = by_date[bucket][asset]
         point["notional"] += float(row.get("notional_f") or 0)
         point["premium"] += float(row.get("premium_f") or 0)

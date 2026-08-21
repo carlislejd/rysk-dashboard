@@ -62,14 +62,20 @@ class TestAnalyticsServices(unittest.TestCase):
         self.assertEqual(len(result["by_asset_option_type"]), 3)
         self.assertEqual(result["totals"]["return_rate_pct"], 2 / 3 * 100)
         self.assertEqual(sum(point["total_notional"] for point in result["notional_series"]), 10_000)
-        self.assertEqual(len(result["strategy_mix_series"]), 1)
-        strategy_mix = result["strategy_mix_series"][0]
-        self.assertEqual(strategy_mix["call_count"], 2)
-        self.assertEqual(strategy_mix["put_count"], 1)
-        self.assertEqual(strategy_mix["call_notional"], 7_000)
-        self.assertEqual(strategy_mix["put_notional"], 3_000)
-        self.assertEqual(strategy_mix["total_count"], 3)
-        self.assertEqual(strategy_mix["total_notional"], 10_000)
+        self.assertEqual(
+            [point["date"] for point in result["notional_series"]],
+            ["2023-11-14", "2023-11-15", "2023-11-16"],
+        )
+        self.assertEqual(len(result["strategy_mix_series"]), 3)
+        first_mix, second_mix, third_mix = result["strategy_mix_series"]
+        self.assertEqual(first_mix["call_count"], 1)
+        self.assertEqual(first_mix["call_notional"], 1_000)
+        self.assertEqual(second_mix["put_count"], 1)
+        self.assertEqual(second_mix["put_notional"], 3_000)
+        self.assertEqual(third_mix["call_count"], 1)
+        self.assertEqual(third_mix["call_notional"], 6_000)
+        self.assertEqual(sum(point["total_count"] for point in result["strategy_mix_series"]), 3)
+        self.assertEqual(sum(point["total_notional"] for point in result["strategy_mix_series"]), 10_000)
         self.assertTrue(result["tenor_surface"])
 
         yield_metrics = {
