@@ -3,73 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RYSK://TERMINAL — Protocol Overview</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Rysk Intelligence — Overview</title>
+    {% include 'partials/head.html' %}
 </head>
-<body>
+<body data-page="global">
+{% set page = 'global' %}{% set page_label = 'Overview' %}{% set jumps = [('act-now', 'Market overview'), ('act-activity', 'Activity & expiries'), ('act-explore', 'Asset explorer')] %}
     <div class="app-shell">
-        <aside class="side-nav" aria-label="Dashboard workflow">
-            <a class="side-brand" href="/">
-                <span class="side-brand-mark">R</span>
-                <span>
-                    <strong>RYSK</strong>
-                    <small>//terminal</small>
-                </span>
-            </a>
-            <div class="side-nav-group">
-                <div class="side-nav-label">Workflows</div>
-                <a href="/" class="side-nav-item active">Global</a>
-                <a href="/account" class="side-nav-item">Account</a>
-                <a href="/analytics" class="side-nav-item">Analytics</a>
-                <a href="/docs" class="side-nav-item">Docs</a>
-            </div>
-            <div class="side-nav-group page-jump-list">
-                <div class="side-nav-label">Global</div>
-                <a href="#act-now" class="side-nav-item compact">Right Now</a>
-                <a href="#act-explore" class="side-nav-item compact">Explore</a>
-            </div>
-            <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
-        </aside>
-    <main class="container app-main">
+        {% include 'partials/sidebar.html' %}
+    <main id="workspace" tabindex="-1" class="container app-main">
         <header>
-            <div class="header-topline">
-                <nav class="dashboard-nav">
-                    <a href="/" class="active">Global</a>
-                    <a href="/account">Account</a>
-                    <a href="/analytics">Analytics</a>
-                    <a href="/docs">Docs</a>
-                </nav>
-                <span class="live-dot">Live Feed</span>
-                <button class="theme-toggle" id="theme-toggle" title="Toggle day/night mode">&#9790;</button>
-            </div>
-            <h1>Protocol <em>Overview</em></h1>
+            {% include 'partials/topbar.html' %}
+            <div class="page-intro"><div><div class="page-eyebrow"><span></span> THE OPTIONS LANDSCAPE</div><h1>See the market.<br><em>Find your perspective.</em></h1><p class="page-description">The flow, the premiums, the positions. Your view into Rysk.</p></div><a class="intro-link" href="/analytics">Go deeper in Research <span>↗</span></a></div>
         </header>
-
-        <!-- Ticker tape — pure vibes, pauses on hover -->
-        <div class="ticker-tape" aria-hidden="true">
-            <div class="ticker-track">
-                <span><em>RYSK://TERMINAL</em> ▚ sell volatility, collect premium</span>
-                <span>covered calls <em>▲</em> cash-secured puts <b>▼</b></span>
-                <span>every strike tells a story</span>
-                <span><em>HYPE</em> ▚ <em>BTC</em> ▚ <em>ETH</em> ▚ <em>SOL</em> ▚ on-chain options flow</span>
-                <span>theta gang never sleeps</span>
-                <span>assignment is just a spicy limit order</span>
-                <span><em>RYSK://TERMINAL</em> ▚ sell volatility, collect premium</span>
-                <span>covered calls <em>▲</em> cash-secured puts <b>▼</b></span>
-                <span>every strike tells a story</span>
-                <span><em>HYPE</em> ▚ <em>BTC</em> ▚ <em>ETH</em> ▚ <em>SOL</em> ▚ on-chain options flow</span>
-                <span>theta gang never sleeps</span>
-                <span>assignment is just a spicy limit order</span>
-            </div>
-        </div>
 
         <!-- Hero KPI strip — six at-a-glance numbers -->
         <section class="hero-kpis" id="hero-kpis">
             <div class="hero-kpi" data-slot="primary">
-                <div class="hero-kpi-label">TVL</div>
+                <div class="hero-kpi-label">Open notional <button class="metric-help" data-glossary="Notional" aria-label="What is open notional?">?</button></div>
                 <div class="hero-kpi-value" id="hero-tvl">—</div>
                 <div class="hero-kpi-sub" id="hero-tvl-sub">&nbsp;</div>
             </div>
@@ -89,7 +39,7 @@
                 <div class="hero-kpi-sub" id="hero-active-sub">&nbsp;</div>
             </div>
             <div class="hero-kpi">
-                <div class="hero-kpi-label">Hottest (24h)</div>
+                <div class="hero-kpi-label">Leading asset · 24h</div>
                 <div class="hero-kpi-value" id="hero-hot">—</div>
                 <div class="hero-kpi-sub" id="hero-hot-sub">&nbsp;</div>
             </div>
@@ -102,11 +52,12 @@
 
         <!-- Act sub-nav — sticky anchor links -->
         <nav class="act-nav" id="act-nav">
-            <a href="#act-now" data-act="act-now" class="active">Right Now</a>
+            <a href="#act-now" data-act="act-now" class="active">Market overview</a>
+            <a href="#act-activity" data-act="act-activity">Activity &amp; expiries</a>
             <a href="#act-explore" data-act="act-explore">Explore</a>
         </nav>
 
-        <div class="chain-filter-control">
+        <div class="chain-filter-control"><div id="observation-status" class="observation-status" role="status">Checking observed activity…</div>
             <span class="time-range-label">Chain</span>
             <div class="tabs chain-filter-tabs" id="chain-filter-tabs">
                 <button class="tab-button active" data-chain="all">All</button>
@@ -120,23 +71,30 @@
              What's happening this minute / this week
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-now">
-            <div class="act-title">Right Now</div>
-            <div class="act-subtitle">Live activity, the next expiry, the most recent trades</div>
+            <div class="act-title">Market overview</div>
+            <div class="act-subtitle">Start with the big picture. Follow the detail that matters.</div>
         </div>
 
-        <!-- Market Pulse — what's hot right now -->
-        <section class="card">
-            <h2>Market Pulse</h2>
-            <div id="pulse-loading" class="loading">Loading...</div>
-            <div id="pulse-content" style="display: none;">
-                <div class="summary-grid" id="pulse-grid"></div>
-                <div id="pulse-strikes" style="margin-top: 16px;"></div>
-            </div>
-        </section>
-
+        <div class="market-grid">
+            <section class="card flow-card" aria-labelledby="flow-title">
+                <div class="chart-title-row"><div><div class="analytics-eyebrow">PROTOCOL FLOW</div><h2 id="flow-title">Capital in motion</h2></div><div class="tabs" id="flow-range-tabs" aria-label="Flow time window"><button class="tab-button" data-flow-days="30">30d</button><button class="tab-button" data-flow-days="90">90d</button><button class="tab-button active" data-flow-days="365" aria-pressed="true">1y</button></div></div>
+                <div class="flow-total-row"><strong id="flow-total">—</strong><span>executed notional <span id="flow-period">/ past year</span></span></div>
+                <div id="flow-loading" class="loading">Reading historical flow…</div>
+                <div id="flow-chart" class="chart-container" aria-label="Daily executed notional by chain"></div>
+                <div class="flow-footnote"><span><i class="legend-swatch"></i> HyperEVM <i class="legend-swatch ethereum"></i> Ethereum</span><span id="flow-sample">Daily buckets · UTC</span></div>
+            </section>
+            <section class="card market-brief" aria-labelledby="brief-title">
+                <div class="analytics-eyebrow">THE SHORT READ</div><h2 id="brief-title">Market brief<span class="brief-star" aria-hidden="true">✳</span></h2>
+                <div id="pulse-loading" class="loading">Reading market activity…</div>
+                <div id="pulse-content" style="display:none"><p id="market-narrative" class="market-narrative"></p><div id="pulse-grid" class="brief-metrics"></div></div>
+                <a class="brief-link" href="#act-explore">Explore the underlying assets <span>↗</span></a>
+            </section>
+        </div>
+        <section class="card" id="trending-card"><div class="analytics-eyebrow">POSITIONING</div><h2>Trending strikes <span class="heading-detail">/ past 7 days</span></h2><div id="pulse-strikes"></div></section>
+        <div class="act-divider" id="act-activity"><div class="act-title">Activity &amp; expiries</div><div class="act-subtitle">What traded, what settles next, and where the exposure sits.</div></div>
         <!-- Top Positions for Next Expiry -->
         <section class="card">
-            <h2>Top Positions — Next Expiry</h2>
+            <div class="analytics-eyebrow">UP NEXT</div><h2>Positions approaching expiry</h2><p class="card-subtitle">The five largest asset-and-strike groups at the next recorded expiry.</p>
             <div id="next-expiry-loading" class="loading">Loading...</div>
             <div id="next-expiry-content" style="display: none;">
                 <div class="summary-grid" id="next-expiry-header"></div>
@@ -160,7 +118,7 @@
 
         <!-- Recent Activity -->
         <section class="card">
-            <h2>Recent Activity</h2>
+            <div class="chart-title-row"><div><div class="analytics-eyebrow">EXECUTION TAPE</div><h2>Latest trades</h2></div><button class="text-action" data-export-table="recent-table" type="button">Export CSV <span aria-hidden="true">↓</span></button></div><p class="card-subtitle">The latest five recorded executions. IV is estimated when available.</p>
             <div id="recent-loading" class="loading">Loading...</div>
             <div id="recent-content" style="display: none;">
                 <table id="recent-table" class="data-table">
@@ -185,11 +143,11 @@
 
         <a class="analytics-handoff" href="/analytics">
             <div>
-                <span class="analytics-eyebrow">NEW // RESEARCH DESK</span>
-                <strong>Looking for the deeper protocol story?</strong>
+                <span class="analytics-eyebrow">THE RESEARCH DESK</span>
+                <strong>Every trade is part of a bigger picture.</strong>
                 <p>Notional streams, historical premium surfaces, volatility regimes, and assignment-adjusted outcomes now live in Analytics.</p>
             </div>
-            <span class="analytics-handoff-arrow">Open Analytics →</span>
+            <span class="analytics-handoff-arrow">Explore Research ↗</span>
         </a>
 
         <!-- ════════════════════════════════════════════════════════════════
@@ -197,13 +155,13 @@
              Drill down by asset or expiry
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-explore">
-            <div class="act-title">Explore</div>
+            <div class="act-title">Explore the market</div>
             <div class="act-subtitle">Click any card to drill into a single asset or expiry</div>
         </div>
 
         <!-- Asset Carousel -->
         <section class="card">
-            <h2>Assets</h2>
+            <div class="chart-title-row"><div><div class="analytics-eyebrow">THE UNDERLYINGS</div><h2>Asset explorer</h2></div><label class="asset-search"><span data-icon="search" aria-hidden="true"></span><input id="asset-search" type="search" placeholder="Find an asset…" aria-label="Find an asset"></label></div><p class="card-subtitle">All-time activity by asset and chain. Select a card to inspect strikes, expiries, and trades.</p>
             <div id="assets-loading" class="loading">Loading assets...</div>
             <div id="assets-content" style="display: none;">
                 <div class="asset-carousel">
@@ -265,6 +223,7 @@
             </div>
         </section>
 
+    {% include 'partials/footer.html' %}
     </main>
     </div>
     <div class="sidepanel-backdrop" id="sidepanel-backdrop" aria-hidden="true"></div>

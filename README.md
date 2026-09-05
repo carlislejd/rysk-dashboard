@@ -9,6 +9,17 @@ Web dashboard and agent-friendly CLI for managing Rysk option positions.
 - **Protocol Analytics**: Explore notional streams, yield-normalized historical OTM cohorts, volatility regimes, and call/put premium efficiency
 - **CLI**: Query account, open positions, strike distributions, and history in table or JSON mode
 
+## Workspace experience
+
+- **Overview** brings recorded flow, a market brief, upcoming expiries, and latest trades together. The latest observed trade date is shown explicitly; the page does not imply historical data is live.
+- **Portfolio** accepts up to ten public wallet addresses, preserving combined and per-wallet analysis without a wallet signature.
+- **Research** retains the historical premium surface, strategy mix, volatility, and yield analytics.
+- Use **Quick find** or **⌘K / Ctrl+K** to jump between workflows and search plain-language metric definitions.
+- Search the asset explorer by symbol or chain, open an asset's Strike Lens, or export the latest trade table as CSV.
+- Light and dark themes share responsive layouts. Wide tables scroll within their sections; asset cards and sortable columns support keyboard activation.
+
+Shared navigation lives in `templates/partials/`. The workspace design is in `static/css/desk.css`, layered over the existing component styles, and shared interactions are in `static/js/desk.js`.
+
 ## Setup
 
 1. Install Poetry (if needed):

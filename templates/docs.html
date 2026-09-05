@@ -3,40 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rysk — API Docs</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Rysk Intelligence — API reference</title>
+    {% include 'partials/head.html' %}
 </head>
-<body>
-    <div class="container">
+<body data-page="docs">
+{% set page = 'docs' %}{% set page_label = 'API reference' %}{% set jumps = [('docs-start', 'Getting started'), ('docs-endpoints', 'Endpoints'), ('docs-output', 'Response preview')] %}
+    <div class="app-shell">
+    {% include 'partials/sidebar.html' %}
+    <main id="workspace" tabindex="-1" class="container app-main docs-page">
         <header>
-            <nav class="dashboard-nav">
-                <a href="/">Global</a>
-                <a href="/account">Account</a>
-                <a href="/analytics">Analytics</a>
-                <a href="/docs" class="active">Docs</a>
-            </nav>
-            <h1>API Reference</h1>
+            {% include 'partials/topbar.html' %}
+            <div class="page-intro"><div><div class="page-eyebrow"><span></span> BUILT FOR YOUR WORKFLOW</div><h1>Your data.<br><em>Beyond the dashboard.</em></h1><p class="page-description">Explore the same insights through the API and CLI.</p></div></div>
             <div class="account-bar">
                 <div class="account-display">CLI calls and hosted API endpoints for agents</div>
             </div>
         </header>
 
-        <section class="card docs-section">
+        <section id="docs-start" class="card docs-section">
             <h2>How To Use</h2>
-            <pre class="docs-code">1) Enter a wallet address above.
+            <pre class="docs-code">1) Enter a public wallet address below.
 2) Click "Apply Address".
 3) Click an endpoint card to preview JSON here.
 4) Click "Open Endpoint" to open that URL in a new tab.</pre>
         </section>
 
         <section class="card docs-section">
-            <h2>Hosted Endpoints (Preview Before Opening)</h2>
+            <h2 id="docs-endpoints">Explore endpoints</h2>
             <p class="subtitle">Base URL: <code>{{ api_base }}</code></p>
             <div class="docs-address-row">
                 <input
+                    aria-label="Public wallet address"
                     id="docs-address-input"
                     class="account-input docs-address-input"
                     type="text"
@@ -85,7 +81,7 @@
         </section>
 
         <section class="card docs-section">
-            <h2>Example Output (Live Preview)</h2>
+            <h2 id="docs-output">Response preview</h2>
             <div class="docs-output-toolbar">
                 <div id="docs-selected-endpoint" class="account-status">No endpoint selected.</div>
                 <div class="docs-output-actions">
@@ -96,7 +92,9 @@
             <pre id="docs-live-output" class="docs-code">Select an endpoint card above to load live JSON preview.</pre>
         </section>
 
-    </div>
+    {% include 'partials/footer.html' %}
+    </main></div>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script>
         window.DOCS_API_BASE = "{{ api_base }}";
     </script>

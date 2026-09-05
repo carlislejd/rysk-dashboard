@@ -1,0 +1,22 @@
+        <a class="skip-link" href="#workspace">Skip to content</a>
+        <aside class="side-nav" aria-label="Main navigation">
+            <a class="side-brand" href="/" aria-label="Rysk Intelligence home">
+                <span class="side-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M6 25V7h9c9 0 9 11 0 11H6m9 0 10 7M7 8l18 17"/></svg></span>
+                <span><strong>rysk<span class="brand-period">.</span></strong><small>Intelligence</small></span>
+            </a>
+            <div class="side-nav-label">Workspace</div>
+            <nav class="side-nav-group">
+                {% for href, label, icon, key in [('/', 'Overview', 'overview', 'global'), ('/account', 'Portfolio', 'wallet', 'account'), ('/analytics', 'Research', 'research', 'analytics'), ('/docs', 'API reference', 'code', 'docs')] %}
+                <a href="{{ href }}" class="side-nav-item {{ 'active' if page == key }}" {% if page == key %}aria-current="page"{% endif %}><span data-icon="{{ icon }}" aria-hidden="true"></span>{{ label }}{% if page == key %}<span class="nav-active-dot"></span>{% endif %}</a>
+                {% endfor %}
+            </nav>
+            <div class="side-nav-group page-jump-list">
+                <div class="side-nav-label">On this page</div>
+                {% for href, label in jumps %}<a href="#{{ href }}" class="side-nav-item compact">{{ label }}</a>{% endfor %}
+            </div>
+            <div class="sidebar-bottom">
+                <div class="sidebar-note"><span class="sidebar-note-mark" aria-hidden="true">↗</span><strong>Understand the trade.</strong><p>Follow the flow. Find the context. Know your exposure.</p></div>
+                <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Open Rysk</a>
+                <div class="sidebar-footer"><span class="connection-dot"></span> On-chain options <span>v.01</span></div>
+            </div>
+        </aside>

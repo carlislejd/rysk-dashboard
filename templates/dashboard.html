@@ -3,38 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RYSK://TERMINAL — Account</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Rysk Intelligence — Portfolio</title>
+    {% include 'partials/head.html' %}
 </head>
-<body data-default-account="{{ account_address }}">
+<body data-page="account" data-default-account="{{ account_address }}">
     <div id="main-content">
+{% set page = 'account' %}{% set page_label = 'Portfolio' %}{% set jumps = [('act-now', 'Open positions'), ('act-performance', 'Performance')] %}
     <div class="app-shell">
-        <aside class="side-nav" aria-label="Dashboard workflow">
-            <a class="side-brand" href="/">
-                <span class="side-brand-mark">R</span>
-                <span>
-                    <strong>RYSK</strong>
-                    <small>//terminal</small>
-                </span>
-            </a>
-            <div class="side-nav-group">
-                <div class="side-nav-label">Workflows</div>
-                <a href="/" class="side-nav-item">Global</a>
-                <a href="/account" class="side-nav-item active">Account</a>
-                <a href="/analytics" class="side-nav-item">Analytics</a>
-                <a href="/docs" class="side-nav-item">Docs</a>
-            </div>
-            <div class="side-nav-group page-jump-list">
-                <div class="side-nav-label">Account</div>
-                <a href="#act-now" class="side-nav-item compact">Right Now</a>
-                <a href="#act-performance" class="side-nav-item compact">Performance</a>
-            </div>
-            <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
-        </aside>
-    <main class="container app-main">
+        {% include 'partials/sidebar.html' %}
+    <main id="workspace" tabindex="-1" class="container app-main">
         <div id="account-main-loading" class="main-loading-overlay" style="display: none;">
             <div class="main-loading-card">
                 <div class="loading-spinner"></div>
@@ -42,17 +19,8 @@
             </div>
         </div>
         <header>
-            <div class="header-topline">
-                <nav class="dashboard-nav">
-                    <a href="/">Global</a>
-                    <a href="/account" class="active">Account</a>
-                    <a href="/analytics">Analytics</a>
-                    <a href="/docs">Docs</a>
-                </nav>
-                <span class="live-dot">Live Feed</span>
-                <button class="theme-toggle" id="theme-toggle" title="Toggle day/night mode">&#9790;</button>
-            </div>
-            <h1>Your <em>Account</em></h1>
+            {% include 'partials/topbar.html' %}
+            <div class="page-intro"><div><div class="page-eyebrow"><span></span> YOUR OPTIONS BOOK</div><h1>Every position.<br><em>A fuller picture.</em></h1><p class="page-description">Understand your exposure today and your performance over time.</p></div></div>
             <div class="account-bar">
                 <div class="account-display">
                     Wallet: <span id="current-wallet-display">Not set</span>
@@ -62,24 +30,6 @@
                 <span id="account-status" class="account-status"></span>
             </div>
         </header>
-
-        <!-- Ticker tape — pure vibes, pauses on hover -->
-        <div class="ticker-tape" aria-hidden="true">
-            <div class="ticker-track">
-                <span><em>RYSK://TERMINAL</em> ▚ your book, your numbers</span>
-                <span>premium collected is premium earned</span>
-                <span>watch your strikes <em>▲</em> respect your expiries <b>▼</b></span>
-                <span>APR is a lifestyle</span>
-                <span>returned = pure profit ▚ assigned = new inventory</span>
-                <span>theta gang never sleeps</span>
-                <span><em>RYSK://TERMINAL</em> ▚ your book, your numbers</span>
-                <span>premium collected is premium earned</span>
-                <span>watch your strikes <em>▲</em> respect your expiries <b>▼</b></span>
-                <span>APR is a lifestyle</span>
-                <span>returned = pure profit ▚ assigned = new inventory</span>
-                <span>theta gang never sleeps</span>
-            </div>
-        </div>
 
         <!-- Hero KPI strip — your numbers, at a glance -->
         <section class="hero-kpis" id="hero-kpis">
@@ -189,6 +139,7 @@
                 History API not configured. Set HISTORY_API_URL environment variable.
             </div>
         </section>
+    {% include 'partials/footer.html' %}
     </main>
     </div>
     <div class="sidepanel-backdrop" id="sidepanel-backdrop" aria-hidden="true"></div>
@@ -197,15 +148,15 @@
             <div class="account-entry-header">
                 <div>
                     <div class="sidepanel-eyebrow">Account</div>
-                    <h2 id="account-entry-title">Manage wallet addresses</h2>
+                    <h2 id="account-entry-title">Your portfolio starts here.</h2><p class="card-subtitle">Add public wallet addresses to explore your positions and premium history. No wallet connection or signature needed.</p>
                 </div>
             </div>
-            <div class="splash-input-row account-entry-row">
-                <textarea id="splash-account-input" class="account-input splash-input account-address-list" rows="3" placeholder="One 0x address per line" spellcheck="false" autocomplete="off"></textarea>
+            <label for="splash-account-input" class="wallet-input-label">Wallet addresses</label><div class="splash-input-row account-entry-row">
+                <textarea id="splash-account-input" aria-describedby="splash-typing splash-error" class="account-input splash-input account-address-list" rows="3" placeholder="One 0x address per line" spellcheck="false" autocomplete="off"></textarea>
                 <button id="splash-launch" class="terminal-button splash-button" type="button">Save &amp; load</button>
             </div>
-            <div id="splash-error" class="error" style="display: none;"></div>
-            <div id="splash-typing" class="account-entry-hint">Add up to 10 addresses. The default view combines their full history; use the wallet filter to inspect one.</div>
+            <div id="splash-error" role="alert" class="error" style="display: none;"></div>
+            <a href="/" class="wallet-back-link">← Back to market overview</a><div id="splash-typing" class="account-entry-hint">Add up to 10 addresses. The default view combines their full history; use the wallet filter to inspect one.</div>
         </div>
     </div>
     </div>

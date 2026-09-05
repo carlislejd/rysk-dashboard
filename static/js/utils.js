@@ -3,7 +3,8 @@
 // ── Theme Toggle (Day/Night) ──
 
 function initTheme() {
-    const saved = localStorage.getItem('rysk-theme') || 'dark';
+    let saved = 'light';
+    try { saved = localStorage.getItem('rysk-theme') || 'light'; } catch (_) {}
     document.documentElement.setAttribute('data-theme', saved);
     updateToggleIcons(saved);
 }
@@ -12,7 +13,7 @@ function toggleTheme() {
     const current = document.documentElement.getAttribute('data-theme') || 'dark';
     const next = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('rysk-theme', next);
+    try { localStorage.setItem('rysk-theme', next); } catch (_) {}
     updateToggleIcons(next);
     // Re-render any visible Plotly charts with new theme colors
     replotAllCharts();
@@ -22,7 +23,8 @@ function updateToggleIcons(theme) {
     // ☾ for dark (click to go light), ☀ for light (click to go dark)
     const icon = theme === 'dark' ? '\u263E' : '\u2600';
     document.querySelectorAll('.theme-toggle').forEach(btn => {
-        btn.innerHTML = icon;
+        btn.textContent = icon;
+        btn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`);
     });
 }
 
@@ -41,10 +43,10 @@ function replotAllCharts() {
 function getPlotlyTheme() {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     return {
-        fontColor: isLight ? '#7a766b' : '#6b7387',
-        gridColor: isLight ? 'rgba(20,19,15,0.08)' : 'rgba(170,255,210,0.07)',
-        annotationBg: isLight ? 'rgba(253,251,244,0.92)' : 'rgba(6,7,9,0.85)',
-        annotationColor: isLight ? '#54514a' : '#6b7387',
+        fontColor: isLight ? '#68776b' : '#a9bbb3',
+        gridColor: isLight ? '#e5e7de' : '#2b3a39',
+        annotationBg: isLight ? '#fdfdf9' : '#192525',
+        annotationColor: isLight ? '#53635a' : '#b8c6c1',
         zoneCallBg: isLight ? 'rgba(0,132,184,0.06)' : 'rgba(0,212,255,0.05)',
         zonePutBg: isLight ? 'rgba(227,39,93,0.06)' : 'rgba(255,77,109,0.05)',
         priceLineColor: isLight ? 'rgba(0, 132, 91, 0.58)' : 'rgba(242, 255, 247, 0.4)',

@@ -189,7 +189,7 @@ function updateAccountUI(address) {
 function setAccountStatus(message = '', isError = false) {
     if (!accountStatusEl) return;
     accountStatusEl.textContent = message || '';
-    accountStatusEl.style.color = isError ? '#ff4d6d' : '#6b7387';
+    accountStatusEl.style.color = isError ? '#ba7068' : '#6b7387';
 }
 
 let positionsAssetSummary = [];
@@ -734,7 +734,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         x: points.map(p => p.x),
         y: points.map(p => p.y),
         marker: {
-            color: '#00ff9d',
+            color: '#67997e',
             size: sizes,
             opacity: opacities
         },
@@ -750,7 +750,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         autosize: true,
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
-        font: { color: theme.fontColor, family: 'JetBrains Mono, monospace' },
+        font: { color: theme.fontColor, family: 'DM Sans, sans-serif' },
         margin: { l: 60, r: 20, t: 30, b: 60 },
         xaxis: {
             title: 'Date',
@@ -777,7 +777,7 @@ function renderAprChart(expiredPositions, filterSymbol = null) {
         mode: 'lines',
         x: [points[0].x, points[points.length - 1].x],
         y: [avgApr, avgApr],
-        line: { color: '#ff9f1c', dash: 'dash' },
+        line: { color: '#b48c52', dash: 'dash' },
         name: `Avg APR ${formatPercentage(avgApr)}`
     }], layout, { displayModeBar: false, responsive: true }).then(() => {
         Plotly.Plots.resize(plot);
@@ -1666,12 +1666,12 @@ function renderAccountPnl(historyData, openPositions) {
         const theme = getPlotlyTheme();
         const cumulativeMode = dates.length === 1 ? 'lines+markers' : 'lines';
         Plotly.newPlot('pnl-chart-account', [
-            { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(0, 255, 157, 0.30)' }, yaxis: 'y2' },
-            { x: dates, y: cumTotalArr, type: 'scatter', mode: cumulativeMode, name: 'Cumulative Total', line: { color: '#00ff9d', width: 2.5 }, marker: { size: 8 } },
-            { x: dates, y: cumReturnedArr, type: 'scatter', mode: cumulativeMode, name: 'Expired OTM Premium', line: { color: '#ff9f1c', width: 2, dash: 'dot' }, marker: { size: 8 } },
+            { x: dates, y: dailyPrem, type: 'bar', name: `${dateLabel} Premium`, marker: { color: 'rgba(103, 153, 126, 0.30)' }, yaxis: 'y2' },
+            { x: dates, y: cumTotalArr, type: 'scatter', mode: cumulativeMode, name: 'Cumulative Total', line: { color: '#67997e', width: 2.5 }, marker: { size: 8 } },
+            { x: dates, y: cumReturnedArr, type: 'scatter', mode: cumulativeMode, name: 'Expired OTM Premium', line: { color: '#b48c52', width: 2, dash: 'dot' }, marker: { size: 8 } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+            font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 60 },
             xaxis: { showgrid: false, tickfont: { size: 10 }, tickangle: -45 },
             yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
@@ -2334,12 +2334,12 @@ function renderPositionsHeatmap(summary) {
         // ITM Calls zone (left of price)
         shapes.push({
             type: 'rect', x0: xMin, x1: cp, y0: 0, y1: 1, yref: 'paper',
-            fillcolor: 'rgba(0, 212, 255, 0.05)', line: { width: 0 }, layer: 'below'
+            fillcolor: 'rgba(106, 157, 168, 0.05)', line: { width: 0 }, layer: 'below'
         });
         // ITM Puts zone (right of price)
         shapes.push({
             type: 'rect', x0: cp, x1: xMax, y0: 0, y1: 1, yref: 'paper',
-            fillcolor: 'rgba(255, 77, 109, 0.05)', line: { width: 0 }, layer: 'below'
+            fillcolor: 'rgba(186, 112, 104, 0.05)', line: { width: 0 }, layer: 'below'
         });
 
         const callZoneMid = (xMin + cp) / 2;
@@ -2350,7 +2350,7 @@ function renderPositionsHeatmap(summary) {
                 x: callZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${compactCurrency(callsItmNotional)} call exposure</b><br>${callsItm} target level${callsItm !== 1 ? 's' : ''} at risk`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(0, 212, 255, 0.85)', family: 'JetBrains Mono, monospace' },
+                font: { size: 10, color: 'rgba(106, 157, 168, 0.85)', family: 'DM Sans, sans-serif' },
                 bgcolor: 'rgba(6,7,9,0.75)', borderpad: 4,
             });
         }
@@ -2359,7 +2359,7 @@ function renderPositionsHeatmap(summary) {
                 x: putZoneMid, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${compactCurrency(putsItmNotional)} put exposure</b><br>${putsItm} target level${putsItm !== 1 ? 's' : ''} at risk`,
                 showarrow: false,
-                font: { size: 10, color: 'rgba(255, 77, 109, 0.85)', family: 'JetBrains Mono, monospace' },
+                font: { size: 10, color: 'rgba(186, 112, 104, 0.85)', family: 'DM Sans, sans-serif' },
                 bgcolor: 'rgba(6,7,9,0.75)', borderpad: 4,
             });
         }
@@ -2379,7 +2379,7 @@ function renderPositionsHeatmap(summary) {
             x: cp, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
             text: `<b>Price ${formatStrike(cp)}</b>`,
             showarrow: false,
-            font: { size: 10, color: isActiveExpiry ? '#f4f4f5' : '#6b7387', family: 'JetBrains Mono, monospace' },
+            font: { size: 10, color: isActiveExpiry ? '#f4f4f5' : '#6b7387', family: 'DM Sans, sans-serif' },
             bgcolor: 'rgba(6,7,9,0.85)', borderpad: 3,
         });
     }
@@ -2388,13 +2388,13 @@ function renderPositionsHeatmap(summary) {
         {
             type: 'bar', name: 'Put', x: strikeValues,
             y: sorted.map(s => s.put_notional),
-            marker: { color: 'rgba(255, 77, 109, 0.7)' },
+            marker: { color: 'rgba(186, 112, 104, 0.7)' },
             width: barWidth,
         },
         {
             type: 'bar', name: 'Call', x: strikeValues,
             y: sorted.map(s => s.call_notional),
-            marker: { color: 'rgba(0, 212, 255, 0.7)' },
+            marker: { color: 'rgba(106, 157, 168, 0.7)' },
             width: barWidth,
         },
     ];
@@ -2402,7 +2402,7 @@ function renderPositionsHeatmap(summary) {
     const layout = {
         barmode: 'stack',
         plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
-        font: { family: 'JetBrains Mono, monospace', size: 12, color: '#6b7387' },
+        font: { family: 'DM Sans, sans-serif', size: 12, color: '#6b7387' },
         margin: { l: 60, r: 20, t: 40, b: 60 },
         xaxis: {
             title: 'Strike', showgrid: false, tickfont: { size: 10 },
@@ -2414,7 +2414,7 @@ function renderPositionsHeatmap(summary) {
         legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
         hoverlabel: {
             bgcolor: '#0c0e13',
-            font: { color: '#f2fff7', family: 'JetBrains Mono, monospace' },
+            font: { color: '#f2fff7', family: 'DM Sans, sans-serif' },
             bordercolor: 'rgba(170,255,210,0.07)'
         },
         shapes, annotations,

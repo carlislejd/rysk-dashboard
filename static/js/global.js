@@ -168,22 +168,22 @@ async function loadOverview(days) {
                     y: series.volumes,
                     type: 'bar',
                     name: `${label} Notional`,
-                    marker: { color: series.slug === 'ethereum' ? 'rgba(98, 126, 234, 0.58)' : 'rgba(0, 255, 157, 0.52)' },
+                    marker: { color: series.slug === 'ethereum' ? 'rgba(98, 126, 234, 0.58)' : 'rgba(103, 153, 126, 0.52)' },
                 });
             });
         } else {
-            traces.push({ x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(0, 255, 157, 0.55)' } });
+            traces.push({ x: dates, y: volumes, type: 'bar', name: 'Notional', marker: { color: 'rgba(103, 153, 126, 0.55)' } });
         }
-        traces.push({ x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#ff9f1c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' });
+        traces.push({ x: dates, y: premiums, type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#b48c52', width: 2 }, marker: { size: 4 }, yaxis: 'y2' });
 
         Plotly.newPlot('volume-chart', traces, {
             barmode: 'stack',
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+            font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
-            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#ff9f1c' }, tickprefix: '$' },
+            yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#b48c52' }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
@@ -218,11 +218,13 @@ function renderChainBreakdown(chains) {
 // ── Asset Grid ──
 
 async function loadAssets() {
+    const requestChain = selectedChain;
     const loading = document.getElementById('assets-loading');
     const content = document.getElementById('assets-content');
     try {
         const resp = await fetch(withChain('/api/global/assets'));
         const data = await resp.json();
+        if (requestChain !== selectedChain) return;
         if (!data.success) throw new Error(data.error);
         globalAssetList = data.assets || [];
         assetsExpanded = false;
@@ -233,6 +235,7 @@ async function loadAssets() {
 
         selectedAsset = null;
     } catch (e) {
+        if (requestChain !== selectedChain) return;
         loading.textContent = 'Failed to load assets: ' + e.message;
     }
 }
@@ -246,7 +249,9 @@ function renderAssetCards() {
         if (toggle) toggle.style.display = 'none';
         return;
     }
-    const visible = assetsExpanded ? globalAssetList : globalAssetList.slice(0, LIST_PREVIEW_LIMIT);
+    const query = (document.getElementById('asset-search')?.value || '').trim().toLowerCase();
+    const filtered = globalAssetList.filter(a => `${a.symbol} ${chainLabel(a)}`.toLowerCase().includes(query));
+    const visible = query || assetsExpanded ? filtered : filtered.slice(0, LIST_PREVIEW_LIMIT);
 
     grid.innerHTML = visible.map(a => {
         const base = shortSymbol(a.symbol);
@@ -255,7 +260,7 @@ function renderAssetCards() {
         const expiredTotal = a.expired_count || 0;
         const returnedPct = expiredTotal > 0 ? ((a.returned / expiredTotal) * 100).toFixed(0) : '—';
         return `
-            <div class="asset-card" data-asset="${escapeAttr(a.symbol)}" data-chain-id="${escapeAttr(a.chain_id ?? '')}">
+            <div class="asset-card" role="button" tabindex="0" aria-label="Inspect ${escapeAttr(a.symbol)} on ${escapeAttr(chainLabel(a))}" data-asset="${escapeAttr(a.symbol)}" data-chain-id="${escapeAttr(a.chain_id ?? '')}">
                 <div class="asset-card-header">
                     <span class="asset-symbol"><span class="token-badge ${base.toLowerCase()}">${base}</span></span>
                     <span class="asset-count">${formatNumber(a.trade_count, 0)} orders</span>
@@ -266,16 +271,17 @@ function renderAssetCards() {
                     <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(a.total_premium)}</span></div>
                     <div class="asset-metric"><span class="asset-metric-label">Avg APR</span><span class="asset-metric-value asset-summary-apr">${formatPercentage(a.avg_apr)}</span></div>
                     <div class="asset-metric"><span class="asset-metric-label">Put / Call</span><span class="asset-metric-value">${putPct}% / ${callPct}%</span></div>
-                    <div class="asset-metric"><span class="asset-metric-label">Active</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
-                    <div class="asset-metric"><span class="asset-metric-label">Expired</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label" title="Trades without a recorded outcome; may include past expiries">Unresolved</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Outcomes recorded</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
                     <div class="asset-metric"><span class="asset-metric-label">Returned</span><span class="asset-metric-value" style="color: var(--accent);">${returnedPct}%</span></div>
                 </div>
             </div>
         `;
     }).join('');
 
+    if (!visible.length) grid.innerHTML = '<div class="empty-state">No matching assets. Try a symbol such as BTC, ETH, or HYPE.</div>';
     if (toggle) {
-        const needsToggle = globalAssetList.length > LIST_PREVIEW_LIMIT;
+        const needsToggle = !query && globalAssetList.length > LIST_PREVIEW_LIMIT;
         toggle.style.display = needsToggle ? 'inline-flex' : 'none';
         toggle.textContent = assetsExpanded ? 'Show fewer' : `Show all ${globalAssetList.length}`;
     }
@@ -619,7 +625,7 @@ function buildStrikeChart(detail, options = {}) {
                 x: (xMin + reference.price) / 2, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${formatStrikeMetric(exposure.callExposure, mode)} call ${metric.label.toLowerCase()}</b><br>${exposure.callLevels} target level${exposure.callLevels !== 1 ? 's' : ''}${suffix}`,
                 showarrow: false,
-                font: { size: compact ? 10 : 12, color: 'rgba(0, 212, 255, 0.88)', family: 'JetBrains Mono, monospace' },
+                font: { size: compact ? 10 : 12, color: 'rgba(106, 157, 168, 0.88)', family: 'DM Sans, sans-serif' },
                 bgcolor: theme.annotationBg, borderpad: compact ? 4 : 6,
             });
         }
@@ -629,7 +635,7 @@ function buildStrikeChart(detail, options = {}) {
                 x: (reference.price + xMax) / 2, y: 1.0, yref: 'paper', yanchor: 'bottom',
                 text: `<b>${formatStrikeMetric(exposure.putExposure, mode)} put ${metric.label.toLowerCase()}</b><br>${exposure.putLevels} target level${exposure.putLevels !== 1 ? 's' : ''}${suffix}`,
                 showarrow: false,
-                font: { size: compact ? 10 : 12, color: 'rgba(255, 77, 109, 0.88)', family: 'JetBrains Mono, monospace' },
+                font: { size: compact ? 10 : 12, color: 'rgba(186, 112, 104, 0.88)', family: 'DM Sans, sans-serif' },
                 bgcolor: theme.annotationBg, borderpad: compact ? 4 : 6,
             });
         }
@@ -643,7 +649,7 @@ function buildStrikeChart(detail, options = {}) {
             x: reference.price, y: 0, yref: 'paper', yanchor: 'top', yshift: 6,
             text: `<b>${reference.label}</b>`,
             showarrow: false,
-            font: { size: compact ? 10 : 12, color: theme.annotationColor, family: 'JetBrains Mono, monospace' },
+            font: { size: compact ? 10 : 12, color: theme.annotationColor, family: 'DM Sans, sans-serif' },
             bgcolor: theme.annotationBg, borderpad: compact ? 3 : 5,
         });
     }
@@ -658,10 +664,10 @@ function buildStrikeChart(detail, options = {}) {
             type: 'bar',
             name: 'Put',
             offsetgroup: 'put',
-            marker: { color: 'rgba(255, 77, 109, 0.72)', line: { color: 'rgba(255, 77, 109, 1)', width: 1 } },
+            marker: { color: 'rgba(186, 112, 104, 0.72)', line: { color: 'rgba(186, 112, 104, 1)', width: 1 } },
             text: compact ? undefined : buildStrikeValueLabels(putValues, mode),
             textposition: 'outside',
-            textfont: { color: 'rgba(255, 104, 132, 0.95)', family: 'JetBrains Mono, monospace', size: 10 },
+            textfont: { color: 'rgba(255, 104, 132, 0.95)', family: 'DM Sans, sans-serif', size: 10 },
             cliponaxis: false,
             hovertemplate: `Put target %{x:$,.2f}<br>${metric.label} %{y:${mode === 'orders' ? ',.0f' : '$,.0f'}}<br>Notional %{customdata[0]:$,.0f}<br>Orders %{customdata[1]:,.0f}<br>Premium %{customdata[2]:$,.2f}<extra></extra>`,
         });
@@ -675,10 +681,10 @@ function buildStrikeChart(detail, options = {}) {
             type: 'bar',
             name: 'Call',
             offsetgroup: 'call',
-            marker: { color: 'rgba(0, 212, 255, 0.72)', line: { color: 'rgba(0, 212, 255, 1)', width: 1 } },
+            marker: { color: 'rgba(106, 157, 168, 0.72)', line: { color: 'rgba(106, 157, 168, 1)', width: 1 } },
             text: compact ? undefined : buildStrikeValueLabels(callValues, mode),
             textposition: 'outside',
-            textfont: { color: 'rgba(43, 220, 255, 0.95)', family: 'JetBrains Mono, monospace', size: 10 },
+            textfont: { color: 'rgba(43, 220, 255, 0.95)', family: 'DM Sans, sans-serif', size: 10 },
             cliponaxis: false,
             hovertemplate: `Call target %{x:$,.2f}<br>${metric.label} %{y:${mode === 'orders' ? ',.0f' : '$,.0f'}}<br>Notional %{customdata[0]:$,.0f}<br>Orders %{customdata[1]:,.0f}<br>Premium %{customdata[2]:$,.2f}<extra></extra>`,
         });
@@ -690,7 +696,7 @@ function buildStrikeChart(detail, options = {}) {
         bargroupgap: 0.08,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: compact ? 12 : 13 },
+        font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: compact ? 12 : 13 },
         margin: compact ? { l: 60, r: 20, t: 48, b: 60 } : { l: 78, r: 28, t: 76, b: 70 },
         xaxis: {
             title: 'Strike Target',
@@ -715,7 +721,7 @@ function buildStrikeChart(detail, options = {}) {
         uniformtext: { minsize: 9, mode: 'hide' },
         hoverlabel: {
             bgcolor: '#0c0e13',
-            font: { color: '#f2fff7', family: 'JetBrains Mono, monospace' },
+            font: { color: '#f2fff7', family: 'DM Sans, sans-serif' },
             bordercolor: 'rgba(170,255,210,0.07)'
         },
         shapes,
@@ -1233,15 +1239,15 @@ function renderExpiryBreakdown(detail) {
 function renderDetailVolumeChart(vol) {
     const theme = getPlotlyTheme();
     Plotly.newPlot('detail-volume-chart', [
-        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(0, 255, 157, 0.55)' } },
-        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#ff9f1c', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.volume), type: 'bar', name: 'Notional', marker: { color: 'rgba(103, 153, 126, 0.55)' } },
+        { x: vol.data.map(d => d.date), y: vol.data.map(d => d.premium), type: 'scatter', mode: 'lines+markers', name: 'Premium', line: { color: '#b48c52', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
     ], {
         paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+        font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
         margin: { l: 60, r: 60, t: 20, b: 40 },
         xaxis: { showgrid: false, tickfont: { size: 11 } },
         yaxis: { title: 'Notional ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
-        yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#ff9f1c' }, tickprefix: '$' },
+        yaxis2: { title: 'Premium ($)', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#b48c52' }, tickprefix: '$' },
         legend: { orientation: 'h', y: -0.08, font: { size: 11 } }, bargap: 0.15,
     }, { responsive: true, displayModeBar: false });
 }
@@ -1314,11 +1320,13 @@ let expiryData = [];
 let selectedExplorerExpiry = null; // null = All
 
 async function loadExpiryExplorer() {
+    const requestChain = selectedChain;
     const loading = document.getElementById('expiry-loading');
     const content = document.getElementById('expiry-content');
     try {
         const resp = await fetch(withChain('/api/global/expiries'));
         const data = await resp.json();
+        if (requestChain !== selectedChain) return;
         if (!data.success) throw new Error(data.error);
         expiryData = data.expiries;
 
@@ -1343,6 +1351,7 @@ async function loadExpiryExplorer() {
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
+        if (requestChain !== selectedChain) return;
         loading.textContent = 'Failed to load expiries: ' + e.message;
     }
 }
@@ -1460,13 +1469,20 @@ function renderExpiryExplorer() {
 // ── Recent Activity (top 10) ──
 
 async function loadRecent() {
+    const requestChain = selectedChain;
     const loading = document.getElementById('recent-loading');
     const content = document.getElementById('recent-content');
     try {
         const resp = await fetch(withChain('/api/global/trades?limit=5&iv=true'));
         const data = await resp.json();
+        if (requestChain !== selectedChain) return;
         if (!data.success) throw new Error(data.error);
 
+        document.querySelector('[data-export-table="recent-table"]').disabled = !data.trades.length;
+        if (!data.trades.length) {
+            loading.textContent = 'No recorded trades for this chain.';
+            loading.style.display = 'block'; content.style.display = 'none'; return;
+        }
         document.getElementById('recent-body').innerHTML = data.trades.map(t => `<tr>
             <td>${formatUnixDateTime(t.created_at)}</td>
             <td>${chainBadge(t)}</td>
@@ -1483,6 +1499,7 @@ async function loadRecent() {
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
+        if (requestChain !== selectedChain) return;
         loading.textContent = 'Failed to load recent trades: ' + e.message;
     }
 }
@@ -1490,11 +1507,13 @@ async function loadRecent() {
 // ── Market Pulse ──
 
 async function loadMarketPulse() {
+    const requestChain = selectedChain;
     const loading = document.getElementById('pulse-loading');
     const content = document.getElementById('pulse-content');
     try {
         const resp = await fetch(withChain('/api/global/market-pulse'));
         const data = await resp.json();
+        if (requestChain !== selectedChain) return;
         if (!data.success) throw new Error(data.error);
 
         const top = data.top_asset_24h;
@@ -1509,62 +1528,33 @@ async function loadMarketPulse() {
         // Populate hero KPIs (4 of 5 — next-expiry comes from loadNextExpiryPositions)
         populateGlobalHero({ act, top, active, dte, volIndicator, volColor });
 
+        const freshness = data.observation || {};
+        const latest = freshness.last_trade_at;
+        const status = document.getElementById('observation-status');
+        const stale = latest && (Date.now() / 1000 - latest > 86400);
+        status.textContent = latest ? `Latest recorded trade · ${formatUnixDate(latest)}${stale ? ' · historical dataset' : ' · refreshes every minute'}` : 'No recorded trades for this chain';
+        status.classList.toggle('fresh', Boolean(latest && !stale));
+        document.getElementById('market-narrative').textContent = act.trades_24h > 0
+            ? `${top ? shortSymbol(top.symbol) + ' leads recorded activity. ' : ''}${formatNumber(act.trades_24h, 0)} trades generated ${compactCurrency(act.premium_24h)} in premium over the past 24 hours.`
+            : latest ? `The latest recorded trade is from ${formatUnixDate(latest)}. Explore the historical flow for context.` : 'A fresh view, waiting for its first recorded trades.';
         document.getElementById('pulse-grid').innerHTML = `
-            <div class="summary-card">
-                <div class="summary-label">Hottest Asset (24h)</div>
-                <div class="summary-value">${top ? `<span class="token-badge ${shortSymbol(top.symbol).toLowerCase()}">${shortSymbol(top.symbol)}</span>` : '—'}</div>
-                <div class="summary-subtext">${top ? `${chainLabel(top)} · ${top.trades} trades · ${compactCurrency(top.volume)}` : 'No activity'}</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">24h Volume</div>
-                <div class="summary-value">${compactCurrency(act.volume_24h)}</div>
-                <div class="summary-subtext" style="color: ${volColor};">${volIndicator} vs 7d avg</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">24h Premium</div>
-                <div class="summary-value">${compactCurrency(act.premium_24h)}</div>
-                <div class="summary-subtext">${act.trades_24h} trades</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Avg DTE (7d)</div>
-                <div class="summary-value">${dte.avg || '—'}d</div>
-                <div class="summary-subtext">${dte.min || '—'}d — ${dte.max || '—'}d range</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">Active Positions</div>
-                <div class="summary-value">${formatNumber(active.count, 0)}</div>
-                <div class="summary-subtext">${compactCurrency(active.notional)} notional</div>
-            </div>
-            <div class="summary-card">
-                <div class="summary-label">7d Volume</div>
-                <div class="summary-value">${compactCurrency(act.volume_7d)}</div>
-                <div class="summary-subtext">${act.trades_7d} trades</div>
-            </div>
+            <div class="summary-card"><div class="summary-label">7-day notional</div><div class="summary-value">${compactCurrency(act.volume_7d)}</div><div class="summary-subtext">${formatNumber(act.trades_7d, 0)} recorded trades</div></div>
+            <div class="summary-card"><div class="summary-label">Average entry tenor</div><div class="summary-value">${dte.avg != null ? dte.avg + 'd' : '—'}</div><div class="summary-subtext">${dte.min != null ? `${dte.min}–${dte.max}d range · 7d` : 'No trades in past 7 days'}</div></div>
+            <div class="summary-card"><div class="summary-label">24h vs daily average</div><div class="summary-value" style="color:${volColor}">${volIndicator}</div><div class="summary-subtext">Compared with past 7 days</div></div>
+            <div class="summary-card"><div class="summary-label">Open premium</div><div class="summary-value">${compactCurrency(active.premium)}</div><div class="summary-subtext">Recorded unexpired positions</div></div>
         `;
-
-        // Popular strikes
-        if (data.popular_strikes && data.popular_strikes.length) {
-            document.getElementById('pulse-strikes').innerHTML = `
-                <h3 class="subsection-title">Trending Strikes (7d)</h3>
-                <table class="data-table">
-                    <thead><tr><th>Asset</th><th>Chain</th><th>Strike</th><th>Type</th><th>Trades</th><th>Notional</th><th>Avg APR</th></tr></thead>
-                    <tbody>${data.popular_strikes.map(s => `<tr>
-                        <td><span class="token-badge ${shortSymbol(s.symbol).toLowerCase()}">${shortSymbol(s.symbol)}</span></td>
-                        <td>${chainBadge(s)}</td>
-                        <td>${formatStrike(s.strike)}</td>
-                        <td>${s.dominant_type || '—'}</td>
-                        <td>${s.count}</td>
-                        <td>${compactCurrency(s.volume)}</td>
-                        <td>${s.avg_apr != null ? formatPercentage(s.avg_apr) : '—'}</td>
-                    </tr>`).join('')}</tbody>
-                </table>
-            `;
-        }
+        document.getElementById('pulse-strikes').innerHTML = data.popular_strikes?.length ? `
+            <table class="data-table"><thead><tr><th>Asset</th><th>Chain</th><th>Strike</th><th>Type</th><th>Trades</th><th>Notional</th><th>Avg APR</th></tr></thead>
+            <tbody>${data.popular_strikes.map(s => `<tr><td><span class="token-badge">${escapeAttr(shortSymbol(s.symbol))}</span></td><td>${chainBadge(s)}</td><td>${formatStrike(s.strike)}</td><td>${s.dominant_type || '—'}</td><td>${s.count}</td><td>${compactCurrency(s.volume)}</td><td>${formatPercentage(s.avg_apr)}</td></tr>`).join('')}</tbody></table>`
+            : '<div class="empty-state"><strong>No trending strikes in the past 7 days</strong><p>Use the asset explorer to inspect the historical strike distribution.</p></div>';
 
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
-        loading.textContent = 'Failed to load market pulse: ' + e.message;
+        if (requestChain !== selectedChain) return;
+        loading.style.display = 'block';
+        loading.textContent = 'Market activity is unavailable. Refresh the page to try again.';
+        document.getElementById('observation-status').textContent = 'Activity unavailable · refresh to retry';
     }
 }
 
@@ -1594,12 +1584,12 @@ async function loadPnlChart(days) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('pnl-chart', [
-            { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(0, 255, 157, 0.30)' }, yaxis: 'y2' },
-            { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#00ff9d', width: 2.5 } },
-            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#ff9f1c', width: 2, dash: 'dot' } },
+            { x: dates, y: dailyPremium, type: 'bar', name: 'Daily Premium', marker: { color: 'rgba(103, 153, 126, 0.30)' }, yaxis: 'y2' },
+            { x: dates, y: cumPremium, type: 'scatter', mode: 'lines', name: 'Cumulative Premium', line: { color: '#67997e', width: 2.5 } },
+            { x: dates, y: cumReturned, type: 'scatter', mode: 'lines', name: 'Returned Position Premium', line: { color: '#b48c52', width: 2, dash: 'dot' } },
         ], {
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+            font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Cumulative ($)', gridcolor: theme.gridColor, tickfont: { size: 11 }, tickprefix: '$' },
@@ -1637,17 +1627,17 @@ async function loadPutCallRatio(days) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('pcr-chart', [
-            { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(255, 77, 109, 0.6)' } },
-            { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(0, 212, 255, 0.6)' } },
-            { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#ffc53d', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
+            { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(186, 112, 104, 0.6)' } },
+            { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(106, 157, 168, 0.6)' } },
+            { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#bfa261', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             barmode: 'stack',
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+            font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 50, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Notional Share (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
-            yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#ffc53d' } },
+            yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#bfa261' } },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });
@@ -1705,14 +1695,14 @@ async function loadHypeVolatility(days = 365) {
 
         const theme = getPlotlyTheme();
         Plotly.newPlot('hype-vol-chart', [
-            { x: dates, y: rv3, type: 'scatter', mode: 'lines', name: '3d RV', line: { color: '#ff4d6d', width: 1.5 } },
-            { x: dates, y: rv7, type: 'scatter', mode: 'lines', name: '7d RV', line: { color: '#ffc53d', width: 2 } },
-            { x: dates, y: rv30, type: 'scatter', mode: 'lines', name: '30d RV', line: { color: '#00ff9d', width: 2.5 } },
+            { x: dates, y: rv3, type: 'scatter', mode: 'lines', name: '3d RV', line: { color: '#ba7068', width: 1.5 } },
+            { x: dates, y: rv7, type: 'scatter', mode: 'lines', name: '7d RV', line: { color: '#bfa261', width: 2 } },
+            { x: dates, y: rv30, type: 'scatter', mode: 'lines', name: '30d RV', line: { color: '#67997e', width: 2.5 } },
             { x: dates, y: close, type: 'scatter', mode: 'lines', name: 'HYPE Close', line: { color: 'rgba(168, 178, 194, 0.55)', width: 1.5 }, yaxis: 'y2' },
         ], {
             paper_bgcolor: 'transparent',
             plot_bgcolor: 'transparent',
-            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+            font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
             margin: { l: 60, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Realized Vol (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%' },
@@ -1784,15 +1774,20 @@ async function loadOutcomes() {
 // ── Top Positions for Next Expiry ──
 
 async function loadNextExpiryPositions() {
+    const requestChain = selectedChain;
     const loading = document.getElementById('next-expiry-loading');
     const content = document.getElementById('next-expiry-content');
     try {
         const resp = await fetch(withChain('/api/global/next-expiry-positions?limit=5'));
         const data = await resp.json();
+        if (requestChain !== selectedChain) return;
         if (!data.success) throw new Error(data.error);
 
         if (!data.next_expiry || !data.positions.length) {
-            loading.textContent = 'No upcoming expiries found.';
+            content.style.display = 'none';
+            loading.style.display = 'block';
+            loading.innerHTML = '<div class="empty-state"><strong>No upcoming expiries recorded</strong><p>There are no future settlements in the selected dataset. Explore historical expiries below.</p><a href="#act-explore">Open the expiry explorer →</a></div>';
+            setHero('hero-next-expiry', '—', 'None recorded');
             return;
         }
 
@@ -1809,11 +1804,11 @@ async function loadNextExpiryPositions() {
                 <div class="summary-value">${expiryDate}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Total Notional</div>
+                <div class="summary-label">Top 5 groups · notional</div>
                 <div class="summary-value">${compactCurrency(totalNotional)}</div>
             </div>
             <div class="summary-card">
-                <div class="summary-label">Total Premium</div>
+                <div class="summary-label">Top 5 groups · premium</div>
                 <div class="summary-value">${compactCurrency(totalPremium)}</div>
             </div>
         `;
@@ -1832,6 +1827,7 @@ async function loadNextExpiryPositions() {
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
+        if (requestChain !== selectedChain) return;
         loading.textContent = 'Failed to load next expiry positions: ' + e.message;
     }
 }
@@ -1892,6 +1888,7 @@ function loadGlobalDashboard() {
         loadRecent(),
         loadAssets(),
         loadExpiryExplorer(),
+        loadFlowChart(),
     ]).then(() => {
         document.querySelectorAll('.chart-container .js-plotly-plot').forEach(el => {
             Plotly.Plots.resize(el);
@@ -1900,7 +1897,18 @@ function loadGlobalDashboard() {
 }
 
 function setChainFilter(chain) {
+    if (selectedChain === (chain || 'all')) return;
     selectedChain = chain || 'all';
+    ['pulse', 'recent', 'assets', 'expiry', 'next-expiry'].forEach(prefix => {
+        const content = document.getElementById(prefix + '-content');
+        const loading = document.getElementById(prefix + '-loading');
+        if (content) content.style.display = 'none';
+        if (loading) { loading.style.display = 'block'; loading.textContent = 'Loading selected chain…'; }
+    });
+    document.querySelectorAll('#hero-kpis .hero-kpi-value').forEach(el => { el.textContent = '—'; });
+    document.querySelectorAll('#hero-kpis .hero-kpi-sub').forEach(el => { el.textContent = ''; });
+    document.getElementById('observation-status').textContent = 'Checking selected chain…';
+    document.getElementById('pulse-strikes').replaceChildren();
     selectedAsset = null;
     selectedAssetChain = null;
     selectedExpiry = null;
@@ -1993,6 +2001,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    document.getElementById('asset-search').addEventListener('input', renderAssetCards);
+    document.getElementById('asset-grid').addEventListener('keydown', event => {
+        if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.asset-card')) { event.preventDefault(); event.target.click(); }
+    });
+    document.getElementById('flow-range-tabs').addEventListener('click', e => {
+        const button = e.target.closest('[data-flow-days]');
+        if (!button) return; flowDays = Number(button.dataset.flowDays);
+        document.querySelectorAll('[data-flow-days]').forEach(b => { b.classList.toggle('active', b === button); b.setAttribute('aria-pressed', String(b === button)); });
+        loadFlowChart();
+    });
     initActNavScrollSpy();
     initStrikeLens();
 
@@ -2018,58 +2036,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = document.getElementById(trackId);
         const step = 240;
 
-        function initLoop() {
-            const items = Array.from(t.children);
-            if (items.length < 2) return;
-
-            // Clone a screenful of items at each end
-            const cloneCount = Math.min(items.length, Math.ceil(t.clientWidth / step) + 1);
-            const tail = items.slice(-cloneCount);
-            const head = items.slice(0, cloneCount);
-            tail.forEach(el => {
-                const clone = el.cloneNode(true);
-                clone.setAttribute('data-carousel-clone', 'true');
-                t.insertBefore(clone, t.firstChild);
-            });
-            head.forEach(el => {
-                const clone = el.cloneNode(true);
-                clone.setAttribute('data-carousel-clone', 'true');
-                t.appendChild(clone);
-            });
-
-            // Start scrolled to the first real item (after prepended clones)
-            const prependWidth = tail.reduce((sum, el) => sum + el.offsetWidth, 0);
-            t.scrollLeft = prependWidth;
-
-            // When scroll stops near a clone boundary, teleport to the real items
-            let scrollTimer;
-            t.addEventListener('scroll', () => {
-                clearTimeout(scrollTimer);
-                scrollTimer = setTimeout(() => {
-                    const maxReal = t.scrollWidth - head.reduce((sum, el) => sum + el.offsetWidth, 0);
-                    if (t.scrollLeft <= 2) {
-                        t.style.scrollBehavior = 'auto';
-                        t.scrollLeft = maxReal - t.clientWidth;
-                        t.style.scrollBehavior = '';
-                    } else if (t.scrollLeft + t.clientWidth >= t.scrollWidth - 2) {
-                        t.style.scrollBehavior = 'auto';
-                        t.scrollLeft = prependWidth;
-                        t.style.scrollBehavior = '';
-                    }
-                }, 100);
-            });
-        }
-
-        // Observe for content changes (cards are loaded async)
-        const observer = new MutationObserver(() => {
-            // Only init once real (non-clone) items exist
-            if (t.children.length > 0 && !t.querySelector('[data-carousel-clone]')) {
-                initLoop();
-            }
-        });
-        observer.observe(t, { childList: true });
-        if (t.children.length > 0) initLoop();
-
         document.getElementById(leftId).addEventListener('click', () => {
             t.scrollBy({ left: -step, behavior: 'smooth' });
         });
@@ -2081,3 +2047,59 @@ document.addEventListener('DOMContentLoaded', () => {
     wireCarousel('detail-expiry-tabs', 'expiry-carousel-left', 'expiry-carousel-right');
     wireCarousel('expiry-explorer-tabs', 'expiry-explorer-left', 'expiry-explorer-right');
 });
+
+// Overview context uses the same recorded volume endpoint as the asset charts.
+let flowDays = 365;
+let flowRequest = 0;
+async function loadFlowChart() {
+    const version = ++flowRequest;
+    const days = flowDays;
+    const loading = document.getElementById('flow-loading');
+    const chart = document.getElementById('flow-chart');
+    loading.style.display = 'block'; loading.textContent = 'Reading historical flow…';
+    chart.style.display = 'none';
+    document.getElementById('flow-total').textContent = '—';
+    document.getElementById('flow-period').textContent = days === 365 ? '/ past year' : `/ past ${days} days`;
+    document.getElementById('flow-sample').textContent = 'Daily buckets · UTC';
+    try {
+        const response = await fetch(withChain(`/api/global/volume?days=${days}`));
+        const data = await response.json();
+        if (version !== flowRequest) return;
+        if (!response.ok || !data.success) throw new Error('Flow unavailable');
+        const rows = data.data || [];
+        document.getElementById('flow-total').textContent = compactCurrency(rows.reduce((sum, row) => sum + row.volume, 0), 1);
+        if (!rows.length) {
+            loading.innerHTML = '<div class="empty-state"><strong>No recorded flow in this window</strong><p>Try a longer time window or another chain to explore available history.</p></div>';
+            return;
+        }
+        const tradeCount = rows.reduce((sum, row) => sum + row.trade_count, 0);
+        document.getElementById('flow-sample').textContent = `${formatNumber(tradeCount, 0)} executions · UTC`;
+        if (typeof Plotly === 'undefined') {
+            loading.textContent = 'Chart library unavailable. The recorded total is shown above; refresh to retry.';
+            return;
+        }
+        const theme = getPlotlyTheme();
+        const chains = new Map();
+        (data.by_chain || []).forEach(row => {
+            const name = chainLabel(row);
+            if (!chains.has(name)) chains.set(name, {x: [], y: [], color: Number(row.chain_id) === 1 ? '#9aaaca' : '#67997e'});
+            chains.get(name).x.push(row.date); chains.get(name).y.push(row.volume);
+        });
+        const traces = Array.from(chains, ([name, series]) => ({type: 'bar', name, x: series.x, y: series.y, marker: {color: series.color}, hovertemplate: '%{x|%b %d, %Y}<br>$%{y:,.0f}<extra>%{fullData.name}</extra>'}));
+        if (!traces.length) traces.push({type:'bar', name:'Recorded notional', x: rows.map(r => r.date), y: rows.map(r => r.volume), marker:{color:'#67997e'}});
+        loading.style.display = 'none'; chart.style.display = 'block';
+        await Plotly.react(chart, traces, {
+            barmode: 'stack', bargap: .16, showlegend: false,
+            paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+            font: {family:'DM Sans, sans-serif', size:10, color:theme.fontColor},
+            margin: {l:47, r:5, t:12, b:28}, height:215,
+            xaxis: {type:'date', showgrid:false, tickformat:'%b %y', nticks:5, fixedrange:true},
+            yaxis: {gridcolor:theme.gridColor, zeroline:false, tickprefix:'$', tickformat:'~s', nticks:4, fixedrange:true},
+            hoverlabel: {bgcolor:theme.annotationBg, bordercolor:theme.gridColor, font:{color:theme.fontColor}},
+        }, {responsive:true, displayModeBar:false});
+    } catch (_) {
+        if (version !== flowRequest) return;
+        chart.style.display = 'none'; loading.style.display = 'block';
+        loading.innerHTML = '<div class="empty-state"><strong>Historical flow is unavailable</strong><p>Choose a time window to retry, or refresh the page.</p></div>';
+    }
+}

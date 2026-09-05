@@ -3,55 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RYSK://TERMINAL — Analytics</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Rysk Intelligence — Research</title>
+    {% include 'partials/head.html' %}
 </head>
-<body>
+<body data-page="analytics">
+{% set page = 'analytics' %}{% set page_label = 'Research' %}{% set jumps = [('act-flow', 'Protocol flow'), ('act-surface', 'Premium surface'), ('act-volatility', 'Volatility'), ('act-yield', 'Yield mix')] %}
     <div class="app-shell">
-        <aside class="side-nav" aria-label="Dashboard workflow">
-            <a class="side-brand" href="/">
-                <span class="side-brand-mark">R</span>
-                <span><strong>RYSK</strong><small>//terminal</small></span>
-            </a>
-            <div class="side-nav-group">
-                <div class="side-nav-label">Workflows</div>
-                <a href="/" class="side-nav-item">Global</a>
-                <a href="/account" class="side-nav-item">Account</a>
-                <a href="/analytics" class="side-nav-item active">Analytics</a>
-                <a href="/docs" class="side-nav-item">Docs</a>
-            </div>
-            <div class="side-nav-group page-jump-list">
-                <div class="side-nav-label">Research</div>
-                <a href="#act-flow" class="side-nav-item compact">Protocol Flow</a>
-                <a href="#act-surface" class="side-nav-item compact">Premium Surface</a>
-                <a href="#act-volatility" class="side-nav-item compact">Volatility</a>
-                <a href="#act-yield" class="side-nav-item compact">Yield Mix</a>
-            </div>
-            <a class="side-nav-cta" href="https://app.rysk.finance/join?code=carlisle" target="_blank" rel="noopener noreferrer">Access Rysk</a>
-        </aside>
+        {% include 'partials/sidebar.html' %}
 
-        <main class="container app-main analytics-page">
+        <main id="workspace" tabindex="-1" class="container app-main analytics-page">
             <header>
-                <div class="header-topline">
-                    <nav class="dashboard-nav">
-                        <a href="/">Global</a>
-                        <a href="/account">Account</a>
-                        <a href="/analytics" class="active">Analytics</a>
-                        <a href="/docs">Docs</a>
-                    </nav>
-                    <span class="live-dot observed-dot">Observed Data</span>
-                    <button class="theme-toggle" id="theme-toggle" title="Toggle day/night mode">&#9790;</button>
-                </div>
-                <h1>Research <em>Desk</em></h1>
+                {% include 'partials/topbar.html' %}
+                <div class="page-intro"><div><div class="page-eyebrow"><span></span> THE RESEARCH DESK</div><h1>Follow the evidence.<br><em>Understand the edge.</em></h1><p class="page-description">Historical executions, pricing patterns, and the context behind the yield.</p></div></div>
             </header>
 
             <section class="analytics-masthead">
                 <div class="analytics-masthead-copy">
-                    <div class="analytics-eyebrow">RYSK INTELLIGENCE // EXECUTED FLOW</div>
-                    <h2>Turn yesterday's RFQs into tomorrow's edge.</h2>
+                    <div class="analytics-eyebrow">YOUR RESEARCH SET</div>
+                    <h2>Past executions. Better questions.</h2>
                     <p>Explore where notional moves, how tenor and moneyness have historically priced, and which volatility regimes paid option sellers.</p>
                 </div>
                 <div class="analytics-masthead-aside">
@@ -289,7 +258,8 @@
                 <span>RYSK://RESEARCH</span>
                 <p>Executed trade history describes the market Rysk cleared. It does not manufacture liquidity where an RFQ has not been requested.</p>
             </div>
-        </main>
+        {% include 'partials/footer.html' %}
+    </main>
     </div>
 
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>

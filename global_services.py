@@ -1030,7 +1030,16 @@ def get_market_pulse(conn, chain_id=None):
         FROM trades {_where_clause(active_parts)}
     """, active_params).fetchone()
 
+    observation_parts = ["symbol != ''"]
+    observation_params = []
+    _add_chain_filter(observation_parts, observation_params, chain_id)
+    observation = conn.execute(f"""
+        SELECT MAX(created_at) AS last_trade_at, COUNT(*) AS trade_count
+        FROM trades {_where_clause(observation_parts)}
+    """, observation_params).fetchone()
+
     return {
+        "observation": {"last_trade_at": observation["last_trade_at"], "trade_count": observation["trade_count"]},
         "top_asset_24h": {
             "symbol": top_24h["symbol"] if top_24h else None,
             **chain_fields(top_24h["chain_id"] if top_24h else None),

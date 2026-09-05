@@ -3,6 +3,7 @@
 let analyticsDays = 365;
 let analyticsChain = 'all';
 let analyticsOverview = null;
+let overviewRequestId = 0;
 let strategyMixMode = 'notional';
 let surfaceData = null;
 let surfaceOptionType = 'call';
@@ -11,19 +12,19 @@ let volatilityData = {};
 let volatilityWindow = 30;
 
 const ANALYTICS_COLORS = {
-    HYPE: '#00ff9d',
-    BTC: '#ff9f1c',
-    ETH: '#8b9cff',
-    SOL: '#c77dff',
-    PUMP: '#ff4d8d',
-    PURR: '#ffc53d',
-    XRP: '#00d4ff',
-    ZEC: '#d4ff66',
+    HYPE: '#67997e',
+    BTC: '#b48c52',
+    ETH: '#8898bd',
+    SOL: '#a08bb3',
+    PUMP: '#b87383',
+    PURR: '#bfa261',
+    XRP: '#6a9da8',
+    ZEC: '#a4b27c',
     OTHER: '#6b7387',
 };
 
 function analyticsColor(asset, index = 0) {
-    const fallback = ['#00ff9d', '#00d4ff', '#ff9f1c', '#c77dff', '#ff4d6d', '#ffc53d', '#8b9cff'];
+    const fallback = ['#67997e', '#6a9da8', '#b48c52', '#a08bb3', '#ba7068', '#bfa261', '#8898bd'];
     return ANALYTICS_COLORS[asset] || fallback[index % fallback.length];
 }
 
@@ -37,12 +38,12 @@ function analyticsPlotLayout(overrides = {}) {
     return {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 11 },
+        font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 11 },
         margin: { l: 58, r: 24, t: 24, b: 48 },
         hoverlabel: {
             bgcolor: theme.annotationBg,
             bordercolor: 'rgba(128, 255, 190, 0.25)',
-            font: { family: 'JetBrains Mono, monospace', color: theme.fontColor, size: 12 },
+            font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 12 },
         },
         xaxis: { showgrid: false, zeroline: false, fixedrange: true },
         yaxis: { gridcolor: theme.gridColor, zerolinecolor: theme.gridColor, fixedrange: true },
@@ -118,7 +119,7 @@ function renderNotionalStream(data) {
         type: 'scatter',
         mode: 'lines',
         name: 'Premium',
-        line: { color: '#ffffff', width: 1.5, dash: 'dot' },
+        line: { color: getPlotlyTheme().priceLineColor, width: 1.5, dash: 'dot' },
         yaxis: 'y2',
         hovertemplate: '<b>Premium</b><br>%{x}<br>%{y:$,.0f}<extra></extra>',
     });
@@ -170,8 +171,8 @@ function renderStrategyMix(data) {
             mode: 'lines',
             stackgroup: 'strategy-share',
             name: 'Covered calls',
-            line: { color: '#00d4ff', width: 1.8 },
-            fillcolor: 'rgba(0, 212, 255, 0.38)',
+            line: { color: '#6a9da8', width: 1.8 },
+            fillcolor: 'rgba(106, 157, 168, 0.38)',
             hovertemplate: `<b>Covered calls</b><br>%{x}<br>%{y:.1f}% of ${valueLabel}<br>%{customdata[0]:${valueFormat}} of %{customdata[1]:${valueFormat}}<extra></extra>`,
         },
         {
@@ -182,8 +183,8 @@ function renderStrategyMix(data) {
             mode: 'lines',
             stackgroup: 'strategy-share',
             name: 'Cash-secured puts',
-            line: { color: '#ff4d8d', width: 1.8 },
-            fillcolor: 'rgba(255, 77, 141, 0.42)',
+            line: { color: '#b87383', width: 1.8 },
+            fillcolor: 'rgba(184, 115, 131, 0.42)',
             hovertemplate: `<b>Cash-secured puts</b><br>%{x}<br>%{y:.1f}% of ${valueLabel}<br>%{customdata[0]:${valueFormat}} of %{customdata[1]:${valueFormat}}<extra></extra>`,
         },
     ];
@@ -268,7 +269,7 @@ function renderTenorSurface(data) {
             [0, '#0d3b32'],
             [0.35, '#007f63'],
             [0.7, '#00d88a'],
-            [1, '#d4ff66'],
+            [1, '#a4b27c'],
         ],
         hovertemplate: '<b>%{y} · %{x}</b><br>%{text}<extra></extra>',
         colorbar: { title: 'Annualized %', thickness: 10, len: 0.78, outlinewidth: 0 },
@@ -286,8 +287,8 @@ function renderStrategyYield(data) {
     const rows = data.by_asset_option_type || [];
     const lookup = new Map(rows.map(row => [`${row.asset}|${row.option_type}`, row]));
     const traces = [
-        { optionType: 'call', name: 'Covered calls', color: '#00d4ff' },
-        { optionType: 'put', name: 'Cash-secured puts', color: '#ff4d8d' },
+        { optionType: 'call', name: 'Covered calls', color: '#6a9da8' },
+        { optionType: 'put', name: 'Cash-secured puts', color: '#b87383' },
     ].map(strategy => ({
         x: leadingAssets,
         y: leadingAssets.map(asset => lookup.get(`${asset}|${strategy.optionType}`)?.premium_yield_pct ?? null),
@@ -337,10 +338,13 @@ function populateSurfaceAssets(data) {
 }
 
 async function loadAnalyticsOverview() {
+    const requestId = ++overviewRequestId;
     const status = document.getElementById('analytics-data-status');
+    status.classList.remove('error-text');
     status.textContent = 'Loading research set…';
     const response = await fetch(chainUrl(`/api/analytics/overview?days=${analyticsDays}`));
     const data = await response.json();
+    if (requestId !== overviewRequestId) return null;
     if (!data.success) throw new Error(data.error || 'Analytics overview failed');
     analyticsOverview = data;
     renderAnalyticsKpis(data);
@@ -378,7 +382,7 @@ function renderSurfaceChart(data) {
         return;
     }
 
-    const callColor = surfaceOptionType === 'call' ? '#00d4ff' : '#ff4d8d';
+    const callColor = surfaceOptionType === 'call' ? '#6a9da8' : '#b87383';
     const sortedApr = samples.map(sample => Number(sample.apr) || 0).sort((a, b) => a - b);
     const p95Apr = sortedApr.length ? sortedApr[Math.floor((sortedApr.length - 1) * 0.95)] : 100;
     const cohortPeak = Math.max(...buckets.flatMap(bucket => [bucket.weighted_apr || 0, bucket.median_apr || 0]), 75);
@@ -401,8 +405,8 @@ function renderSurfaceChart(data) {
         type: 'scatter',
         mode: 'lines+markers',
         name: 'Weighted annualized yield',
-        line: { color: '#00ff9d', width: 3, shape: 'spline' },
-        marker: { size: 10, color: '#00ff9d', line: { color: '#06110d', width: 2 } },
+        line: { color: '#67997e', width: 3, shape: 'spline' },
+        marker: { size: 10, color: '#67997e', line: { color: '#06110d', width: 2 } },
         hovertemplate: '<b>%{text}</b><br>Weighted annualized yield %{y:.1f}%<br>Median %{customdata[1]:.1f}%<br>Premium yield %{customdata[2]:.2f}%<br>Weighted tenor %{customdata[3]:.1f}d<br>%{customdata[0]} trades<extra></extra>',
     }, {
         x: buckets.map(bucket => bucket.midpoint),
@@ -410,7 +414,7 @@ function renderSurfaceChart(data) {
         type: 'scatter',
         mode: 'lines',
         name: 'Median annualized yield',
-        line: { color: '#ffc53d', width: 1.7, dash: 'dot', shape: 'spline' },
+        line: { color: '#bfa261', width: 1.7, dash: 'dot', shape: 'spline' },
         hovertemplate: 'Median annualized yield %{y:.1f}%<extra></extra>',
     }];
 
@@ -420,7 +424,7 @@ function renderSurfaceChart(data) {
         yaxis: { title: 'Annualized premium yield', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, range: [0, focusedAprMax], fixedrange: true },
         legend: { orientation: 'h', y: -0.18, x: 0 },
         hovermode: 'closest',
-        shapes: [{ type: 'line', x0: 5, x1: 5, y0: 0, y1: 1, yref: 'paper', line: { color: '#ffffff', width: 1, dash: 'dash' } }],
+        shapes: [{ type: 'line', x0: 5, x1: 5, y0: 0, y1: 1, yref: 'paper', line: { color: getPlotlyTheme().priceLineColor, width: 1, dash: 'dash' } }],
     }), ANALYTICS_PLOT_CONFIG);
 }
 
@@ -464,7 +468,7 @@ function updateSurfaceTarget() {
         Plotly.relayout('otm-apr-chart', {
             'shapes[0].x0': otm,
             'shapes[0].x1': otm,
-            'shapes[0].line.color': bucket ? '#ffffff' : '#ff4d6d',
+            'shapes[0].line.color': bucket ? getPlotlyTheme().priceLineColor : '#ba7068',
         });
     }
 
@@ -577,7 +581,8 @@ function setAnalyticsError(error) {
 
 async function refreshAnalytics({ refreshVolatility = false, resetSurface = false } = {}) {
     try {
-        await loadAnalyticsOverview();
+        const overview = await loadAnalyticsOverview();
+        if (!overview) return;
         await Promise.allSettled([
             loadSurface({ resetInputs: resetSurface }),
             refreshVolatility ? loadVolatility() : Promise.resolve(),
