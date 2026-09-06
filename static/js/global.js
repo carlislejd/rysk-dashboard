@@ -962,13 +962,9 @@ function renderStrikeStory(rows, chartModel, referencePrice) {
     const totalPremium = calls.premium + puts.premium;
     const callShare = totalNotional > 0 ? (calls.notional / totalNotional) * 100 : 0;
     const putShare = totalNotional > 0 ? 100 - callShare : 0;
-    const larger = calls.notional >= puts.notional ? calls : puts;
-    const smaller = calls.notional >= puts.notional ? puts : calls;
-    const dominantSide = calls.notional === puts.notional ? 'Balanced' : calls.notional > puts.notional ? 'Call-heavy' : 'Put-heavy';
-    const dominance = smaller.notional > 0 ? larger.notional / smaller.notional : larger.notional > 0 ? null : 1;
-    const dominanceLabel = dominantSide === 'Balanced'
-        ? 'Balanced book'
-        : `${dominantSide}${dominance ? ` · ${formatNumber(dominance, 1)}×` : ' only'}`;
+    const dominanceLabel = totalNotional === 0 ? 'No matching trades'
+        : calls.notional === puts.notional ? 'Equal calls and puts'
+        : calls.notional > puts.notional ? 'Mostly calls' : 'Mostly puts';
     const risk = chartModel.notionalExposure || { totalExposure: 0, callExposure: 0, putExposure: 0 };
     const atRiskShare = totalNotional > 0 ? (risk.totalExposure / totalNotional) * 100 : 0;
 
@@ -1386,7 +1382,7 @@ function renderExpiryExplorer() {
         <div class="summary-card"><div class="summary-label">Orders</div><div class="summary-value">${formatNumber(totalOrders, 0)}</div>${!selected ? `<div class="summary-subtext">${filtered.length} expiry dates</div>` : ''}</div>
         <div class="summary-card"><div class="summary-label">Notional</div><div class="summary-value">${compactCurrency(totalNotional)}</div></div>
         <div class="summary-card"><div class="summary-label">Premium</div><div class="summary-value">${compactCurrency(totalPremium)}</div><div class="summary-subtext">${premiumYield}% yield</div></div>
-        <div class="summary-card"><div class="summary-label">Avg DTE</div><div class="summary-value">${avgDte}d</div></div>
+        <div class="summary-card"><div class="summary-label">Avg days to expiry</div><div class="summary-value">${avgDte}d</div></div>
         <div class="summary-card"><div class="summary-label">Put / Call</div><div class="summary-value">${putPct}% / ${100 - putPct}%</div></div>
         ${outcomeTotal > 0
             ? `<div class="summary-card"><div class="summary-label">Returned</div><div class="summary-value" style="color: var(--accent);">${returnRate}%</div><div class="summary-subtext">${totalReturned} of ${outcomeTotal}</div></div>`
@@ -1433,7 +1429,7 @@ function renderExpiryExplorer() {
                     <th data-sort-key="notional">Notional</th>
                     <th data-sort-key="premium">Premium</th>
                     <th>Yield</th>
-                    <th>DTE</th>
+                    <th>Days to expiry</th>
                     <th>Put/Call</th>
                     <th>Returned</th>
                 </tr></thead>
@@ -1539,7 +1535,7 @@ async function loadMarketPulse() {
             : latest ? `The latest recorded trade is from ${formatUnixDate(latest)}. Explore the historical flow for context.` : 'A fresh view, waiting for its first recorded trades.';
         document.getElementById('pulse-grid').innerHTML = `
             <div class="summary-card"><div class="summary-label">7-day notional</div><div class="summary-value">${compactCurrency(act.volume_7d)}</div><div class="summary-subtext">${formatNumber(act.trades_7d, 0)} recorded trades</div></div>
-            <div class="summary-card"><div class="summary-label">Average entry tenor</div><div class="summary-value">${dte.avg != null ? dte.avg + 'd' : '—'}</div><div class="summary-subtext">${dte.min != null ? `${dte.min}–${dte.max}d range · 7d` : 'No trades in past 7 days'}</div></div>
+            <div class="summary-card"><div class="summary-label">Avg trade duration at entry</div><div class="summary-value">${dte.avg != null ? dte.avg + 'd' : '—'}</div><div class="summary-subtext">${dte.min != null ? `${dte.min}–${dte.max}d range · 7d` : 'No trades in past 7 days'}</div></div>
             <div class="summary-card"><div class="summary-label">24h vs daily average</div><div class="summary-value" style="color:${volColor}">${volIndicator}</div><div class="summary-subtext">Compared with past 7 days</div></div>
             <div class="summary-card"><div class="summary-label">Open premium</div><div class="summary-value">${compactCurrency(active.premium)}</div><div class="summary-subtext">Recorded unexpired positions</div></div>
         `;
@@ -1620,7 +1616,6 @@ async function loadPutCallRatio(days) {
         const weeks = data.data.map(d => d.week);
         const putPcts = data.data.map(d => d.put_pct);
         const callPcts = data.data.map(d => 100 - d.put_pct);
-        const ratios = data.data.map(d => d.ratio);
 
         loading.style.display = 'none';
         chart.style.display = 'block';
@@ -1629,7 +1624,6 @@ async function loadPutCallRatio(days) {
         Plotly.newPlot('pcr-chart', [
             { x: weeks, y: putPcts, type: 'bar', name: 'Put Volume', marker: { color: 'rgba(186, 112, 104, 0.6)' } },
             { x: weeks, y: callPcts, type: 'bar', name: 'Call Volume', marker: { color: 'rgba(106, 157, 168, 0.6)' } },
-            { x: weeks, y: ratios, type: 'scatter', mode: 'lines+markers', name: 'P/C Ratio', line: { color: '#bfa261', width: 2 }, marker: { size: 4 }, yaxis: 'y2' },
         ], {
             barmode: 'stack',
             paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
@@ -1637,7 +1631,6 @@ async function loadPutCallRatio(days) {
             margin: { l: 50, r: 60, t: 20, b: 40 },
             xaxis: { showgrid: false, tickfont: { size: 11 } },
             yaxis: { title: 'Notional Share (%)', gridcolor: theme.gridColor, tickfont: { size: 11 }, ticksuffix: '%', range: [0, 100] },
-            yaxis2: { title: 'P/C Ratio', overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11, color: '#bfa261' } },
             legend: { orientation: 'h', y: -0.08, font: { size: 11 } },
             bargap: 0.15,
         }, { responsive: true, displayModeBar: false });

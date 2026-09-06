@@ -29,8 +29,8 @@
         ['API reference', '/docs', 'Endpoints, CLI, and JSON previews', 'code'],
         ['Asset explorer', '/#act-explore', 'Inspect an underlying, its strikes, and expiries', 'overview'],
         ['Activity & expiries', '/#act-activity', 'Recent executions and upcoming settlement exposure', 'overview'],
-        ['Premium surface', '/analytics#act-surface', 'Compare historical annualized yield by moneyness', 'research'],
-        ['Volatility', '/analytics#act-volatility', 'Compare realized volatility and assignment outcomes', 'research'],
+        ['Premium surface', '/analytics#act-surface', 'Compare historical yields by strike distance', 'research'],
+        ['Volatility', '/analytics#act-volatility', 'Compare historical price volatility', 'research'],
         ['Yield mix', '/analytics#act-yield', 'Call and put premium efficiency by asset', 'research'],
     ];
     function initCommand() {

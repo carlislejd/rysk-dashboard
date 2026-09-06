@@ -1612,7 +1612,7 @@ function renderAccountPnl(historyData, openPositions) {
             <div class="summary-subtext">${aprs.length} positions with APR</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Avg DTE at Entry</div>
+            <div class="summary-label">Avg trade duration at entry</div>
             <div class="summary-value">${avgDte != null ? formatNumber(avgDte, 1) + 'd' : '—'}</div>
         </div>
         <div class="summary-card">

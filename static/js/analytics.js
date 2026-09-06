@@ -83,7 +83,7 @@ function renderAnalyticsKpis(data) {
     setText('analytics-yield', formatPercentage(totals.premium_yield_pct, 2));
     setText('analytics-yield-sub', 'all executions · not annualized');
     setText('analytics-apr', formatPercentage(totals.weighted_apr, 1));
-    setText('analytics-apr-sub', `premium ÷ capital-days · median ${formatPercentage(totals.median_apr, 1)}`);
+    setText('analytics-apr-sub', 'accounts for trade size and duration');
     setText('analytics-tenor', totals.weighted_dte_days != null ? `${formatNumber(totals.weighted_dte_days, 1)}d` : '—');
 }
 
@@ -210,10 +210,9 @@ function renderStrategyMix(data) {
     const putTotal = Number(totals[isNotional ? 'put_notional' : 'put_count']) || 0;
     const combined = callTotal + putTotal;
     const putShare = combined > 0 ? putTotal / combined * 100 : 0;
-    const ratio = callTotal > 0 ? putTotal / callTotal : null;
     setText(
         'strategy-mix-summary',
-        `CSP ${formatPercentage(putShare, 1)} · ${ratio != null ? `${formatNumber(ratio, 2)}× CC` : 'no CC baseline'}`,
+        combined > 0 ? `Cash-secured puts: ${formatPercentage(putShare, 1)}` : '—',
     );
 }
 
@@ -243,8 +242,8 @@ function renderEfficiency(data) {
         hovertemplate: '<b>%{text}</b><br>Annualized yield %{x:.1f}%<br>Premium yield %{y:.2f}%<br>Notional %{customdata[0]:$,.0f}<br>%{customdata[1]} trades<extra></extra>',
     }], analyticsPlotLayout({
         margin: { l: 58, r: 24, t: 26, b: 54 },
-        xaxis: { title: 'Capital-day annualized yield', ticksuffix: '%', showgrid: false, fixedrange: true },
-        yaxis: { title: 'Premium / notional', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, fixedrange: true },
+        xaxis: { title: 'Annualized premium yield', ticksuffix: '%', showgrid: false, fixedrange: true },
+        yaxis: { title: 'Premium yield', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, fixedrange: true },
         showlegend: false,
     }), ANALYTICS_PLOT_CONFIG);
 }
@@ -299,13 +298,13 @@ function renderStrategyYield(data) {
         type: 'bar',
         name: strategy.name,
         marker: { color: strategy.color, opacity: 0.8 },
-        hovertemplate: `<b>%{x} · ${strategy.name}</b><br>Premium yield %{y:.2f}%<br>Annualized %{customdata[0]:.1f}%<br>Weighted tenor %{customdata[1]:.1f}d<br>Notional %{customdata[2]:$,.0f}<br>%{customdata[3]} executions<extra></extra>`,
+        hovertemplate: `<b>%{x} · ${strategy.name}</b><br>Premium yield %{y:.2f}%<br>Annualized %{customdata[0]:.1f}%<br>Avg trade duration %{customdata[1]:.1f}d<br>Notional %{customdata[2]:$,.0f}<br>%{customdata[3]} executions<extra></extra>`,
     }));
     Plotly.newPlot('strategy-yield-chart', traces, analyticsPlotLayout({
         margin: { l: 62, r: 28, t: 24, b: 56 },
         barmode: 'group',
         xaxis: { title: 'Underlying', showgrid: false, fixedrange: true },
-        yaxis: { title: 'Premium / strike notional', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, rangemode: 'tozero', fixedrange: true },
+        yaxis: { title: 'Premium yield', ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, rangemode: 'tozero', fixedrange: true },
         legend: { orientation: 'h', y: -0.16, x: 0 },
     }), ANALYTICS_PLOT_CONFIG);
 }
@@ -396,7 +395,7 @@ function renderSurfaceChart(data) {
         mode: 'markers',
         name: 'Executions',
         marker: { size: 6, color: callColor, opacity: 0.18 },
-        hovertemplate: '<b>%{text}</b><br>%{x:.2f}% OTM<br>Annualized yield %{y:.1f}%<br>Strike %{customdata[0]:$,.2f}<br>Prior close %{customdata[1]:$,.2f}<br>%{customdata[2]:.1f} DTE<br>Notional %{customdata[3]:$,.0f}<extra></extra>',
+        hovertemplate: '<b>%{text}</b><br>%{x:.2f}% OTM<br>Annualized yield %{y:.1f}%<br>Strike %{customdata[0]:$,.2f}<br>Prior close %{customdata[1]:$,.2f}<br>%{customdata[2]:.1f} days to expiry at entry<br>Notional %{customdata[3]:$,.0f}<extra></extra>',
     }, {
         x: buckets.map(bucket => bucket.midpoint),
         y: buckets.map(bucket => bucket.weighted_apr),
@@ -407,7 +406,7 @@ function renderSurfaceChart(data) {
         name: 'Weighted annualized yield',
         line: { color: '#67997e', width: 3, shape: 'spline' },
         marker: { size: 10, color: '#67997e', line: { color: '#06110d', width: 2 } },
-        hovertemplate: '<b>%{text}</b><br>Weighted annualized yield %{y:.1f}%<br>Median %{customdata[1]:.1f}%<br>Premium yield %{customdata[2]:.2f}%<br>Weighted tenor %{customdata[3]:.1f}d<br>%{customdata[0]} trades<extra></extra>',
+        hovertemplate: '<b>%{text}</b><br>Weighted annualized yield %{y:.1f}%<br>Median %{customdata[1]:.1f}%<br>Premium yield %{customdata[2]:.2f}%<br>Avg trade duration %{customdata[3]:.1f}d<br>%{customdata[0]} trades<extra></extra>',
     }, {
         x: buckets.map(bucket => bucket.midpoint),
         y: buckets.map(bucket => bucket.median_apr),
@@ -447,15 +446,16 @@ function updateSurfaceTarget() {
     const bucket = findSurfaceBucket(otm);
 
     if (otm == null) {
-        setText('surface-formula', 'Enter a spot and strike to map your target.');
+        setText('surface-formula', 'Enter a reference price and target strike.');
         setText('result-otm', '—');
         return;
     }
 
-    const direction = surfaceOptionType === 'call' ? 'strike / spot − 1' : '1 − strike / spot';
-    setText('surface-formula', `${direction} = ${formatPercentage(otm, 2)} OTM`);
-    setText('result-otm', `${otm >= 0 ? '+' : ''}${formatPercentage(otm, 2)} OTM`);
-    setText('result-bucket', bucket ? `${bucket.label} historical cohort` : 'No observed cohort at this distance');
+    const distance = formatPercentage(Math.abs(otm), 2);
+    const direction = strike > spot ? 'above' : 'below';
+    setText('surface-formula', strike === spot ? 'Strike equals the reference price.' : `Strike is ${distance} ${direction} the reference price.`);
+    setText('result-otm', otm === 0 ? 'At the money' : `${distance} ${otm > 0 ? 'out of' : 'in'} the money`);
+    setText('result-bucket', bucket ? `${bucket.label} historical trades` : 'No historical trades at this distance');
     setText('result-apr', bucket ? formatPercentage(bucket.weighted_apr, 1) : '—');
     setText('result-median', bucket ? formatPercentage(bucket.median_apr, 1) : '—');
     setText('result-yield', bucket ? formatPercentage(bucket.premium_yield_pct, 2) : '—');
@@ -480,7 +480,7 @@ async function loadSurface({ resetInputs = false } = {}) {
     const requestId = ++surfaceRequestId;
     const asset = document.getElementById('surface-asset').value || 'HYPE';
     const loading = document.getElementById('surface-loading');
-    loading.textContent = 'Reconstructing historical moneyness…';
+    loading.textContent = 'Loading historical strike prices…';
     loading.style.display = 'block';
     const url = chainUrl(`/api/analytics/otm-apr?asset=${encodeURIComponent(asset)}&days=${analyticsDays}&option_type=${surfaceOptionType}${getDteParams()}`);
 
@@ -491,7 +491,7 @@ async function loadSurface({ resetInputs = false } = {}) {
         if (requestId !== surfaceRequestId) return;
         surfaceData = data;
         renderSurfaceChart(data);
-        setText('surface-coverage', `${formatNumber(data.observed_trades || 0, 0)} trades · ${formatPercentage(data.price_coverage_pct, 0)} price coverage`);
+        setText('surface-coverage', `${formatNumber(data.observed_trades || 0, 0)} trades · ${formatPercentage(data.price_coverage_pct, 0)} with reference prices`);
 
         const spotInput = document.getElementById('surface-spot');
         const strikeInput = document.getElementById('surface-strike');
@@ -524,13 +524,13 @@ function renderVolatility() {
             mode: 'lines',
             name: asset,
             line: { color: analyticsColor(asset, index), width: asset === 'HYPE' ? 2.8 : 2 },
-            hovertemplate: `<b>${asset}</b><br>%{x}<br>${volatilityWindow}d RV %{y:.1f}%<extra></extra>`,
+            hovertemplate: `<b>${asset}</b><br>%{x}<br>${volatilityWindow}-day realized volatility %{y:.1f}%<extra></extra>`,
         };
     });
     Plotly.newPlot('volatility-chart', traces, analyticsPlotLayout({
         margin: { l: 62, r: 28, t: 26, b: 56 },
         xaxis: { showgrid: false, fixedrange: true },
-        yaxis: { title: `${volatilityWindow}d annualized realized vol`, ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, rangemode: 'tozero', fixedrange: true },
+        yaxis: { title: `Annualized volatility (%)`, ticksuffix: '%', gridcolor: getPlotlyTheme().gridColor, rangemode: 'tozero', fixedrange: true },
         hovermode: 'x unified',
     }), ANALYTICS_PLOT_CONFIG);
 
@@ -539,7 +539,7 @@ function renderVolatility() {
         return `<div class="vol-snapshot-card" style="--asset-color:${analyticsColor(asset, index)}">
             <span>${asset}</span>
             <strong>${latest[key] != null ? formatPercentage(latest[key], 1) : '—'}</strong>
-            <small>${latest.return_1d_pct != null ? `${latest.return_1d_pct >= 0 ? '+' : ''}${formatPercentage(latest.return_1d_pct, 2)} 1d` : 'No current reading'}</small>
+            <small>${latest.return_1d_pct != null ? `${latest.return_1d_pct >= 0 ? '+' : ''}${formatPercentage(latest.return_1d_pct, 2)} latest daily price change` : 'No current reading'}</small>
         </div>`;
     }).join('');
 }

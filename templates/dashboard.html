@@ -91,7 +91,7 @@
             <div id="positions-content" style="display: none;"></div>
             <div id="positions-error" class="error" style="display: none;"></div>
             <div id="positions-not-configured" class="warning" style="display: none;">
-                Positions API not configured. Set POSITIONS_API_URL environment variable.
+                Position data is not available yet.
             </div>
         </section>
 
@@ -116,8 +116,8 @@
                             <button class="tab-button" data-pnl-view="monthly">Monthly</button>
                         </div>
                         <div class="tabs pnl-basis-tabs" id="pnl-basis-tabs">
-                            <button class="tab-button active" data-pnl-basis="accrual">Accrual Basis</button>
-                            <button class="tab-button" data-pnl-basis="cash">Cash Basis</button>
+                            <button class="tab-button active" data-pnl-basis="accrual">By expiry date</button>
+                            <button class="tab-button" data-pnl-basis="cash">By trade date</button>
                         </div>
                     </div>
                     <div class="pnl-basis-hint" id="pnl-basis-hint">Premium attributed to option expiry month</div>
@@ -136,7 +136,7 @@
             <div id="history-content" style="display: none;"></div>
             <div id="history-error" class="error" style="display: none;"></div>
             <div id="history-not-configured" class="warning" style="display: none;">
-                History API not configured. Set HISTORY_API_URL environment variable.
+                Trade history is not available yet.
             </div>
         </section>
     {% include 'partials/footer.html' %}

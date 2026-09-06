@@ -21,13 +21,13 @@
                 <div class="analytics-masthead-copy">
                     <div class="analytics-eyebrow">YOUR RESEARCH SET</div>
                     <h2>Past executions. Better questions.</h2>
-                    <p>Explore where notional moves, how tenor and moneyness have historically priced, and which volatility regimes paid option sellers.</p>
+                    <p>Compare trade activity, historical premiums, and price volatility.</p>
                 </div>
                 <div class="analytics-masthead-aside">
                     <span class="method-chip">Historical executions</span>
-                    <span class="method-chip">Prior-close moneyness</span>
+                    <span class="method-chip">Previous closing prices</span>
                     <span class="method-chip">Calls + puts</span>
-                    <div class="signal-line"><span></span> No synthetic live quotes</div>
+                    <div class="signal-line"><span></span> Based on recorded trades</div>
                 </div>
             </section>
 
@@ -48,14 +48,14 @@
                     <div class="hero-kpi-sub" id="analytics-yield-sub">premium / strike notional</div>
                 </div>
                 <div class="hero-kpi">
-                    <div class="hero-kpi-label">Weighted APR</div>
+                    <div class="hero-kpi-label">Annualized Yield</div>
                     <div class="hero-kpi-value" id="analytics-apr">—</div>
                     <div class="hero-kpi-sub" id="analytics-apr-sub">&nbsp;</div>
                 </div>
                 <div class="hero-kpi">
-                    <div class="hero-kpi-label">Weighted Tenor</div>
+                    <div class="hero-kpi-label">Avg Trade Duration</div>
                     <div class="hero-kpi-value" id="analytics-tenor">—</div>
-                    <div class="hero-kpi-sub">entry to expiry</div>
+                    <div class="hero-kpi-sub">entry to expiry, weighted by trade size</div>
                 </div>
             </section>
 
@@ -89,15 +89,15 @@
 
             <div class="act-divider" id="act-flow">
                 <div class="act-title">Protocol Flow</div>
-                <div class="act-subtitle">See which underlyings are absorbing notional—and when the mix changes</div>
+                <div class="act-subtitle">See which assets account for the most trading activity</div>
             </div>
 
             <section class="card analytics-chart-card analytics-feature-card">
                 <div class="chart-title-row">
                     <div>
                         <div class="analytics-eyebrow">CAPITAL ROTATION</div>
-                        <h2>Notional Stream</h2>
-                        <p class="card-subtitle">Executed strike notional, stacked by underlying in daily UTC buckets.</p>
+                        <h2>Trading Activity Over Time</h2>
+                        <p class="card-subtitle">Daily trade size by asset (UTC). Notional is strike price multiplied by option quantity.</p>
                     </div>
                     <div class="chart-stat" id="stream-leader">—</div>
                 </div>
@@ -108,15 +108,15 @@
             <section class="card analytics-chart-card analytics-feature-card">
                 <div class="chart-title-row">
                     <div>
-                        <div class="analytics-eyebrow">POSITIONING REGIME</div>
+                        <div class="analytics-eyebrow">STRATEGY MIX</div>
                         <h2>Strategy Share Over Time</h2>
-                        <p class="card-subtitle">100% mix of covered calls and cash-secured puts. Compare participation with strike-notional allocation.</p>
+                        <p class="card-subtitle">Share of covered calls and cash-secured puts each day. Choose trade count or trade size (notional). The badge summarizes the selected period.</p>
                     </div>
                     <div class="chart-title-controls">
                         <div class="chart-stat" id="strategy-mix-summary">—</div>
                         <div class="tabs" id="strategy-mix-tabs">
-                            <button class="tab-button" data-strategy-mix="count">Count</button>
-                            <button class="tab-button active" data-strategy-mix="notional">Notional</button>
+                            <button class="tab-button" data-strategy-mix="count">Trade count</button>
+                            <button class="tab-button active" data-strategy-mix="notional">Trade size ($)</button>
                         </div>
                     </div>
                 </div>
@@ -133,8 +133,8 @@
                 </section>
                 <section class="card analytics-chart-card">
                     <div class="analytics-eyebrow">TERM STRUCTURE</div>
-                    <h2>Annualized Yield by Tenor</h2>
-                    <p class="card-subtitle">Premium divided by strike-notional-days across entry DTE buckets.</p>
+                    <h2>Annualized Yield by Trade Duration</h2>
+                    <p class="card-subtitle">Compare annualized premium yields by days from trade entry to expiry. Values account for trade size and duration.</p>
                     <div id="tenor-chart" class="chart-container analytics-medium-chart"></div>
                 </section>
             </div>
@@ -147,9 +147,9 @@
             <section class="card premium-lab">
                 <div class="premium-lab-header">
                     <div>
-                        <div class="analytics-eyebrow">RFQ MEMORY // NOT A LIVE QUOTE</div>
+                        <div class="analytics-eyebrow">HISTORICAL TRADES</div>
                         <h2>Strike Target Lab</h2>
-                        <p class="card-subtitle">“If spot is $60 and I want $63, what did comparable 5% OTM calls historically earn?”</p>
+                        <p class="card-subtitle">“If the asset price is $60 and my call strike is $63, what did similar trades earn?”</p>
                     </div>
                     <div class="historical-badge"><span></span> Historical benchmark</div>
                 </div>
@@ -167,9 +167,9 @@
                             </div>
                         </div>
                         <label class="analytics-field surface-tenor-field">
-                            <span>Entry tenor</span>
+                            <span>Days from entry to expiry</span>
                             <select id="surface-dte" class="chart-select">
-                                <option value="all">All tenors</option>
+                                <option value="all">All durations</option>
                                 <option value="0,7">0–7 days</option>
                                 <option value="7,14">8–14 days</option>
                                 <option value="14,30" selected>15–30 days</option>
@@ -179,7 +179,7 @@
                         </label>
                         <div class="surface-price-grid">
                             <label class="analytics-field">
-                                <span>Reference spot</span>
+                                <span>Reference asset price</span>
                                 <div class="input-with-prefix"><b>$</b><input id="surface-spot" type="number" min="0" step="any" placeholder="60"></div>
                             </label>
                             <label class="analytics-field">
@@ -187,7 +187,7 @@
                                 <div class="input-with-prefix"><b>$</b><input id="surface-strike" type="number" min="0" step="any" placeholder="63"></div>
                             </label>
                         </div>
-                        <div class="surface-formula" id="surface-formula">Enter a spot and strike to map your target.</div>
+                        <div class="surface-formula" id="surface-formula">Enter a reference price and target strike.</div>
                     </div>
                     <div class="premium-lab-result" id="surface-result">
                         <div class="result-kicker">YOUR TARGET</div>
@@ -195,24 +195,24 @@
                         <div class="result-bucket" id="result-bucket">Waiting for historical surface</div>
                         <div class="result-metrics">
                             <div><span>Annualized yield</span><strong id="result-apr">—</strong></div>
-                            <div><span>Median annualized</span><strong id="result-median">—</strong></div>
+                            <div><span>Median annualized yield</span><strong id="result-median">—</strong></div>
                             <div><span>Premium yield</span><strong id="result-yield">—</strong></div>
-                            <div><span>Weighted tenor</span><strong id="result-tenor">—</strong></div>
+                            <div><span>Avg trade duration</span><strong id="result-tenor">—</strong></div>
                         </div>
                         <div class="result-confidence" id="result-confidence">— observed executions</div>
                     </div>
                 </div>
-                <div id="surface-loading" class="loading">Reconstructing historical moneyness…</div>
+                <div id="surface-loading" class="loading">Loading historical strike prices…</div>
                 <div id="otm-apr-chart" class="chart-container analytics-tall-chart"></div>
                 <div class="methodology-strip">
                     <span class="methodology-icon">i</span>
-                    <p><strong>How to read this:</strong> moneyness uses the previous Hyperliquid daily close before each trade. It avoids same-day lookahead, but it is still a historical reference—not an RFQ or guaranteed executable premium.</p>
+                    <p><strong>How to read this:</strong> Strike distance is measured from the asset’s previous daily closing price on Hyperliquid. Yields are historical comparisons, not live quotes or guaranteed returns. Average duration is weighted by trade size.</p>
                     <span id="surface-coverage">—</span>
                 </div>
             </section>
 
             <div class="act-divider" id="act-volatility">
-                <div class="act-title">Volatility Regimes</div>
+                <div class="act-title">Price Volatility</div>
                 <div class="act-subtitle">Compare realized volatility across the protocol's core underlyings</div>
             </div>
 
@@ -221,7 +221,7 @@
                     <div>
                         <div class="analytics-eyebrow">REALIZED VOLATILITY</div>
                         <h2>HYPE / BTC / ETH</h2>
-                        <p class="card-subtitle">Annualized daily close-to-close volatility. Switch the focus to inspect shorter regimes.</p>
+                        <p class="card-subtitle">How much daily closing prices varied, expressed as an annual rate. Choose the number of days used in each calculation.</p>
                     </div>
                     <div class="tabs" id="vol-window-tabs">
                         <button class="tab-button" data-vol-window="3">3d</button>
@@ -230,7 +230,7 @@
                     </div>
                 </div>
                 <div id="volatility-snapshot" class="volatility-snapshot"></div>
-                <div id="volatility-loading" class="loading">Loading volatility regimes…</div>
+                <div id="volatility-loading" class="loading">Loading price volatility…</div>
                 <div id="volatility-chart" class="chart-container analytics-tall-chart"></div>
             </section>
 
@@ -243,12 +243,12 @@
                 <section class="card analytics-chart-card">
                     <div class="analytics-eyebrow">STRATEGY MIX</div>
                     <h2>Yield by Strategy</h2>
-                    <p class="card-subtitle">Premium / strike notional for all executions. Assignment and cost basis are not inputs.</p>
+                    <p class="card-subtitle">Premium as a percentage of trade size. This measures premium income, not total profit after settlement.</p>
                     <div id="strategy-yield-chart" class="chart-container analytics-tall-chart"></div>
                 </section>
                 <section class="card analytics-rank-card">
                     <div class="analytics-eyebrow">ASSET SCORECARD</div>
-                    <h2>Observed Leaders</h2>
+                    <h2>Most Traded Assets</h2>
                     <p class="card-subtitle">Ranked by protocol notional in the selected window.</p>
                     <div id="asset-scorecard" class="analytics-scorecard"></div>
                 </section>
@@ -256,7 +256,7 @@
 
             <div class="analytics-footer-note">
                 <span>RYSK://RESEARCH</span>
-                <p>Executed trade history describes the market Rysk cleared. It does not manufacture liquidity where an RFQ has not been requested.</p>
+                <p>Based on recorded Rysk trades. Historical yields do not guarantee future quotes or returns.</p>
             </div>
         {% include 'partials/footer.html' %}
     </main>
