@@ -45,3 +45,14 @@ class TestLegacyReconciliation(unittest.TestCase):
     def test_verified_old_transaction_is_never_assumed_duplicate(self):
         self.conn.execute("UPDATE trade_wallets SET status='verified_short_owner',wallet='other' WHERE tx_hash='old'")
         self.assertEqual(reconcile(self.conn)['archived'], 0)
+
+    def test_audit_counts_legacy_identity_once_across_snapshot_versions(self):
+        from cohort_services import get_retention_audit
+        reconcile(self.conn)
+        row = self.conn.execute('SELECT * FROM reconciled_trade_records').fetchone()
+        original = json.loads(row['original_json'])
+        original['inserted_at'] += 1
+        self.conn.execute('INSERT INTO reconciled_trade_records VALUES (?,?,?,?,?,?)',
+                          ('another-snapshot',row['chain_id'],row['canonical_tx_hash'],
+                           json.dumps(original),row['reason'],row['reconciled_at']))
+        self.assertEqual(get_retention_audit(self.conn)['reconciled_legacy_rows'], 1)

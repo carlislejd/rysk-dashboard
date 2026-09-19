@@ -136,7 +136,12 @@ def get_retention_audit(conn):
             chain['source_trade_count'] = source[0]
             chain['source_attributed_trades'] = source[1] or 0
     return {'by_chain': chains, 'statuses': statuses,
-            'reconciled_legacy_rows': conn.execute('SELECT COUNT(*) FROM reconciled_trade_records').fetchone()[0],
+            # Local and production snapshots can preserve the same legacy
+            # representation with different insertion/settlement metadata.
+            'reconciled_legacy_rows': conn.execute('''SELECT COUNT(*) FROM (
+                SELECT chain_id,canonical_tx_hash,json_extract(original_json,'$.tx_hash')
+                FROM reconciled_trade_records GROUP BY 1,2,3
+            )''').fetchone()[0],
             'global_trade_count': sum(row['total_trades'] for row in chains),
             'source_reconciliation': json.loads(metadata['full_trade_audit_json']) if 'full_trade_audit_json' in metadata else None,
             'latest_sync': json.loads(metadata['last_trade_audit_json']) if 'last_trade_audit_json' in metadata else None,
