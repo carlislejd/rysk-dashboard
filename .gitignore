@@ -31,3 +31,8 @@ Thumbs.db
 
 # Local cert bundle for macOS network restrictions
 cacert.pem
+
+# Incremental cohort job locks
+data/*.refresh.lock
+data/*.refresh.log
+data/*.sqlite.gz

@@ -175,3 +175,105 @@ Safety behavior:
 
 - Backfill only updates unresolved rows (`outcome IS NULL`, or provisional `Unknown` with missing `expiry_price_f`).
 - It does **not** overwrite finalized `Assigned`/`Returned` rows.
+
+## Wallet retention cohorts
+
+Research → **Wallet Retention** shows monthly option-seller cohorts with return
+rate, active-wallet count, and trades per active wallet. Month 1 is the first
+**observed attributed** sale, not a proven first-ever trade. Cohorts use all
+stored history, independent of the Research window; the chain filter applies.
+The same wallet address is counted once across chains in the All view; chain
+views measure first observed activity on that chain. Wallets are not people.
+The API is `GET /api/analytics/retention?chain_id=999` (omit the filter for all).
+
+The Global trades API and both transaction tables include `seller_wallet` and
+`owner_status`, joined by chain and transaction hash. The retention response
+includes a per-chain audit against that exact Global trades table, plus the
+latest full-source reconciliation, incremental sync, and refresh outcome.
+
+Run the incremental daily pipeline:
+
+```bash
+poetry run python scripts/refresh_cohorts.py
+```
+
+This syncs new transactions on **both HyperEVM and Ethereum**, then recovers new
+owners. A database-specific lock prevents overlapping refresh jobs. Successful
+attributions and receipts persist in `trade_wallets`; source hash observations
+persist in `trade_source_observations`. Only new trades and unavailable receipts
+from the last seven days are attempted during normal incremental runs. Older
+gaps are preserved and reported rather than repeatedly fetching months of data.
+`render.yaml` defines a daily Render cron at 16:00 UTC (9am PDT / 8am PST).
+It calls the protected `/api/admin/cohort-refresh` endpoint, which launches the
+job on the web service that owns `/data/rysk_trades.db`. Cron cannot mount that
+service's disk directly. The cron polls authenticated job status and fails if
+the refresh fails or does not complete. The shared admin token and service URL
+are referenced from the web service, not copied into source control. There is
+no local Codex schedule. Apply the Blueprint to activate the Render cron;
+local SQLite data is not automatically uploaded by a code deployment.
+
+To seed Render from a completed local recovery, export a consistent snapshot,
+transfer it to the service's disk, and merge it using the deployed import tool:
+
+```bash
+python scripts/cohort_cache.py export data/cohort-seed.sqlite.gz
+# After transferring the snapshot to Render, run in its shell:
+RYSK_DB_PATH=/data/rysk_trades.db python scripts/cohort_cache.py import /data/cohort-seed.sqlite.gz
+# Or upload directly using the existing admin token and service URL in your environment:
+python scripts/cohort_cache.py upload data/cohort-seed.sqlite.gz
+```
+
+Imports preserve existing deployment trades and settlement results, validate
+wallet proofs against the destination trades, and can be safely repeated.
+The authenticated upload endpoint accepts compressed snapshots up to 64 MiB
+and caps the expanded snapshot at 256 MiB. It does not require new SSH access.
+Snapshots are local data artifacts, excluded from version control. Successful
+receipt caches retain block identity and raw mint/deposit logs needed to
+reproduce attribution; unrelated transfer logs and bloom filters are omitted.
+
+Manual recovery and reconciliation:
+
+```bash
+# HyperEVM (RPC_URL override supported)
+poetry run python scripts/backfill_wallets.py --chain 999
+# Ethereum (ETHEREUM_RPC_URL override supported)
+poetry run python scripts/backfill_wallets.py --chain 1
+# Explicit historical retry of cached gaps/rejections
+poetry run python scripts/backfill_wallets.py --chain 999 --retry
+# Full source audit: fetch history and reconcile every returned transaction hash
+poetry run python scripts/sync.py --from-date 2025-07-01
+```
+
+The public HyperEVM RPC accepts up to 20 requests per batch. dRPC free endpoints
+accept at most 3; use `--batch-size 3` with those endpoints. Worker concurrency
+and aggregate request rate are bounded, with shared backoff on RPC failures.
+A sync failure stops the cursor at the last successful window, and cursor writes
+are monotonic. Replayed hashed and hashless rows do not inflate the stored count.
+Dense API windows are split, and persisted hashes are checked before advancing.
+An older row absent from the current upstream response is reported. After owner
+recovery, an exact, unique match across all source fields can be reconciled with
+a verified current transaction. The original row is preserved in
+`reconciled_trade_records`, settlement results are carried forward, and only the
+canonical transaction remains in Global totals. Ambiguous matches, conflicting
+settlement results, and independently verified transactions are never merged.
+No wallet signature, private key, or on-chain transaction is required.
+
+Attribution uses the indexed `AccountOwner` in Gamma's
+[`ShortOtokenMinted` event](https://github.com/opynfinance/GammaProtocol/blob/master/contracts/core/Controller.sol),
+requires a successful matching receipt, an allowlisted chain-specific
+router/controller, one mint with matching option quantity, and a matching
+collateral deposit for the same owner and vault. Transaction senders and asset
+addresses are never used as trader identities. Unsupported deployments,
+ambiguous receipts, and collateral mismatches remain unattributed; receipt
+proof is cached for review. This measures seller-wallet activity, not maker
+retention. Deployment allowlists are in `wallet_attribution.py`.
+
+Coverage is visible by chain and month. Missing hashes, unavailable receipts,
+and rejected attributions can shift cohort membership or undercount returns;
+results with gaps are provisional. Unprocessed months show a pending marker,
+future months stay blank, and the final observed month is conservatively marked
+partial (there is no verified ingestion-completeness watermark). Weighted
+summaries pool original eligible cohort sizes and exclude partial/pending cells.
+Very small cohorts should be interpreted with their displayed denominator.
+The earliest history can include established wallets whose previous activity
+predates this dataset.

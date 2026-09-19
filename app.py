@@ -4,6 +4,7 @@ Flask application for Rysk Options Dashboard.
 
 from flask import Flask, render_template, jsonify, request
 import os
+from cohort_services import get_retention_cohorts, get_retention_audit
 from analytics_services import get_analytics_overview, get_otm_apr_surface
 from chain_metadata import parse_chain_filter
 from dashboard_services import (
@@ -471,6 +472,27 @@ def api_global_volatility():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/analytics/retention')
+def api_analytics_retention():
+    """Full-history wallet cohorts from verified on-chain option sale owners."""
+    try:
+        chain_id = resolve_chain_filter()
+        conn = get_db()
+        try:
+            # Cohorts and audit totals must describe the same snapshot while
+            # an incremental recovery is committing new wallet proofs.
+            conn.execute('BEGIN')
+            data = get_retention_cohorts(conn, chain_id=chain_id)
+            data['audit'] = get_retention_audit(conn)
+        finally:
+            conn.close()
+        return jsonify({"success": True, **data})
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 @app.route('/api/analytics/overview')
 def api_analytics_overview():
     """Time-series, tenor, and execution-yield research datasets."""
@@ -737,6 +759,49 @@ def api_global_premium_over_time():
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/admin/cohort-refresh', methods=['POST', 'GET'])
+def api_admin_cohort_refresh():
+    """Render cron triggers asynchronous work on the service's persistent disk."""
+    import hmac
+    from cohort_jobs import start_refresh_job, refresh_status
+    if not ADMIN_BACKFILL_TOKEN:
+        return jsonify({'success': False, 'error': 'Admin token is not configured'}), 503
+    provided = (request.headers.get('X-Admin-Token') or '').strip()
+    if not hmac.compare_digest(provided.encode(), ADMIN_BACKFILL_TOKEN.encode()):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    try:
+        if request.method == 'GET':
+            return jsonify({'success': True, 'job': refresh_status()})
+        return jsonify({'success': True, 'job': start_refresh_job()}), 202
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/admin/cohort-cache', methods=['POST'])
+def api_admin_cohort_cache():
+    """Merge a local recovery snapshot without replacing the production DB."""
+    import hmac
+    import tempfile
+    from pathlib import Path
+    from scripts.cohort_cache import import_cache
+    if not ADMIN_BACKFILL_TOKEN:
+        return jsonify({'success': False, 'error': 'Admin token is not configured'}), 503
+    if not hmac.compare_digest((request.headers.get('X-Admin-Token') or '').encode(), ADMIN_BACKFILL_TOKEN.encode()):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    request.max_content_length = 64 * 1024 * 1024
+    uploaded = request.files.get('snapshot')
+    if uploaded is None:
+        return jsonify({'success': False, 'error': 'A snapshot file is required'}), 400
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'snapshot.sqlite.gz'
+            uploaded.save(path)
+            result = import_cache(path)
+        return jsonify({'success': True, **result})
+    except (ValueError, OSError) as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
 
 
 @app.route('/api/admin/backfill-outcomes', methods=['POST'])

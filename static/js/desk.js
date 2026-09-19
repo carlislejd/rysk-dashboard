@@ -20,6 +20,7 @@
         'IV / realized volatility': 'Implied volatility (IV) is estimated from an option price. Realized volatility measures past price changes. Both are annualized; they describe different things and depend on the observation window.',
         'OTM / moneyness': 'Out of the money describes a call strike above the reference price or a put strike below it. Research uses the prior daily close as a historical reference. It is not an executable quote.',
         'Assigned / returned': 'Assigned calls sell the underlying at strike; assigned puts buy it at strike. Returned positions keep the premium and release collateral. Neither label alone measures total investment profit.',
+        'Wallet retention / cohorts': 'Group option-seller wallets by their first observed sale month. A later cell counts wallets trading in that calendar month divided by the original cohort size. This measures repeat activity, not whether option collateral was returned at expiry. Missing attribution makes results provisional.',
         'CC / CSP': 'CC means covered call: sell a call against an underlying asset. CSP means cash-secured put: sell a put backed by cash collateral. Compare their exposure as well as their premium.',
     };
     const destinations = [
@@ -29,6 +30,7 @@
         ['API reference', '/docs', 'Endpoints, CLI, and JSON previews', 'code'],
         ['Asset explorer', '/#act-explore', 'Inspect an underlying, its strikes, and expiries', 'overview'],
         ['Activity & expiries', '/#act-activity', 'Recent executions and upcoming settlement exposure', 'overview'],
+        ['Wallet retention', '/analytics#act-retention', 'Monthly cohorts, returning wallets, and repeat trading frequency', 'research'],
         ['Premium surface', '/analytics#act-surface', 'Compare historical yields by strike distance', 'research'],
         ['Volatility', '/analytics#act-volatility', 'Compare historical price volatility', 'research'],
         ['Yield mix', '/analytics#act-yield', 'Call and put premium efficiency by asset', 'research'],

@@ -4,7 +4,7 @@ SQLite database layer for storing global trade history.
 Note: The global /api/history endpoint does NOT return trader wallet addresses.
 The `address` field contains the underlying asset contract, `collateral` is the
 collateral token contract, and `usd` is the settlement token. Trader-level
-analytics are not possible from this data source.
+analytics require separate on-chain attribution in trade_wallets.
 """
 
 import os
@@ -42,6 +42,32 @@ CREATE TABLE IF NOT EXISTS trades (
     notional_f    REAL NOT NULL,
     apr_f         REAL,
     inserted_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS trade_wallets (
+    chain_id INTEGER NOT NULL,
+    tx_hash TEXT NOT NULL,
+    wallet TEXT,
+    status TEXT NOT NULL,
+    receipt_json TEXT,
+    checked_at INTEGER NOT NULL,
+    PRIMARY KEY (chain_id, tx_hash)
+);
+
+CREATE TABLE IF NOT EXISTS trade_source_observations (
+    chain_id INTEGER NOT NULL,
+    tx_hash TEXT NOT NULL,
+    last_seen_at INTEGER NOT NULL,
+    PRIMARY KEY (chain_id, tx_hash)
+);
+
+CREATE TABLE IF NOT EXISTS reconciled_trade_records (
+    record_key TEXT PRIMARY KEY,
+    chain_id INTEGER NOT NULL,
+    canonical_tx_hash TEXT NOT NULL,
+    original_json TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    reconciled_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sync_meta (
@@ -120,8 +146,24 @@ def insert_trades(conn, rows):
         except (ValueError, TypeError):
             apr_f = None
 
+        tx_hash = row.get("txHash") or row.get("tx_hash")
+        chain = parse_chain_id(row.get("chainId") or row.get("chain_id"), default=default_chain_id())
+        created = row.get("createdAt") or row.get("created_at")
+        # Historical API rows can lack hashes. Replaying a window must not add
+        # the same hashless source row again (SQLite permits NULL primary keys).
+        if not tx_hash and conn.execute(
+            """SELECT 1 FROM trades WHERE tx_hash IS NULL AND chain_id=? AND created_at=?
+               AND address=? AND symbol=? AND quantity=? AND strike=? AND premium=?
+               AND expiry IS ? AND is_put=? AND is_buy=? LIMIT 1""",
+            (chain, created, row.get("address", ""), row.get("symbol", ""),
+             str(row.get("quantity", "0")), str(row.get("strike", "0")),
+             str(row.get("premium", "0")), row.get("expiry"),
+             1 if row.get("isPut") or row.get("is_put") else 0,
+             1 if row.get("isBuy") or row.get("is_buy") else 0),
+        ).fetchone():
+            continue
         try:
-            conn.execute(
+            cursor = conn.execute(
                 """INSERT OR IGNORE INTO trades
                    (tx_hash, address, chain_id, created_at, expiry,
                     is_buy, is_put, symbol, quantity, strike, price, premium,
@@ -153,7 +195,7 @@ def insert_trades(conn, rows):
                     apr_f,
                 ),
             )
-            inserted += conn.total_changes  # approximate
+            inserted += cursor.rowcount
         except sqlite3.IntegrityError:
             pass
     conn.commit()
@@ -171,7 +213,9 @@ def get_last_sync_ts(conn):
 def set_last_sync_ts(conn, ts):
     """Upsert the last sync timestamp."""
     conn.execute(
-        "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_sync_ts', ?)",
+        """INSERT INTO sync_meta (key, value) VALUES ('last_sync_ts', ?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value
+           WHERE CAST(excluded.value AS INTEGER) > CAST(sync_meta.value AS INTEGER)""",
         (str(int(ts)),),
     )
     conn.commit()

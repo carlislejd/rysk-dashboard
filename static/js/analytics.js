@@ -595,6 +595,7 @@ async function refreshAnalytics({ refreshVolatility = false, resetSurface = fals
 document.addEventListener('DOMContentLoaded', () => {
     refreshAnalytics({ refreshVolatility: true, resetSurface: true });
     initAnalyticsScrollSpy();
+    loadRetention();
 
     document.getElementById('analytics-range-tabs').addEventListener('click', event => {
         const button = event.target.closest('[data-days]');
@@ -608,6 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const button = event.target.closest('[data-chain]');
         if (!button) return;
         analyticsChain = button.dataset.chain || 'all';
+        loadRetention();
         document.querySelectorAll('#analytics-chain-tabs .tab-button').forEach(item => item.classList.toggle('active', item === button));
         refreshAnalytics({ resetSurface: true });
     });
@@ -638,5 +640,79 @@ document.addEventListener('DOMContentLoaded', () => {
         volatilityWindow = Number(button.dataset.volWindow);
         document.querySelectorAll('#vol-window-tabs .tab-button').forEach(item => item.classList.toggle('active', item === button));
         renderVolatility();
+    });
+});
+
+
+let retentionData = null;
+let retentionMetric = 'retention_pct';
+let retentionRequestId = 0;
+
+function renderRetention() {
+    const data = retentionData;
+    if (!data) return;
+    const matrix = document.getElementById('retention-matrix');
+    const metric = retentionMetric;
+    const cohorts = data.cohorts || [];
+    if (!cohorts.length) {
+        matrix.innerHTML = '<p class="analytics-empty">No attributed option sellers for this chain yet.</p>';
+        document.getElementById('retention-summary').innerHTML = '';
+        return;
+    }
+    const maxValue = metric === 'retention_pct' ? 100 : Math.max(1, ...cohorts.flatMap(row => row.cells.map(cell => cell?.[metric] || 0)));
+    const formatCell = value => value == null ? 'n/a' : metric === 'retention_pct' ? `${value.toFixed(1)}%` : metric === 'active_wallets' ? formatNumber(value, 0) : value.toFixed(1);
+    const metricName = { retention_pct: 'Return rate', active_wallets: 'Active wallets', trades_per_active_wallet: 'Trades per active wallet' }[metric];
+    matrix.innerHTML = `<table class="retention-table"><caption>${metricName} by first observed sale month (UTC)</caption><thead><tr><th scope="col">First observed</th><th scope="col">Cohort size</th>${data.months.map(month => `<th scope="col">Month ${month}</th>`).join('')}</tr></thead><tbody>${cohorts.map(row => `<tr><th scope="row">${escapeAnalyticsHtml(row.cohort)}</th><td class="retention-size">${formatNumber(row.wallets, 0)}</td>${row.cells.map(cell => {
+        if (!cell) return '<td class="retention-future" aria-label="Not yet observed">—</td>';
+        if (cell.pending) return '<td class="retention-future" aria-label="Wallet recovery pending">…</td>';
+        const value = cell[metric];
+        const level = value == null || value === 0 ? 0 : Math.min(5, Math.ceil(value / maxValue * 5));
+        const title = `${cell.calendar_month}: ${cell.active_wallets} of ${row.wallets} wallets (${cell.retention_pct.toFixed(1)}%); ${cell.trades} trades; ${cell.trades_per_active_wallet?.toFixed(1) ?? 'no'} trades per active wallet${cell.partial ? '; partial month' : ''}${!cell.attribution_complete ? '; incomplete attribution' : ''}`;
+        return `<td class="retention-level-${level}${cell.partial ? ' retention-partial' : ''}" title="${escapeAnalyticsHtml(title)}" aria-label="${escapeAnalyticsHtml(title)}">${formatCell(value)}${cell.partial ? '*' : ''}${!cell.attribution_complete ? '†' : ''}</td>`;
+    }).join('')}</tr>`).join('')}</tbody></table>`;
+    const summary = (data.summary || []).filter(row => [2, 3, 6].includes(row.month));
+    document.getElementById('retention-summary').innerHTML = `<div><strong>${formatNumber(data.wallet_count, 0)}</strong><span>Attributed seller wallets</span></div>` + summary.map(row => `<div><strong>${row.retention_pct == null ? '—' : row.retention_pct.toFixed(1) + '%'}</strong><span>Month ${row.month} return rate · ${formatNumber(row.eligible_wallets, 0)} eligible wallets</span></div>`).join('');
+}
+
+async function loadRetention() {
+    const requestId = ++retentionRequestId;
+    const status = document.getElementById('retention-status');
+    status.textContent = 'Loading wallet cohorts…';
+    retentionData = null;
+    document.getElementById('retention-matrix').innerHTML = '';
+    document.getElementById('retention-summary').innerHTML = '';
+    document.getElementById('retention-coverage').textContent = '';
+    document.getElementById('retention-chain-audit').innerHTML = '';
+    document.getElementById('retention-methodology').textContent = '';
+    try {
+        const response = await fetch(chainUrl('/api/analytics/retention'));
+        const data = await response.json();
+        if (requestId !== retentionRequestId) return;
+        if (!response.ok || !data.success) throw new Error(data.error || 'Request failed');
+        retentionData = data;
+        document.getElementById('retention-chain-audit').innerHTML = (data.audit?.by_chain || []).map(row => `<div><strong>${escapeAnalyticsHtml(row.chain_name)}</strong> ${formatNumber(row.attributed_trades, 0)} / ${formatNumber(row.total_trades, 0)} Global trades attributed · ${row.coverage_pct.toFixed(1)}%${row.source_trade_count != null ? `<br>Current API records: ${formatNumber(row.source_attributed_trades, 0)} / ${formatNumber(row.source_trade_count, 0)} attributed` : ''}<br><small>${formatNumber(row.pending_trades, 0)} pending · ${formatNumber(row.unavailable_receipts, 0)} receipts unavailable · ${formatNumber(row.missing_hash_trades, 0)} missing hashes</small></div>`).join('');
+        status.textContent = `${data.coverage_pct < 100 ? 'Provisional · ' : ''}${data.pending_trades ? formatNumber(data.pending_trades, 0) + ' trades awaiting recovery · ' : ''}${formatNumber(data.attributed_trades, 0)} / ${formatNumber(data.total_trades, 0)} trades attributed (${data.coverage_pct.toFixed(1)}%) · Recorded through ${data.observed_through?.slice(0, 10) || '—'} · Summary excludes partial months`;
+        document.getElementById('retention-methodology').textContent = data.methodology;
+        document.getElementById('retention-coverage').textContent = `${data.missing_hash_trades} trades lack transaction hashes. Monthly attribution: ` + (data.monthly_coverage || []).map(row => `${row.month}: ${row.attributed_trades}/${row.total_trades}`).join(' · ');
+        const audit = data.audit?.source_reconciliation;
+        if (audit) document.getElementById('retention-coverage').textContent += ` Source audit across both chains: ${formatNumber(audit.source_unique_hashes || 0, 0)} unique API transaction hashes; ${formatNumber(audit.missing_from_database || 0, 0)} missing from the database; ${formatNumber(audit.stored_not_in_source || 0, 0)} older stored hashes absent from the current API response (preserved). Audit through ${new Date(audit.through_ts * 1000).toISOString().slice(0, 10)}.`;
+        if (data.audit?.reconciled_legacy_rows) document.getElementById('retention-coverage').textContent += ` ${formatNumber(data.audit.reconciled_legacy_rows, 0)} legacy records were matched to verified current transactions and archived to prevent double-counting.`;
+        renderRetention();
+    } catch (error) {
+        if (requestId !== retentionRequestId) return;
+        status.textContent = `Wallet cohorts unavailable: ${error.message}`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('retention-metric-tabs').addEventListener('click', event => {
+        const button = event.target.closest('[data-retention-metric]');
+        if (!button) return;
+        retentionMetric = button.dataset.retentionMetric;
+        document.querySelectorAll('#retention-metric-tabs button').forEach(item => {
+            item.classList.toggle('active', item === button);
+            item.setAttribute('aria-pressed', String(item === button));
+        });
+        renderRetention();
     });
 });

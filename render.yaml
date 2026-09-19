@@ -52,3 +52,27 @@ services:
         value: "3.11.7"
       - key: ADMIN_BACKFILL_TOKEN
         sync: false
+
+  # Cron has no access to the web service's persistent disk. Trigger the job
+  # on the web service, then poll until it succeeds so Render reports failures.
+  - type: cron
+    name: rysk-refresh-cohorts-daily
+    runtime: python
+    region: ohio
+    plan: starter
+    schedule: "0 16 * * *"  # 16:00 UTC daily (9am PDT / 8am PST)
+    buildCommand: ./scripts/render_build.sh
+    startCommand: python scripts/trigger_cohort_refresh.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
+      - key: RYSK_SERVICE_URL
+        fromService:
+          type: web
+          name: rysk-dashboard
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: ADMIN_BACKFILL_TOKEN
+        fromService:
+          type: web
+          name: rysk-dashboard
+          envVarKey: ADMIN_BACKFILL_TOKEN

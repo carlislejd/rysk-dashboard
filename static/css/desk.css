@@ -371,3 +371,27 @@ body[data-page="account"] .hero-kpis, .analytics-kpis { grid-template-columns: r
     .chain-filter-control { flex-direction: row; justify-content: flex-end; align-items: center; gap: 8px; }
     .chain-filter-control .time-range-label { margin: 0; }
 }
+
+/* Monthly wallet cohorts: text values remain readable without color. */
+.retention-scroll { overflow-x: auto; margin: 20px 0; }
+.retention-table { width: 100%; border-collapse: separate; border-spacing: 4px; font-variant-numeric: tabular-nums; }
+.retention-table caption { text-align: left; padding: 0 0 12px; font-size: 12px; }
+.retention-table th, .retention-table td { padding: 14px 12px; text-align: center; white-space: nowrap; border-radius: 4px; font-size: 12px; }
+.retention-table th:first-child { text-align: left; }
+.retention-table td.retention-level-0 { background: #edf3f0; color: #234c40; }
+.retention-table td.retention-level-1 { background: #d8e9df; color: #234c40; }
+.retention-table td.retention-level-2 { background: #b4d4c2; color: #183d30; }
+.retention-table td.retention-level-3 { background: #80ad96; color: #102b20; }
+.retention-table td.retention-level-4 { background: #48785f; color: #fff; }
+.retention-table td.retention-level-5 { background: #244f3b; color: #fff; }
+.retention-partial { outline: 1px dashed currentColor; outline-offset: -4px; }
+.retention-summary { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 24px; }
+.retention-summary strong { display: block; font-size: 28px; font-weight: 500; }
+.retention-summary span { display: block; font-size: 12px; opacity: .7; margin-top: 5px; }
+.retention-method { margin-top: 20px; font-size: 12px; line-height: 1.7; }
+.retention-method summary { cursor: pointer; }
+.retention-legend { margin-top: 12px; }
+
+.retention-chain-audit { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 16px 0; font-size: 12px; line-height: 1.8; }
+.retention-chain-audit strong { margin-right: 8px; }
+.retention-chain-audit small { opacity: .7; }
