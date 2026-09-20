@@ -539,7 +539,7 @@ function renderDetailSummary(detail) {
         <div class="summary-card"><div class="summary-label">Notional</div><div class="summary-value">${compactCurrency(totalVol)}</div></div>
         <div class="summary-card"><div class="summary-label">Premium</div><div class="summary-value">${compactCurrency(totalPrem)}</div></div>
         <div class="summary-card"><div class="summary-label">Avg APR</div><div class="summary-value">${formatPercentage(avgApr)}</div></div>
-        <div class="summary-card"><div class="summary-label">Put / Call</div><div class="summary-value">${compactCurrency(totalPutVol)} / ${compactCurrency(totalCallVol)}</div></div>
+        <div class="summary-card"><div class="summary-label">Put / Call</div><div class="summary-value summary-value-pair"><span><small>Put</small> ${compactCurrency(totalPutVol)}</span><span><small>Call</small> ${compactCurrency(totalCallVol)}</span></div></div>
         <div class="summary-card"><div class="summary-label">Assignment Rate</div><div class="summary-value">${assignedPct}%</div><div class="summary-subtext">${totalAssigned} assigned / ${totalReturned} returned</div></div>
     `;
 }
@@ -1707,11 +1707,6 @@ function renderOpenExposure(exposure) {
     if (!rows?.length) { window.RyskCharts?.empty?.(chartId, 'No open exposure is recorded.'); return; }
     const palette = chartPalette();
     const labels = rows.map(row => exposureView === 'expiry' ? `${formatUnixDate(row.expiry)} · ${row.chain_short_name || chainLabel(row)}` : `${shortSymbol(row.symbol)} · ${row.chain_short_name || chainLabel(row)}`);
-    const select = document.getElementById('open-exposure-select');
-    if (select) {
-        select.innerHTML = '<option value="">Select a bar</option>' + rows.map((row, index) => `<option value="${index}">${escapeAttr(labels[index])}</option>`).join('');
-        select.onchange = () => { if (select.value !== '') selectOpenExposure(rows[Number(select.value)]); };
-    }
     renderGlobalChart(chartId, [
         { type: 'bar', orientation: 'h', name: 'Calls', y: labels, x: rows.map(row => row.call_notional), customdata: rows, marker: { color: '$call', opacity: rows.map(row => !Object.keys(openPositionFilters).length || (openPositionFilters.chain_id === row.chain_id && (exposureView === 'expiry' ? row.expiry === openPositionFilters.expiry : row.symbol === openPositionFilters.symbol)) ? 1 : 0.45) }, hovertemplate: '%{y}<br>Calls $%{x:,.0f}<extra></extra>' },
         { type: 'bar', orientation: 'h', name: 'Puts', y: labels, x: rows.map(row => row.put_notional), customdata: rows, marker: { color: '$put', opacity: rows.map(row => !Object.keys(openPositionFilters).length || (openPositionFilters.chain_id === row.chain_id && (exposureView === 'expiry' ? row.expiry === openPositionFilters.expiry : row.symbol === openPositionFilters.symbol)) ? 1 : 0.45) }, hovertemplate: '%{y}<br>Puts $%{x:,.0f}<extra></extra>' },

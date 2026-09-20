@@ -525,3 +525,9 @@ button.rysk-chart-control:hover, button.selection-chip:hover { border-color: var
     .chart-controls input, .chart-controls select { flex:1; min-width:0; }
     #health-content .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Keep paired monetary figures readable inside narrow asset-summary tiles. */
+#detail-summary .summary-card { min-width: 0; }
+.summary-value-pair { display: flex; flex-direction: column; gap: 5px; font-size: 21px; }
+.summary-value-pair > span { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.summary-value-pair small { min-width: 25px; color: var(--text-muted); font: 11px var(--font-sans); letter-spacing: 0; }
