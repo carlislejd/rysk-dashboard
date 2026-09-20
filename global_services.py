@@ -572,8 +572,6 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
         f"""SELECT tx_hash, symbol, chain_id, created_at, expiry,
                    is_buy, is_put, quantity_f, strike_f, premium_f,
                    notional_f, apr_f, status, outcome, expiry_price_f,
-                   (SELECT w.wallet FROM trade_wallets w WHERE w.chain_id=trades.chain_id
-                    AND w.tx_hash=trades.tx_hash AND w.status='verified_short_owner') AS seller_wallet,
                    (SELECT w.status FROM trade_wallets w WHERE w.chain_id=trades.chain_id
                     AND w.tx_hash=trades.tx_hash) AS owner_status
             FROM trades {where}
@@ -586,7 +584,6 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
     for r in rows:
         trades.append({
             "tx_hash": r["tx_hash"],
-            "seller_wallet": r["seller_wallet"],
             "owner_status": r["owner_status"] or ("pending" if r["tx_hash"] else "missing_hash"),
             "symbol": r["symbol"],
             **chain_fields(r["chain_id"]),

@@ -7,7 +7,7 @@
     {% include 'partials/head.html' %}
 </head>
 <body data-page="analytics">
-{% set page = 'analytics' %}{% set page_label = 'Research' %}{% set jumps = [('act-flow', 'Protocol flow'), ('act-retention', 'Wallet retention'), ('act-surface', 'Premium surface'), ('act-volatility', 'Volatility'), ('act-yield', 'Yield mix')] %}
+{% set page = 'analytics' %}{% set page_label = 'Research' %}{% set jumps = [('act-flow', 'Protocol flow'), ('act-retention', 'Return activity'), ('act-participants', 'Trader activity'), ('act-surface', 'Premium surface'), ('act-volatility', 'Volatility'), ('act-yield', 'Yield mix')] %}
     <div class="app-shell">
         {% include 'partials/sidebar.html' %}
 
@@ -61,7 +61,8 @@
 
             <nav class="act-nav analytics-act-nav" id="analytics-act-nav">
                 <a href="#act-flow" data-act="act-flow" class="active">Protocol Flow</a>
-                <a href="#act-retention" data-act="act-retention">Wallet Retention</a>
+                <a href="#act-retention" data-act="act-retention">Return Activity</a>
+                <a href="#act-participants" data-act="act-participants">Trader Activity</a>
                 <a href="#act-surface" data-act="act-surface">Premium Surface</a>
                 <a href="#act-volatility" data-act="act-volatility">Volatility</a>
                 <a href="#act-yield" data-act="act-yield">Yield Mix</a>
@@ -141,31 +142,45 @@
             </div>
 
             <div class="act-divider" id="act-retention">
-                <div class="act-title">Wallet Retention</div>
+                <div class="act-title">Return Activity</div>
                 <div class="act-subtitle">Do option sellers come back—and how often?</div>
             </div>
             <section class="card analytics-chart-card">
                 <div class="chart-title-row">
                     <div>
-                        <div class="analytics-eyebrow">MONTHLY COHORTS · ON-CHAIN POSITION OWNERS</div>
+                        <div class="analytics-eyebrow">MONTHLY COHORTS · VERIFIED POSITION OWNERS</div>
                         <h2>From first trade to repeat activity</h2>
-                        <p class="card-subtitle">Each row starts with a wallet’s first observed option sale. Month 2 is the next calendar month. Full stored history; the Chain filter applies, the Window filter does not.</p>
-                    </div>
-                    <div class="tabs" id="retention-metric-tabs" aria-label="Cohort metric">
-                        <button class="tab-button active" data-retention-metric="retention_pct" aria-pressed="true">Return rate</button>
-                        <button class="tab-button" data-retention-metric="active_wallets" aria-pressed="false">Wallets</button>
-                        <button class="tab-button" data-retention-metric="trades_per_active_wallet" aria-pressed="false">Trades / active wallet</button>
+                        <p class="card-subtitle">Each row begins in a trader’s first observed option-sale month. Month 2 is the next calendar month. Full stored history; the Chain filter applies, the Window filter does not.</p>
                     </div>
                 </div>
                 <p id="retention-status" role="status" class="card-subtitle">Recovering cohort data…</p>
                 <div id="retention-chain-audit" class="retention-chain-audit"></div>
                 <div id="retention-summary" class="retention-summary"></div>
-                <div id="retention-matrix" class="retention-scroll" tabindex="0" role="region" aria-label="Monthly wallet retention matrix"></div>
-                <p class="card-subtitle retention-legend">Darker cells = more activity · * Partial calendar month · † Incomplete wallet attribution · — Not yet observed · … Recovery pending · n/a No active wallets</p>
+                <div id="retention-matrix" class="retention-scroll" tabindex="0" role="region" aria-label="Monthly return-rate matrix"></div>
+                <p class="card-subtitle retention-legend">Darker cells = higher return rate · * Partial calendar month · † Incomplete attribution · — Not yet observed · … Recovery pending · Limited history is withheld</p>
                 <details class="retention-method"><summary>Coverage and methodology</summary>
                     <p id="retention-methodology"></p>
                     <div id="retention-coverage"></div>
                 </details>
+            </section>
+
+            <div class="act-divider" id="act-participants">
+                <div class="act-title">Trader Activity</div>
+                <div class="act-subtitle">Anonymous participation patterns, premium yield, and concentration</div>
+            </div>
+            <section class="card analytics-chart-card participant-activity-card">
+                <div class="chart-title-row"><div><div class="analytics-eyebrow">VERIFIED POSITION OWNERS</div><h2>Trader activity</h2><p id="participant-status" class="card-subtitle" role="status">Loading anonymous activity analytics…</p></div></div>
+                <div class="participant-leaderboard-grid">
+                    <div class="participant-panel"><div class="participant-panel-heading"><span>NOTIONAL LEADERS</span><small>Top 10 by observed notional</small></div><div id="notional-leaderboard" class="participant-leaderboard" aria-live="polite"></div></div>
+                    <div class="participant-panel"><div class="participant-panel-heading"><span>PREMIUM LEADERS</span><small>Top 10 by premium collected</small></div><div id="premium-leaderboard" class="participant-leaderboard" aria-live="polite"></div></div>
+                </div>
+                <div class="participant-segment-grid">
+                    <div class="participant-panel"><div class="participant-panel-heading"><span>PREMIUM YIELD BANDS</span><small>Weighted annualized yield at entry</small></div><div id="apr-segments" class="participant-segments" aria-live="polite"></div></div>
+                    <div class="participant-panel"><div class="participant-panel-heading"><span>REPEAT ACTIVITY</span><small>Participation across the selected window</small></div><div id="activity-segments" class="participant-segments" aria-live="polite"></div></div>
+                </div>
+                <p class="participant-suppression-note">Limited-history shares are withheld and are not redistributed across the visible segments.</p>
+                <div class="participant-panel participant-concentration-panel"><div class="participant-panel-heading"><span>ACTIVITY CONCENTRATION</span><small>Share generated by the leading percentage of anonymous traders</small></div><div id="participant-concentration" class="participant-concentration" aria-live="polite"></div></div>
+                <details class="retention-method participant-method"><summary>Coverage and methodology</summary><p id="participant-methodology"></p><div id="participant-coverage"></div></details>
             </section>
 
             <div class="act-divider" id="act-surface">

@@ -5,7 +5,12 @@ from pathlib import Path
 import sqlite3
 import unittest
 
-from cohort_services import get_retention_cohorts, get_retention_audit
+from cohort_services import (
+    get_retention_cohorts,
+    get_retention_audit,
+    public_retention_audit,
+    public_retention_cohorts,
+)
 from db import init_db
 from wallet_attribution import recover_wallet, receipt_proof
 
@@ -74,9 +79,9 @@ class TestRetention(unittest.TestCase):
         audit = get_retention_audit(self.conn)
         self.assertEqual(feed['total'], audit['global_trade_count'])
         self.assertEqual(feed['total'], 2)
-        self.assertIsNone(feed['trades'][0]['seller_wallet'])
+        self.assertNotIn('seller_wallet', feed['trades'][0])
         self.assertEqual(feed['trades'][0]['owner_status'], 'pending')
-        self.assertEqual(feed['trades'][1]['seller_wallet'], '0xone')
+        self.assertNotIn('seller_wallet', feed['trades'][1])
         self.assertEqual(audit['by_chain'][0]['attributed_trades'], 1)
         self.assertEqual(audit['by_chain'][0]['pending_trades'], 1)
 
@@ -95,6 +100,82 @@ class TestRetention(unittest.TestCase):
         self.assertEqual(result['cohorts'], [])
         self.assertEqual(result['coverage_pct'], 0)
         self.assertIsNone(result['observed_through'])
+
+    def test_public_projection_removes_participant_counts_and_suppresses_small_cohorts(self):
+        self.trade('2026-01-01', '0xone')
+        self.trade('2026-02-01', '0xone')
+        internal = get_retention_cohorts(self.conn)
+        public = public_retention_cohorts(internal, min_participants=20)
+
+        self.assertNotIn('wallet_count', public)
+        self.assertNotIn('wallets', public['cohorts'][0])
+        self.assertTrue(public['cohorts'][0]['limited_history'])
+        cell = public['cohorts'][0]['cells'][1]
+        self.assertTrue(cell['limited_history'])
+        self.assertIsNone(cell['retention_pct'])
+        self.assertNotIn('active_wallets', cell)
+        self.assertNotIn('trades_per_active_wallet', cell)
+        self.assertTrue(public['summary'][1]['limited_history'])
+        self.assertNotIn('eligible_wallets', public['summary'][1])
+        self.assertNotIn('active_wallets', public['summary'][1])
+
+    def test_public_projection_threshold_zero_pending_partial_and_future_invariants(self):
+        for number in range(19):
+            self.trade('2026-01-01', f'0x{number:040x}')
+        internal = get_retention_cohorts(self.conn)
+        public = public_retention_cohorts(internal, min_participants=20)
+        self.assertTrue(public['cohorts'][0]['limited_history'])
+
+        # The twentieth trader makes the original January cohort reportable.
+        self.trade('2026-01-02', f'0x{19:040x}')
+        # Advance the observation period without a January return, then add a
+        # pending March receipt. February's zero must remain a valid result.
+        self.trade('2026-02-01', '0xfebruary')
+        self.trade('2026-03-01', None)
+        internal = get_retention_cohorts(self.conn)
+        public = public_retention_cohorts(internal, min_participants=20)
+        january, february = public['cohorts']
+        self.assertFalse(january['limited_history'])
+        self.assertTrue(february['limited_history'])
+        self.assertEqual(january['cells'][1]['retention_pct'], 0)
+        self.assertFalse(january['cells'][1]['partial'])
+        self.assertTrue(january['cells'][2]['pending'])
+        self.assertTrue(january['cells'][2]['partial'])
+        self.assertIsNone(january['cells'][2]['retention_pct'])
+        self.assertIsNone(february['cells'][2])
+
+        cell = public['cohorts'][0]['cells'][0]
+        self.assertFalse(cell['limited_history'])
+        self.assertEqual(cell['retention_pct'], 100)
+
+    def test_public_audit_allowlists_trade_metrics(self):
+        audit = public_retention_audit({
+            'by_chain': [{'chain_id': 1, 'chain_name': 'Ethereum', 'wallets': 20,
+                          'total_trades': 25, 'attributed_trades': 24}],
+            'statuses': [{'chain_id': 1, 'status': 'verified_short_owner', 'trades': 24}],
+            'reconciled_legacy_rows': 3,
+            'global_trade_count': 25,
+            'source_reconciliation': {'source_unique_hashes': 25,
+                                      'missing_examples': ['0xowner'],
+                                      'database_by_chain': {'1': 25,
+                                                            'owner_address': '0xowner',
+                                                            'nested': {'wallets': 20}},
+                                      'source_by_chain': {'999': 24,
+                                                          'wallet': {'count': 1}},
+                                      'extra_by_chain': {'not-a-chain': 1}},
+            'latest_refresh': {'state': 'complete', 'started_at': 1,
+                               'by_chain': [{'wallets': 20}], 'error': '0xowner'},
+        })
+        self.assertNotIn('wallets', audit['by_chain'][0])
+        self.assertNotIn('missing_examples', audit['source_reconciliation'])
+        self.assertNotIn('by_chain', audit['latest_refresh'])
+        self.assertNotIn('owner_address', audit['source_reconciliation']['database_by_chain'])
+        self.assertNotIn('nested', audit['source_reconciliation']['database_by_chain'])
+        self.assertEqual(audit['source_reconciliation']['database_by_chain'], {'1': 25})
+        self.assertEqual(audit['source_reconciliation']['source_by_chain'], {'999': 24})
+        self.assertEqual(audit['source_reconciliation']['extra_by_chain'], {})
+        self.assertNotIn('0xowner', str(audit))
+        self.assertEqual(audit['by_chain'][0]['attributed_trades'], 24)
 
 
 class TestWalletAttribution(unittest.TestCase):

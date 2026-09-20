@@ -1,10 +1,27 @@
 import sqlite3
 import unittest
 
-from global_services import get_asset_detail
+from db import init_db
+from global_services import get_asset_detail, get_global_trades
 
 
 class TestGlobalServices(unittest.TestCase):
+    def test_global_trades_never_include_verified_owner_wallet(self):
+        conn = sqlite3.connect(':memory:')
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        conn.execute('''INSERT INTO trades
+            (tx_hash,address,chain_id,created_at,is_buy,is_put,symbol,quantity,strike,
+             price,premium,quantity_f,strike_f,premium_f,notional_f)
+            VALUES ('hash','asset',999,1,1,0,'HYPE','1','1','1','1',1,1,1,1)''')
+        conn.execute("INSERT INTO trade_wallets VALUES (999,'hash','0x1234567890abcdef', 'verified_short_owner',NULL,0)")
+
+        payload = get_global_trades(conn)
+
+        self.assertNotIn('seller_wallet', payload['trades'][0])
+        self.assertEqual(payload['trades'][0]['owner_status'], 'verified_short_owner')
+        self.assertNotIn('0x1234567890abcdef', str(payload))
+
     def test_asset_detail_strikes_include_side_order_counts(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row

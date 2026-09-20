@@ -34,3 +34,24 @@ class TestRetentionAPI(unittest.TestCase):
         response = self.client.get('/api/analytics/retention?chain_id=invalid')
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json['success'])
+
+    def test_public_response_has_no_participant_counts_or_owner_addresses(self):
+        conn = get_db(self.path)
+        conn.execute('''INSERT INTO trades
+            (tx_hash,address,chain_id,created_at,is_buy,is_put,symbol,quantity,strike,
+             price,premium,quantity_f,strike_f,premium_f,notional_f)
+            VALUES ('hash','asset',999,1767225600,1,0,'HYPE','1','1','1','1',1,1,1,1)''')
+        conn.execute("INSERT INTO trade_wallets VALUES (999,'hash','0x1234567890abcdef', 'verified_short_owner',NULL,0)")
+        conn.commit()
+        conn.close()
+
+        response = self.client.get('/api/analytics/retention')
+        self.assertEqual(response.status_code, 200)
+        payload = response.json
+        self.assertNotIn('wallet_count', payload)
+        self.assertNotIn('wallets', payload['cohorts'][0])
+        self.assertTrue(payload['cohorts'][0]['limited_history'])
+        self.assertNotIn('active_wallets', payload['cohorts'][0]['cells'][0])
+        self.assertNotIn('eligible_wallets', payload['summary'][0])
+        self.assertNotIn('wallets', payload['audit']['by_chain'][0])
+        self.assertNotIn('0x1234567890abcdef', str(payload))

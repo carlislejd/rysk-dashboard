@@ -18,6 +18,8 @@ services:
         value: "true"
       - key: ADMIN_BACKFILL_TOKEN
         generateValue: true
+      - key: PARTICIPANT_ALIAS_SECRET
+        generateValue: true
     disk:
       name: rysk-data
       mountPath: /data

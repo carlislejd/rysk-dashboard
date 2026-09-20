@@ -1248,16 +1248,6 @@ function renderDetailVolumeChart(vol) {
     }, { responsive: true, displayModeBar: false });
 }
 
-function sellerWalletCell(trade) {
-    const wallet = trade.seller_wallet;
-    if (typeof wallet === 'string' && /^0x[0-9a-f]{40}$/i.test(wallet)) {
-        const explorer = Number(trade.chain_id) === 1 ? 'https://etherscan.io' : 'https://hyperevmscan.io';
-        return `<a href="${explorer}/address/${wallet}" target="_blank" rel="noopener noreferrer" title="${wallet}">${wallet.slice(0, 6)}…${wallet.slice(-4)}</a>`;
-    }
-    const label = trade.owner_status === 'pending' ? 'Recovery pending' : trade.owner_status === 'missing_hash' ? 'No transaction hash' : 'Owner not attributed';
-    return `<span title="${label}">—</span>`;
-}
-
 function renderDetailTrades(data, symbol, expiry) {
     const now = Date.now() / 1000;
     document.getElementById('detail-trades-content').innerHTML = `
@@ -1265,7 +1255,7 @@ function renderDetailTrades(data, symbol, expiry) {
             <th data-sort-key="created">Date</th><th>Chain</th><th>Type</th><th data-sort-key="strike">Strike</th>
             <th data-sort-key="quantity">Qty</th><th data-sort-key="premium">Premium</th>
             <th data-sort-key="notional">Notional</th><th data-sort-key="apr">APR</th>
-            <th>Expiry</th><th>Outcome</th><th>Seller wallet</th>
+            <th>Expiry</th><th>Outcome</th>
         </tr></thead><tbody>${data.trades.map(t => {
             const expired = t.expiry && t.expiry < now;
             let outcomeHtml;
@@ -1285,7 +1275,6 @@ function renderDetailTrades(data, symbol, expiry) {
             <td data-sort-key="apr" data-sort-value="${t.apr || 0}">${formatPercentage(t.apr)}</td>
             <td>${formatUnixDate(t.expiry)}</td>
             <td>${outcomeHtml}</td>
-            <td>${sellerWalletCell(t)}</td>
         </tr>`;
         }).join('')}</tbody></table>`;
     const expiryParam = expiry ? `&expiry=${expiry}` : '';
@@ -1501,7 +1490,6 @@ async function loadRecent() {
             <td>${formatCurrency(t.notional, 0)}</td>
             <td>${formatPercentage(t.apr)}</td>
             <td>${t.iv != null ? formatPercentage(t.iv, 1) : '—'}</td>
-            <td>${sellerWalletCell(t)}</td>
         </tr>`).join('');
 
         loading.style.display = 'none';

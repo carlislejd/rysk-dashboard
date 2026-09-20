@@ -596,6 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshAnalytics({ refreshVolatility: true, resetSurface: true });
     initAnalyticsScrollSpy();
     loadRetention();
+    loadParticipantAnalytics();
 
     document.getElementById('analytics-range-tabs').addEventListener('click', event => {
         const button = event.target.closest('[data-days]');
@@ -603,6 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
         analyticsDays = Number(button.dataset.days);
         document.querySelectorAll('#analytics-range-tabs .tab-button').forEach(item => item.classList.toggle('active', item === button));
         refreshAnalytics({ refreshVolatility: true });
+        loadParticipantAnalytics();
     });
 
     document.getElementById('analytics-chain-tabs').addEventListener('click', event => {
@@ -610,6 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!button) return;
         analyticsChain = button.dataset.chain || 'all';
         loadRetention();
+        loadParticipantAnalytics();
         document.querySelectorAll('#analytics-chain-tabs .tab-button').forEach(item => item.classList.toggle('active', item === button));
         refreshAnalytics({ resetSurface: true });
     });
@@ -645,33 +648,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 let retentionData = null;
-let retentionMetric = 'retention_pct';
 let retentionRequestId = 0;
+let participantRequestId = 0;
 
 function renderRetention() {
     const data = retentionData;
     if (!data) return;
     const matrix = document.getElementById('retention-matrix');
-    const metric = retentionMetric;
     const cohorts = data.cohorts || [];
     if (!cohorts.length) {
-        matrix.innerHTML = '<p class="analytics-empty">No attributed option sellers for this chain yet.</p>';
+        matrix.innerHTML = '<p class="analytics-empty">No verified option-sale activity for this chain yet.</p>';
         document.getElementById('retention-summary').innerHTML = '';
         return;
     }
-    const maxValue = metric === 'retention_pct' ? 100 : Math.max(1, ...cohorts.flatMap(row => row.cells.map(cell => cell?.[metric] || 0)));
-    const formatCell = value => value == null ? 'n/a' : metric === 'retention_pct' ? `${value.toFixed(1)}%` : metric === 'active_wallets' ? formatNumber(value, 0) : value.toFixed(1);
-    const metricName = { retention_pct: 'Return rate', active_wallets: 'Active wallets', trades_per_active_wallet: 'Trades per active wallet' }[metric];
-    matrix.innerHTML = `<table class="retention-table"><caption>${metricName} by first observed sale month (UTC)</caption><thead><tr><th scope="col">First observed</th><th scope="col">Cohort size</th>${data.months.map(month => `<th scope="col">Month ${month}</th>`).join('')}</tr></thead><tbody>${cohorts.map(row => `<tr><th scope="row">${escapeAnalyticsHtml(row.cohort)}</th><td class="retention-size">${formatNumber(row.wallets, 0)}</td>${row.cells.map(cell => {
+    const maxValue = 100;
+    matrix.innerHTML = `<table class="retention-table"><caption>Return rate by first observed sale month (UTC)</caption><thead><tr><th scope="col">First observed</th>${data.months.map(month => `<th scope="col">Month ${month}</th>`).join('')}</tr></thead><tbody>${cohorts.map(row => `<tr><th scope="row">${escapeAnalyticsHtml(row.cohort)}</th>${row.cells.map(cell => {
         if (!cell) return '<td class="retention-future" aria-label="Not yet observed">—</td>';
-        if (cell.pending) return '<td class="retention-future" aria-label="Wallet recovery pending">…</td>';
-        const value = cell[metric];
+        if (cell.pending) return '<td class="retention-future" aria-label="Attribution recovery pending">…</td>';
+        if (cell.limited_history) return `<td class="retention-limited${cell.partial ? ' retention-partial' : ''}" aria-label="Limited history${cell.partial ? '; partial month' : ''}${!cell.attribution_complete ? '; incomplete attribution' : ''}">Limited history${cell.partial ? '*' : ''}${!cell.attribution_complete ? '†' : ''}</td>`;
+        const value = cell.retention_pct;
         const level = value == null || value === 0 ? 0 : Math.min(5, Math.ceil(value / maxValue * 5));
-        const title = `${cell.calendar_month}: ${cell.active_wallets} of ${row.wallets} wallets (${cell.retention_pct.toFixed(1)}%); ${cell.trades} trades; ${cell.trades_per_active_wallet?.toFixed(1) ?? 'no'} trades per active wallet${cell.partial ? '; partial month' : ''}${!cell.attribution_complete ? '; incomplete attribution' : ''}`;
-        return `<td class="retention-level-${level}${cell.partial ? ' retention-partial' : ''}" title="${escapeAnalyticsHtml(title)}" aria-label="${escapeAnalyticsHtml(title)}">${formatCell(value)}${cell.partial ? '*' : ''}${!cell.attribution_complete ? '†' : ''}</td>`;
+        const title = `${cell.calendar_month}: ${value == null ? 'not available' : value.toFixed(1) + '%'} return rate; ${cell.trades} trades${cell.partial ? '; partial month' : ''}${!cell.attribution_complete ? '; incomplete attribution' : ''}`;
+        return `<td class="retention-level-${level}${cell.partial ? ' retention-partial' : ''}" title="${escapeAnalyticsHtml(title)}" aria-label="${escapeAnalyticsHtml(title)}">${value == null ? '—' : value.toFixed(1) + '%'}${cell.partial ? '*' : ''}${!cell.attribution_complete ? '†' : ''}</td>`;
     }).join('')}</tr>`).join('')}</tbody></table>`;
     const summary = (data.summary || []).filter(row => [2, 3, 6].includes(row.month));
-    document.getElementById('retention-summary').innerHTML = `<div><strong>${formatNumber(data.wallet_count, 0)}</strong><span>Attributed seller wallets</span></div>` + summary.map(row => `<div><strong>${row.retention_pct == null ? '—' : row.retention_pct.toFixed(1) + '%'}</strong><span>Month ${row.month} return rate · ${formatNumber(row.eligible_wallets, 0)} eligible wallets</span></div>`).join('');
+    document.getElementById('retention-summary').innerHTML = summary.map(row => `<div><strong>${row.limited_history ? 'Limited history' : row.retention_pct == null ? '—' : row.retention_pct.toFixed(1) + '%'}</strong><span>Month ${row.month} return rate</span></div>`).join('');
 }
 
 async function loadRetention() {
@@ -690,8 +691,8 @@ async function loadRetention() {
         if (requestId !== retentionRequestId) return;
         if (!response.ok || !data.success) throw new Error(data.error || 'Request failed');
         retentionData = data;
-        document.getElementById('retention-chain-audit').innerHTML = (data.audit?.by_chain || []).map(row => `<div><strong>${escapeAnalyticsHtml(row.chain_name)}</strong> ${formatNumber(row.attributed_trades, 0)} / ${formatNumber(row.total_trades, 0)} Global trades attributed · ${row.coverage_pct.toFixed(1)}%${row.source_trade_count != null ? `<br>Current API records: ${formatNumber(row.source_attributed_trades, 0)} / ${formatNumber(row.source_trade_count, 0)} attributed` : ''}<br><small>${formatNumber(row.pending_trades, 0)} pending · ${formatNumber(row.unavailable_receipts, 0)} receipts unavailable · ${formatNumber(row.missing_hash_trades, 0)} missing hashes</small></div>`).join('');
-        status.textContent = `${data.coverage_pct < 100 ? 'Provisional · ' : ''}${data.pending_trades ? formatNumber(data.pending_trades, 0) + ' trades awaiting recovery · ' : ''}${formatNumber(data.attributed_trades, 0)} / ${formatNumber(data.total_trades, 0)} trades attributed (${data.coverage_pct.toFixed(1)}%) · Recorded through ${data.observed_through?.slice(0, 10) || '—'} · Summary excludes partial months`;
+        document.getElementById('retention-chain-audit').innerHTML = (data.audit?.by_chain || []).map(row => `<div><strong>${escapeAnalyticsHtml(row.chain_name)}</strong> ${formatNumber(row.attributed_trades, 0)} / ${formatNumber(row.total_trades, 0)} Global trades attributed · ${coveragePercent(row.coverage_pct)}${row.source_trade_count != null ? `<br>Current API records: ${formatNumber(row.source_attributed_trades, 0)} / ${formatNumber(row.source_trade_count, 0)} attributed` : ''}<br><small>${formatNumber(row.pending_trades, 0)} pending · ${formatNumber(row.unavailable_receipts, 0)} receipts unavailable · ${formatNumber(row.missing_hash_trades, 0)} missing hashes</small></div>`).join('');
+        status.textContent = `${data.coverage_pct < 100 ? 'Provisional · ' : ''}${data.pending_trades ? formatNumber(data.pending_trades, 0) + ' trades awaiting recovery · ' : ''}${formatNumber(data.attributed_trades, 0)} / ${formatNumber(data.total_trades, 0)} trades attributed (${coveragePercent(data.coverage_pct)}) · Recorded through ${data.observed_through?.slice(0, 10) || '—'} · Summary excludes partial months`;
         document.getElementById('retention-methodology').textContent = data.methodology;
         document.getElementById('retention-coverage').textContent = `${data.missing_hash_trades} trades lack transaction hashes. Monthly attribution: ` + (data.monthly_coverage || []).map(row => `${row.month}: ${row.attributed_trades}/${row.total_trades}`).join(' · ');
         const audit = data.audit?.source_reconciliation;
@@ -704,15 +705,125 @@ async function loadRetention() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('retention-metric-tabs').addEventListener('click', event => {
-        const button = event.target.closest('[data-retention-metric]');
-        if (!button) return;
-        retentionMetric = button.dataset.retentionMetric;
-        document.querySelectorAll('#retention-metric-tabs button').forEach(item => {
-            item.classList.toggle('active', item === button);
-            item.setAttribute('aria-pressed', String(item === button));
-        });
-        renderRetention();
+function participantEmpty(message = 'No reportable activity for this selection.') {
+    return `<p class="analytics-empty">${escapeAnalyticsHtml(message)}</p>`;
+}
+
+function participantPercent(value, digits = 1) {
+    return value == null || !Number.isFinite(Number(value)) ? '—' : `${Number(value).toFixed(digits)}%`;
+}
+
+function coveragePercent(value) {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    const numeric = Number(value);
+    if (numeric < 100 && numeric > 99.9) return '>99.9%';
+    return `${numeric.toFixed(1)}%`;
+}
+
+function renderLeaderboard(targetId, board, amountKey) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    if (!board || board.status === 'limited_history') {
+        target.innerHTML = participantEmpty('Limited history');
+        return;
+    }
+    const rows = board.rows || [];
+    if (board.status !== 'ready' || !rows.length) {
+        target.innerHTML = participantEmpty(board?.status === 'unavailable' ? 'This ranking is unavailable for the selected filters.' : undefined);
+        return;
+    }
+    target.innerHTML = `<div class="participant-leaderboard-head"><span></span><span>Trader</span><span>Amount</span><span>Share</span><span>Entry APR</span></div>${rows.map(row => `<div class="participant-leaderboard-row">
+        <span class="participant-rank">${escapeAnalyticsHtml(row.rank)}</span>
+        <strong>${escapeAnalyticsHtml(row.alias)}</strong>
+        <span>${compactCurrency(row[amountKey])}</span>
+        <span>${participantPercent(row.share_pct)}</span>
+        <span>${participantPercent(row.weighted_apr)}</span>
+    </div>`).join('')}`;
+}
+
+function renderSegments(targetId, segments) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    if (!segments?.length) {
+        target.innerHTML = participantEmpty();
+        return;
+    }
+    target.innerHTML = `<div class="participant-segment-head"><span>Segment</span><span>Trader share</span><span>Notional</span><span>Premium</span></div>${segments.map(segment => {
+        const limited = segment.status === 'limited_history' || segment.participant_share_pct == null;
+        return `<div class="participant-segment-row${limited ? ' is-limited' : ''}">
+            <strong>${escapeAnalyticsHtml(segment.label)}</strong>
+            <span>${limited ? 'Limited history' : participantPercent(segment.participant_share_pct)}</span>
+            <span>${limited ? '—' : participantPercent(segment.notional_share_pct)}</span>
+            <span>${limited ? '—' : participantPercent(segment.premium_share_pct)}</span>
+        </div>`;
+    }).join('')}`;
+}
+
+function renderConcentration(concentration) {
+    const target = document.getElementById('participant-concentration');
+    if (!target) return;
+    if (!concentration || concentration.status === 'limited_history') {
+        target.innerHTML = participantEmpty('Limited history');
+        return;
+    }
+    const rows = concentration.rows || [];
+    if (concentration.status !== 'ready' || !rows.length) {
+        target.innerHTML = participantEmpty(concentration?.status === 'unavailable' ? 'Concentration is unavailable for the selected filters.' : undefined);
+        return;
+    }
+    target.innerHTML = `<div class="participant-concentration-head"><span>Leading group</span><span>Notional share</span><span>Premium share</span></div>${rows.map(row => `<div class="participant-concentration-row"><strong>Top ${escapeAnalyticsHtml(row.percentile)}%</strong><span class="concentration-value">${participantPercent(row.notional_share_pct)}<i style="width:${Math.max(0, Math.min(100, Number(row.notional_share_pct) || 0))}%"></i></span><span class="concentration-value">${participantPercent(row.premium_share_pct)}<i style="width:${Math.max(0, Math.min(100, Number(row.premium_share_pct) || 0))}%"></i></span></div>`).join('')}`;
+}
+
+function renderParticipantAnalytics(data) {
+    const leaderboards = data.leaderboards || {};
+    renderLeaderboard('notional-leaderboard', leaderboards.notional, 'notional');
+    renderLeaderboard('premium-leaderboard', leaderboards.premium, 'premium');
+    renderSegments('apr-segments', data.apr_segments);
+    renderSegments('activity-segments', data.activity_segments);
+    renderConcentration(data.concentration);
+
+    const coverage = data.coverage || {};
+    const status = document.getElementById('participant-status');
+    if (status) {
+        status.textContent = `${coverage.coverage_pct < 100 ? 'Provisional · ' : ''}${formatNumber(coverage.attributed_trades || 0, 0)} / ${formatNumber(coverage.total_trades || 0, 0)} trades attributed (${coveragePercent(coverage.coverage_pct)}) · ${windowLabel()} · Recorded through ${coverage.observed_through?.slice(0, 10) || '—'}`;
+    }
+    const methodology = document.getElementById('participant-methodology');
+    if (methodology) {
+        const method = data.methodology;
+        methodology.textContent = typeof method === 'string' ? method : [method?.weighted_apr, method?.privacy, method?.coverage, method?.concentration].filter(Boolean).join(' ') || 'Rankings and segments use verified position-owner attribution. Premium yield is annualized at entry and does not represent realized profit.';
+    }
+    const coverageEl = document.getElementById('participant-coverage');
+    if (coverageEl) {
+        const refreshedAt = coverage.last_refreshed;
+        const refreshed = refreshedAt ? new Date(typeof refreshedAt === 'number' ? refreshedAt * 1000 : refreshedAt).toLocaleString() : null;
+        coverageEl.textContent = `Coverage: ${coveragePercent(coverage.coverage_pct)} of recorded trades are attributed. Observed from ${coverage.observed_from?.slice(0, 10) || '—'} through ${coverage.observed_through?.slice(0, 10) || '—'}${refreshed && refreshed !== 'Invalid Date' ? ` · Refreshed ${refreshed}` : ''}.`;
+    }
+}
+
+async function loadParticipantAnalytics() {
+    const requestId = ++participantRequestId;
+    const status = document.getElementById('participant-status');
+    if (status) status.textContent = 'Loading anonymous activity analytics…';
+    const methodology = document.getElementById('participant-methodology');
+    const coverage = document.getElementById('participant-coverage');
+    if (methodology) methodology.textContent = '';
+    if (coverage) coverage.textContent = '';
+    ['notional-leaderboard', 'premium-leaderboard', 'apr-segments', 'activity-segments', 'participant-concentration'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.innerHTML = '';
     });
-});
+    try {
+        const response = await fetch(chainUrl(`/api/analytics/participants?days=${analyticsDays}`));
+        const result = await response.json();
+        if (requestId !== participantRequestId) return;
+        if (!response.ok || !result.success) throw new Error(result.error || 'Request failed');
+        renderParticipantAnalytics(result.data || result);
+    } catch (error) {
+        if (requestId !== participantRequestId) return;
+        if (status) status.textContent = `Trader activity unavailable: ${error.message}`;
+        ['notional-leaderboard', 'premium-leaderboard', 'apr-segments', 'activity-segments', 'participant-concentration'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.innerHTML = participantEmpty('Analytics unavailable for this selection.');
+        });
+    }
+}

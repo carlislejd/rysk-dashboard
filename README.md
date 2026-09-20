@@ -178,18 +178,55 @@ Safety behavior:
 
 ## Wallet retention cohorts
 
-Research → **Wallet Retention** shows monthly option-seller cohorts with return
-rate, active-wallet count, and trades per active wallet. Month 1 is the first
+Research → **Wallet Retention** shows monthly option-seller cohorts as return
+percentages, without participant counts. Month 1 is the first
 **observed attributed** sale, not a proven first-ever trade. Cohorts use all
 stored history, independent of the Research window; the chain filter applies.
 The same wallet address is counted once across chains in the All view; chain
 views measure first observed activity on that chain. Wallets are not people.
 The API is `GET /api/analytics/retention?chain_id=999` (omit the filter for all).
 
-The Global trades API and both transaction tables include `seller_wallet` and
-`owner_status`, joined by chain and transaction hash. The retention response
-includes a per-chain audit against that exact Global trades table, plus the
-latest full-source reconciliation, incremental sync, and refresh outcome.
+Public Global transaction tables and responses omit seller addresses. Owner
+proofs remain in the local database for internal analysis and auditing. The
+retention response includes a sanitized per-chain trade audit against that
+same Global trades table, without participant totals or owner addresses.
+
+### Anonymous trader analytics
+
+Research also includes notional and premium leaderboards, fixed APR bands,
+repeat-activity segments, and concentration shares. The endpoint is
+`GET /api/analytics/participants?days=365&chain_id=999`; `days=0` means all
+history, and omitting `chain_id` combines chains. These views follow the
+Research window, unlike retention. All percentage shares use verified
+attributed activity in the selected window, with attribution coverage shown.
+
+Leaderboards show only the top ten stable aliases, amounts, financial share,
+and weighted entry APR. APR uses annualizable premium divided by total
+strike-notional-days, annualized over 365 days; it is not realized profit.
+Trader APR bands are under 10%, 10–25%, 25–50%, 50–100%, and 100%+, with an
+Unclassified category for traders without an annualizable result. Activity
+segments distinguish one trade, repeat trades in one UTC calendar month, and
+trades in multiple UTC months within the selected window.
+
+Set `PARTICIPANT_ALIAS_SECRET` to a persistent random secret on the web service.
+`render.yaml` generates it for Blueprint-managed provisioning. Existing
+services must add it to their Render environment before deploying this feature.
+Keep it stable across deploys: rotating it changes every alias. Missing secret
+configuration disables rankings while leaving aggregate analytics available.
+Aliases are keyed hashes of normalized wallet addresses, consistent across
+chains and periods. There is no public address-to-alias lookup. On-chain
+transactions remain independently traceable; these are presentation aliases,
+not a guarantee of anonymity.
+
+Internally, 20 distinct traders are required for rankings and participant-based
+percentages. Each segment and retention cohort must meet this minimum; pooled
+retention summaries use their pooled eligible denominator. Suppressed values
+show **Limited history**, without redistributing their shares. Concentration
+requires 100 traders and uses rounded-up group sizes for the top 1%, 5%, and
+10%, ranking notional and premium independently. Exact participant counts stay
+internal and are omitted from public JSON, labels, and tooltips. Trade counts
+and financial amounts remain available. All analytics reuse the daily Render
+refresh and persisted owner proofs; no additional backfill or scheduler runs.
 
 Run the incremental daily pipeline:
 
@@ -274,6 +311,6 @@ results with gaps are provisional. Unprocessed months show a pending marker,
 future months stay blank, and the final observed month is conservatively marked
 partial (there is no verified ingestion-completeness watermark). Weighted
 summaries pool original eligible cohort sizes and exclude partial/pending cells.
-Very small cohorts should be interpreted with their displayed denominator.
+Thin cohorts display Limited history instead of percentages or denominators.
 The earliest history can include established wallets whose previous activity
 predates this dataset.

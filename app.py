@@ -4,7 +4,11 @@ Flask application for Rysk Options Dashboard.
 
 from flask import Flask, render_template, jsonify, request
 import os
-from cohort_services import get_retention_cohorts, get_retention_audit
+from cohort_services import (
+    get_retention_cohorts, get_retention_audit,
+    public_retention_cohorts, public_retention_audit,
+)
+from participant_services import get_participant_analytics
 from analytics_services import get_analytics_overview, get_otm_apr_surface
 from chain_metadata import parse_chain_filter
 from dashboard_services import (
@@ -47,6 +51,7 @@ app = Flask(__name__)
 # Configuration
 ACCOUNT_ADDRESS = os.getenv("ACCOUNT_ADDRESS", "")
 ADMIN_BACKFILL_TOKEN = os.getenv("ADMIN_BACKFILL_TOKEN", "")
+PARTICIPANT_ALIAS_SECRET = os.getenv("PARTICIPANT_ALIAS_SECRET", "")
 
 # Initialize database on startup
 with app.app_context():
@@ -482,15 +487,45 @@ def api_analytics_retention():
             # Cohorts and audit totals must describe the same snapshot while
             # an incremental recovery is committing new wallet proofs.
             conn.execute('BEGIN')
-            data = get_retention_cohorts(conn, chain_id=chain_id)
-            data['audit'] = get_retention_audit(conn)
+            data = public_retention_cohorts(get_retention_cohorts(conn, chain_id=chain_id))
+            data['audit'] = public_retention_audit(get_retention_audit(conn))
         finally:
             conn.close()
         return jsonify({"success": True, **data})
     except ValueError as exc:
         return jsonify({"success": False, "error": str(exc)}), 400
-    except Exception as exc:
-        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception:
+        app.logger.exception('Retention analytics failed')
+        return jsonify({"success": False, "error": 'Retention analytics unavailable'}), 500
+
+
+@app.route('/api/analytics/participants')
+def api_analytics_participants():
+    """Anonymous rankings and participation shares from verified sellers."""
+    try:
+        raw_days = request.args.get('days', '365')
+        try:
+            days = int(raw_days)
+        except (ValueError, TypeError):
+            raise ValueError('days must be a non-negative integer')
+        if days < 0 or days > 36500:
+            raise ValueError('days must be between 0 and 36500')
+        chain_id = resolve_chain_filter()
+        conn = get_db()
+        try:
+            conn.execute('BEGIN')
+            data = get_participant_analytics(
+                conn, days=days, chain_id=chain_id,
+                alias_secret=PARTICIPANT_ALIAS_SECRET,
+            )
+        finally:
+            conn.close()
+        return jsonify({'success': True, **data})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        app.logger.exception('Participant analytics failed')
+        return jsonify({'success': False, 'error': 'Participant analytics unavailable'}), 500
 
 
 @app.route('/api/analytics/overview')
