@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import app
 from db import get_db, init_db
+from participant_services import public_trader_identity
 
 
 class TestParticipantAPI(unittest.TestCase):
@@ -57,6 +58,55 @@ class TestParticipantAPI(unittest.TestCase):
                 response = self.client.get('/api/analytics/participants')
         self.assertEqual(response.status_code, 500)
         self.assertNotIn('private-wallet-data', response.get_data(as_text=True))
+
+    def test_global_identity_opens_matching_address_free_history(self):
+        owner = '0x' + 'ab' * 20
+        conn = get_db(self.path)
+        conn.execute('''INSERT INTO trades
+            (tx_hash,address,chain_id,created_at,expiry,is_buy,is_put,symbol,quantity,strike,
+             price,premium,quantity_f,strike_f,premium_f,notional_f)
+            VALUES ('hash','asset',1,1767225600,1768089600,0,0,'ETH','1','100','2','2',1,100,2,100)''')
+        conn.execute('INSERT INTO trade_wallets VALUES (?,?,?,?,?,?)',
+                     (1, 'hash', owner, 'verified_short_owner', None, 0))
+        conn.commit()
+        conn.close()
+        with patch.object(app, 'PARTICIPANT_ALIAS_SECRET', 'test-only-secret'):
+            global_data = self.client.get('/api/global/trades?chain_id=1').get_json()
+            trade = global_data['trades'][0]
+            identity = public_trader_identity(owner, 'test-only-secret')
+            self.assertEqual(trade['trader_alias'], identity['alias'])
+            self.assertEqual(trade['trader_id'], identity['trader_id'])
+            response = self.client.get('/api/analytics/traders/' + trade['trader_id'])
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertEqual(data['identity'], identity)
+            self.assertEqual(data['totals']['trade_count'], 1)
+            self.assertEqual(data['totals']['premium'], 2)
+            self.assertNotIn(owner, response.get_data(as_text=True))
+            self.assertNotIn('tx_hash', data['trades'][0])
+            page = self.client.get('/trader/' + trade['trader_id'])
+            self.assertEqual(page.status_code, 200)
+            self.assertNotIn(owner, page.get_data(as_text=True))
+            self.assertNotIn('wallet-input', page.get_data(as_text=True))
+
+    def test_trader_route_rejects_invalid_inputs_without_exposing_identity(self):
+        trader_id = 'a' * 64
+        with patch.object(app, 'PARTICIPANT_ALIAS_SECRET', 'test-only-secret'):
+            for query in ('days=-1', 'page=0', 'limit=101', 'days=xyz', 'chain_id=bogus'):
+                response = self.client.get('/api/analytics/traders/' + trader_id + '?' + query)
+                self.assertEqual(response.status_code, 400)
+            self.assertEqual(self.client.get('/api/analytics/traders/' + trader_id).status_code, 404)
+            self.assertEqual(self.client.get('/api/analytics/traders/not-an-id').status_code, 404)
+        with patch.object(app, 'PARTICIPANT_ALIAS_SECRET', ''):
+            self.assertEqual(self.client.get('/api/analytics/traders/' + trader_id).status_code, 503)
+
+    def test_overview_exposes_current_listing_without_removing_historical_totals(self):
+        with patch.object(app, 'get_tradeable_assets', return_value={'assets': ['ETH'], 'source': 'live_inventory'}):
+            with patch.object(app, 'get_analytics_overview', return_value={'totals': {'notional': 123}}):
+                response = self.client.get('/api/analytics/overview')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['tradeable_assets']['assets'], ['ETH'])
+        self.assertEqual(response.get_json()['totals']['notional'], 123)
 
 
 if __name__ == '__main__':

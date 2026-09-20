@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rysk Intelligence — Trader history</title>
+    {% include 'partials/head.html' %}
+</head>
+<body data-page="trader">
+{% set page = 'trader' %}{% set page_label = 'Trader history' %}{% set jumps = [('trader-overview', 'Overview'), ('trader-executions', 'Executions')] %}
+    <div class="app-shell">
+        {% include 'partials/sidebar.html' %}
+        <main id="workspace" tabindex="-1" class="container app-main trader-page">
+            <header>
+                {% include 'partials/topbar.html' %}
+                <div class="page-intro"><div><div class="page-eyebrow"><span></span> ANONYMOUS HISTORICAL RECORD</div><h1 id="trader-title">Trader history</h1><p class="page-description">Recorded Rysk executions for this anonymous trader. This is historical activity, not a live portfolio.</p></div><a class="intro-link" href="/analytics#act-participants">Back to Research <span>↗</span></a></div>
+            </header>
+
+            <section class="analytics-toolbar card trader-toolbar" aria-label="Trader history filters">
+                <div class="analytics-filter-group"><span class="analytics-filter-label">Window</span><div class="tabs" id="trader-range-tabs">
+                    <button class="tab-button" data-days="30">30d</button><button class="tab-button" data-days="90">90d</button><button class="tab-button" data-days="365">1y</button><button class="tab-button active" data-days="0">All</button>
+                </div></div>
+                <div class="analytics-filter-group"><span class="analytics-filter-label">Chain</span><div class="tabs" id="trader-chain-tabs">
+                    <button class="tab-button active" data-chain="all">All</button><button class="tab-button" data-chain="hyperevm">HyperEVM</button><button class="tab-button" data-chain="ethereum">Ethereum</button>
+                </div></div>
+                <div class="analytics-data-status" id="trader-status" role="status">Loading recorded history…</div>
+            </section>
+
+            <div class="act-divider" id="trader-overview"><div class="act-title">Historical overview</div><div class="act-subtitle">Observed activity for the selected period</div></div>
+            <section class="hero-kpis trader-kpis" id="trader-kpis">
+                <div class="hero-kpi" data-slot="primary"><div class="hero-kpi-label">Observed Notional</div><div class="hero-kpi-value" id="trader-notional">—</div><div class="hero-kpi-sub">recorded executions</div></div>
+                <div class="hero-kpi"><div class="hero-kpi-label">Premium</div><div class="hero-kpi-value" id="trader-premium">—</div><div class="hero-kpi-sub">observed at entry</div></div>
+                <div class="hero-kpi"><div class="hero-kpi-label">Entry APR</div><div class="hero-kpi-value" id="trader-apr">—</div><div class="hero-kpi-sub">weighted by trade size and duration</div></div>
+                <div class="hero-kpi"><div class="hero-kpi-label">Executions</div><div class="hero-kpi-value" id="trader-trades">—</div><div class="hero-kpi-sub">recorded in this view</div></div>
+            </section>
+
+            <div class="act-divider" id="trader-executions"><div class="act-title">Recorded executions</div><div class="act-subtitle">Historical trade tape only</div></div>
+            <section class="card trader-trades-card">
+                <p class="card-subtitle trader-apr-note">Entry APR annualizes premium at trade entry; it is not realized profit or a return forecast.</p>
+                <div id="trader-trades-loading" class="loading">Loading executions…</div>
+                <div id="trader-trades-content" hidden>
+                    <div class="trader-table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Chain</th><th>Asset</th><th>Type</th><th>Strike</th><th>Quantity</th><th>Premium</th><th>Notional</th><th>Entry APR</th><th>Expiry</th><th>Outcome</th></tr></thead><tbody id="trader-trades-body"></tbody></table></div>
+                    <div class="trader-pagination" id="trader-pagination"></div>
+                </div>
+            </section>
+            {% include 'partials/footer.html' %}
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/trader.js') }}"></script>
+</body>
+</html>

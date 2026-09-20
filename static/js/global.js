@@ -54,6 +54,15 @@ function escapeAttr(value) {
     }[ch]));
 }
 
+function traderHistoryLink(trade, chainOverride = undefined) {
+    if (!trade?.trader_id || !trade?.trader_alias) return '—';
+    const chain = chainOverride === undefined ? selectedChain : chainOverride;
+    const params = new URLSearchParams({ days: '0' });
+    if (chain !== null && chain !== undefined && chain !== '' && chain !== 'all') params.set('chain_id', String(chain));
+    const href = `/trader/${encodeURIComponent(trade.trader_id)}?${params.toString()}`;
+    return `<a class="trader-link" href="${escapeAttr(href)}">${escapeAttr(trade.trader_alias)}</a>`;
+}
+
 function formatUnixDate(ts) {
     if (!ts) return '—';
     return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -1255,7 +1264,7 @@ function renderDetailTrades(data, symbol, expiry) {
             <th data-sort-key="created">Date</th><th>Chain</th><th>Type</th><th data-sort-key="strike">Strike</th>
             <th data-sort-key="quantity">Qty</th><th data-sort-key="premium">Premium</th>
             <th data-sort-key="notional">Notional</th><th data-sort-key="apr">APR</th>
-            <th>Expiry</th><th>Outcome</th>
+            <th>Expiry</th><th>Outcome</th><th>Trader</th>
         </tr></thead><tbody>${data.trades.map(t => {
             const expired = t.expiry && t.expiry < now;
             let outcomeHtml;
@@ -1275,6 +1284,7 @@ function renderDetailTrades(data, symbol, expiry) {
             <td data-sort-key="apr" data-sort-value="${t.apr || 0}">${formatPercentage(t.apr)}</td>
             <td>${formatUnixDate(t.expiry)}</td>
             <td>${outcomeHtml}</td>
+            <td>${traderHistoryLink(t, selectedAssetChain)}</td>
         </tr>`;
         }).join('')}</tbody></table>`;
     const expiryParam = expiry ? `&expiry=${expiry}` : '';
@@ -1490,6 +1500,7 @@ async function loadRecent() {
             <td>${formatCurrency(t.notional, 0)}</td>
             <td>${formatPercentage(t.apr)}</td>
             <td>${t.iv != null ? formatPercentage(t.iv, 1) : '—'}</td>
+            <td>${traderHistoryLink(t)}</td>
         </tr>`).join('');
 
         loading.style.display = 'none';

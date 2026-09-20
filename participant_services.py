@@ -32,10 +32,17 @@ APR_SEGMENTS = (
 
 
 def _alias(wallet: str, secret: str) -> str:
-    digest = hmac.new(
-        secret.encode("utf-8"), wallet.lower().encode("utf-8"), hashlib.sha256
-    ).hexdigest()[:12].upper()
-    return f"Trader {digest}"
+    return public_trader_identity(wallet, secret)["alias"]
+
+
+def public_trader_identity(wallet: str, secret: str) -> Dict[str, str]:
+    """Return a stable opaque identity without exposing the wallet itself."""
+    if not secret:
+        raise ValueError("A trader alias secret is required")
+    trader_id = hmac.new(
+        secret.encode("utf-8"), str(wallet).lower().encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return {"trader_id": trader_id, "alias": f"Trader {trader_id[:8].upper()}"}
 
 
 def _month(timestamp: int) -> str:
@@ -141,6 +148,7 @@ def _leaderboard(
         "rows": [
             {
                 "rank": rank,
+                "trader_id": member["trader_id"],
                 "alias": member["alias"],
                 "notional": member["metrics"]["notional"],
                 "premium": member["metrics"]["premium"],
@@ -215,8 +223,10 @@ def get_participant_analytics(
     members = []
     for wallet, member in by_wallet.items():
         metrics = _finish_aggregate(member["aggregate"])
+        identity = public_trader_identity(wallet, alias_secret) if alias_secret else None
         members.append({
-            "alias": _alias(wallet, alias_secret) if alias_secret else None,
+            "alias": identity["alias"] if identity else None,
+            "trader_id": identity["trader_id"] if identity else None,
             "metrics": metrics,
             "months": member["months"],
         })

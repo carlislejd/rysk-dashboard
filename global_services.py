@@ -12,6 +12,7 @@ import requests as _requests
 
 from chain_metadata import chain_fields
 from iv_calc import implied_volatility
+from participant_services import public_trader_identity
 from positions_api import _symbol_to_market_asset
 
 RISK_FREE_RATE = 0.045  # 4.5%
@@ -549,7 +550,8 @@ def get_expiry_overview(conn, chain_id=None):
     return {"expiries": expiries, "filters": {"chain_id": chain_id}}
 
 
-def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id=None):
+def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id=None,
+                      alias_secret=None):
     """Paginated recent trades feed, optionally filtered by asset and/or expiry."""
     offset = (page - 1) * limit
     where_parts = []
@@ -567,14 +569,19 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
         f"SELECT COUNT(*) FROM trades {where}", params
     ).fetchone()
     total = count_row[0]
+    # ``trade_wallets`` also has a chain_id, so qualify the existing filter
+    # only for the joined public-history query below.
+    trade_where = where.replace('chain_id = ?', 'trades.chain_id = ?')
 
     rows = conn.execute(
-        f"""SELECT tx_hash, symbol, chain_id, created_at, expiry,
+        f"""SELECT trades.tx_hash, symbol, trades.chain_id, created_at, expiry,
                    is_buy, is_put, quantity_f, strike_f, premium_f,
-                   notional_f, apr_f, status, outcome, expiry_price_f,
-                   (SELECT w.status FROM trade_wallets w WHERE w.chain_id=trades.chain_id
-                    AND w.tx_hash=trades.tx_hash) AS owner_status
-            FROM trades {where}
+                   notional_f, apr_f, trades.status, outcome, expiry_price_f,
+                   w.status AS owner_status,
+                   CASE WHEN w.status='verified_short_owner' THEN w.wallet END AS verified_wallet
+            FROM trades LEFT JOIN trade_wallets w
+              ON w.chain_id=trades.chain_id AND w.tx_hash=trades.tx_hash
+            {trade_where}
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?""",
         params + [limit, offset],
@@ -582,9 +589,13 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
 
     trades = []
     for r in rows:
+        identity = (public_trader_identity(r['verified_wallet'], alias_secret)
+                    if r['verified_wallet'] and alias_secret else None)
         trades.append({
             "tx_hash": r["tx_hash"],
             "owner_status": r["owner_status"] or ("pending" if r["tx_hash"] else "missing_hash"),
+            "trader_id": identity['trader_id'] if identity else None,
+            "trader_alias": identity['alias'] if identity else None,
             "symbol": r["symbol"],
             **chain_fields(r["chain_id"]),
             "created_at": r["created_at"],

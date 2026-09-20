@@ -200,7 +200,7 @@ history, and omitting `chain_id` combines chains. These views follow the
 Research window, unlike retention. All percentage shares use verified
 attributed activity in the selected window, with attribution coverage shown.
 
-Leaderboards show only the top ten stable aliases, amounts, financial share,
+Leaderboards show only the top ten stable aliases, amounts,
 and weighted entry APR. APR uses annualizable premium divided by total
 strike-notional-days, annualized over 365 days; it is not realized profit.
 Trader APR bands are under 10%, 10–25%, 25–50%, 50–100%, and 100%+, with an
@@ -217,6 +217,23 @@ Aliases are keyed hashes of normalized wallet addresses, consistent across
 chains and periods. There is no public address-to-alias lookup. On-chain
 transactions remain independently traceable; these are presentation aliases,
 not a guarantee of anonymity.
+
+Labels use eight characters, such as `Trader A1B2C3D4`. The complete keyed
+identity is used in profile URLs, so shortening the visible label does not
+make routing ambiguous. Click an alias in Research or Global transactions to
+open `/trader/<opaque-id>`, an anonymous historical record with chain/window
+filters and paginated executions. Its API is
+`GET /api/analytics/traders/<opaque-id>?days=0&page=1&limit=50` (optional
+`chain_id`). It returns verified attributed trades, historical notional,
+premium and entry APR; neither owner addresses nor transaction hashes are
+returned by the profile API. It is separate from the wallet-based live
+Portfolio page. Trade counts remain available; participant totals do not.
+
+Premium Efficiency, Annualized Yield by Trade Duration, and Yield by Strategy
+show only assets present in current options inventory. Listing checks are
+cached for five minutes; an outage uses the last successful listing or the
+documented initial listing snapshot, with a visible stale-listing notice.
+Historical protocol totals and stored trades are preserved.
 
 Internally, 20 distinct traders are required for rankings and participant-based
 percentages. Each segment and retention cohort must meet this minimum; pooled

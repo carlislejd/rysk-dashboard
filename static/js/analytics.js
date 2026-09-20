@@ -222,8 +222,24 @@ function bubbleSizes(rows, min = 16, max = 54) {
     return values.map(value => min + (value / peak) * (max - min));
 }
 
+function tradeableResearchRows(data) {
+    const available = new Set(data.tradeable_assets?.assets || []);
+    return (data.by_asset || []).filter(row => available.has(row.asset));
+}
+
+function tradeableChartNote(data, chartId) {
+    const chart = document.getElementById(chartId);
+    const note = chart?.closest('section')?.querySelector('[data-tradeable-note]');
+    if (!note) return;
+    const source = data.tradeable_assets?.source;
+    note.textContent = source === 'live_inventory'
+        ? 'Showing assets currently listed in the options inventory.'
+        : 'Showing the last known tradeable assets; live inventory is temporarily unavailable.';
+}
+
 function renderEfficiency(data) {
-    const rows = (data.by_asset || []).filter(row => row.weighted_apr != null && row.premium_yield_pct != null);
+    tradeableChartNote(data, 'efficiency-chart');
+    const rows = tradeableResearchRows(data).filter(row => row.weighted_apr != null && row.premium_yield_pct != null);
     Plotly.newPlot('efficiency-chart', [{
         x: rows.map(row => row.weighted_apr),
         y: rows.map(row => row.premium_yield_pct),
@@ -249,7 +265,8 @@ function renderEfficiency(data) {
 }
 
 function renderTenorSurface(data) {
-    const allAssets = (data.by_asset || []).slice(0, 7).map(row => row.asset);
+    tradeableChartNote(data, 'tenor-chart');
+    const allAssets = tradeableResearchRows(data).slice(0, 7).map(row => row.asset);
     const tenors = data.tenor_buckets || [];
     const lookup = new Map((data.tenor_surface || []).map(row => [`${row.asset}|${row.tenor}`, row]));
     const z = allAssets.map(asset => tenors.map(tenor => lookup.get(`${asset}|${tenor}`)?.weighted_apr ?? null));
@@ -282,7 +299,8 @@ function renderTenorSurface(data) {
 }
 
 function renderStrategyYield(data) {
-    const leadingAssets = (data.by_asset || []).slice(0, 8).map(row => row.asset);
+    tradeableChartNote(data, 'strategy-yield-chart');
+    const leadingAssets = tradeableResearchRows(data).slice(0, 8).map(row => row.asset);
     const rows = data.by_asset_option_type || [];
     const lookup = new Map(rows.map(row => [`${row.asset}|${row.option_type}`, row]));
     const traces = [
@@ -720,6 +738,12 @@ function coveragePercent(value) {
     return `${numeric.toFixed(1)}%`;
 }
 
+function traderHistoryUrl(traderId) {
+    const params = new URLSearchParams({ days: String(analyticsDays) });
+    if (analyticsChain !== 'all') params.set('chain_id', analyticsChain);
+    return `/trader/${encodeURIComponent(traderId)}?${params.toString()}`;
+}
+
 function renderLeaderboard(targetId, board, amountKey) {
     const target = document.getElementById(targetId);
     if (!target) return;
@@ -732,11 +756,10 @@ function renderLeaderboard(targetId, board, amountKey) {
         target.innerHTML = participantEmpty(board?.status === 'unavailable' ? 'This ranking is unavailable for the selected filters.' : undefined);
         return;
     }
-    target.innerHTML = `<div class="participant-leaderboard-head"><span></span><span>Trader</span><span>Amount</span><span>Share</span><span>Entry APR</span></div>${rows.map(row => `<div class="participant-leaderboard-row">
+    target.innerHTML = `<div class="participant-leaderboard-head"><span></span><span>Trader</span><span>Amount</span><span>Entry APR</span></div>${rows.map(row => `<div class="participant-leaderboard-row">
         <span class="participant-rank">${escapeAnalyticsHtml(row.rank)}</span>
-        <strong>${escapeAnalyticsHtml(row.alias)}</strong>
+        <strong><a href="${traderHistoryUrl(row.trader_id)}">${escapeAnalyticsHtml(row.alias)}</a></strong>
         <span>${compactCurrency(row[amountKey])}</span>
-        <span>${participantPercent(row.share_pct)}</span>
         <span>${participantPercent(row.weighted_apr)}</span>
     </div>`).join('')}`;
 }

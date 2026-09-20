@@ -9,6 +9,8 @@ from cohort_services import (
     public_retention_cohorts, public_retention_audit,
 )
 from participant_services import get_participant_analytics
+from trader_services import get_trader_history
+from tradeable_assets import get_tradeable_assets
 from analytics_services import get_analytics_overview, get_otm_apr_surface
 from chain_metadata import parse_chain_filter
 from dashboard_services import (
@@ -112,6 +114,15 @@ def account():
 def analytics():
     """Protocol research desk."""
     return render_template('analytics.html')
+
+
+@app.route('/trader/<trader_id>')
+def trader_history_page(trader_id):
+    """Historical trader activity without placing the owner address in the UI."""
+    import re
+    if not re.fullmatch(r'[0-9a-f]{64}', trader_id):
+        return 'Trader not found', 404
+    return render_template('trader.html', trader_id=trader_id)
 
 
 @app.route('/docs')
@@ -539,9 +550,48 @@ def api_analytics_overview():
             data = get_analytics_overview(conn, days=days, chain_id=chain_id)
         finally:
             conn.close()
+        data['tradeable_assets'] = get_tradeable_assets()
         return jsonify({"success": True, **data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/analytics/traders/<trader_id>')
+def api_trader_history(trader_id):
+    """Resolve an opaque public identity entirely on the server."""
+    import re
+    if not re.fullmatch(r'[0-9a-f]{64}', trader_id):
+        return jsonify({'success': False, 'error': 'Trader not found'}), 404
+    if not PARTICIPANT_ALIAS_SECRET:
+        return jsonify({'success': False, 'error': 'Trader history unavailable'}), 503
+    try:
+        values = {}
+        for key, default, minimum, maximum in (
+            ('days', 0, 0, 36500), ('page', 1, 1, 1000000), ('limit', 50, 1, 100),
+        ):
+            try:
+                value = int(request.args.get(key, default))
+            except (TypeError, ValueError):
+                raise ValueError(f'{key} must be an integer')
+            if not minimum <= value <= maximum:
+                raise ValueError(f'{key} must be between {minimum} and {maximum}')
+            values[key] = value
+        chain_id = resolve_chain_filter()
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    conn = get_db()
+    try:
+        conn.execute('BEGIN')
+        data = get_trader_history(conn, trader_id, PARTICIPANT_ALIAS_SECRET,
+                                  chain_id=chain_id, **values)
+        return jsonify({'success': True, **data})
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Trader not found'}), 404
+    except Exception:
+        app.logger.exception('Trader history failed')
+        return jsonify({'success': False, 'error': 'Trader history unavailable'}), 500
+    finally:
+        conn.close()
 
 
 @app.route('/api/analytics/otm-apr')
@@ -623,7 +673,8 @@ def api_global_trades():
         iv = request.args.get("iv", "").lower() in ("1", "true")
         conn = get_db()
         try:
-            data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry, chain_id=chain_id)
+            data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry,
+                                     chain_id=chain_id, alias_secret=PARTICIPANT_ALIAS_SECRET)
         finally:
             conn.close()
         if iv:
