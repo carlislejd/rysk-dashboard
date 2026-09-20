@@ -7,6 +7,7 @@ per-asset analytics.
 """
 
 import time
+from datetime import datetime, timezone
 
 import requests as _requests
 
@@ -551,8 +552,9 @@ def get_expiry_overview(conn, chain_id=None):
 
 
 def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id=None,
-                      alias_secret=None):
-    """Paginated recent trades feed, optionally filtered by asset and/or expiry."""
+                      strike=None, from_ts=None, to_ts=None, open_only=False,
+                      now=None, alias_secret=None):
+    """Paginated public trades with composable, half-open UTC time filters."""
     offset = (page - 1) * limit
     where_parts = []
     params = []
@@ -562,6 +564,19 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
     if expiry:
         where_parts.append("expiry = ?")
         params.append(expiry)
+    if strike is not None:
+        where_parts.append("strike_f = ?")
+        params.append(strike)
+    if from_ts is not None:
+        where_parts.append("created_at >= ?")
+        params.append(from_ts)
+    if to_ts is not None:
+        where_parts.append("created_at < ?")
+        params.append(to_ts)
+    if open_only:
+        as_of = int(time.time()) if now is None else int(now)
+        where_parts.extend(["expiry > ?", "outcome IS NULL"])
+        params.append(as_of)
     _add_chain_filter(where_parts, params, chain_id)
     where = "WHERE " + " AND ".join(where_parts) if where_parts else ""
 
@@ -618,8 +633,70 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
         "page": page,
         "limit": limit,
         "pages": max(1, -(-total // limit)),
-        "filters": {"symbol": symbol, "expiry": expiry, "chain_id": chain_id},
+        "filters": {"symbol": symbol, "expiry": expiry, "strike": strike,
+                    "from_ts": from_ts, "to_ts": to_ts, "open_only": open_only,
+                    "chain_id": chain_id},
     }
+
+
+def get_global_execution_timeline(conn, window="24h", chain_id=None, now=None):
+    """UTC execution buckets for the Global tape, including explicit zero buckets.
+
+    The returned bucket bounds are deliberately half-open so a clicked bar can
+    be passed straight to ``get_global_trades`` without duplicating an
+    execution at a boundary.
+    """
+    now = int(time.time()) if now is None else int(now)
+    if window not in ("24h", "7d"):
+        raise ValueError("window must be 24h or 7d")
+    seconds = 3600 if window == "24h" else 86400
+    count = 24 if window == "24h" else 7
+    current_start = (now // seconds) * seconds
+    start = current_start - (count - 1) * seconds
+    # ``now + 1`` includes a trade stamped at the captured second while
+    # keeping the last bucket half-open for the linked trades request.
+    end = now + 1
+    parts = ["created_at >= ?", "created_at < ?"]
+    params = [start, end]
+    _add_chain_filter(parts, params, chain_id)
+    rows = conn.execute(f"""
+        SELECT (created_at / ?) * ? AS bucket_start,
+               COUNT(*) AS trade_count,
+               COALESCE(SUM(notional_f), 0) AS notional,
+               COALESCE(SUM(premium_f), 0) AS premium
+        FROM trades {_where_clause(parts)}
+        GROUP BY bucket_start ORDER BY bucket_start
+    """, [seconds, seconds] + params).fetchall()
+    coverage_parts = []
+    coverage_params = []
+    _add_chain_filter(coverage_parts, coverage_params, chain_id)
+    coverage = conn.execute(f"""
+        SELECT MIN(created_at) AS first_trade_at, MAX(created_at) AS last_trade_at
+        FROM trades {_where_clause(coverage_parts)}
+    """, coverage_params).fetchone()
+    first_seen = coverage["first_trade_at"] if coverage else None
+    last_seen = coverage["last_trade_at"] if coverage else None
+    by_start = {int(row["bucket_start"]): row for row in rows}
+    data = []
+    for bucket_start in range(start, current_start + 1, seconds):
+        row = by_start.get(bucket_start)
+        bucket_end = min(bucket_start + seconds, end)
+        # Zeros are meaningful only between observed executions. Do not paint
+        # unobserved history as zero activity.
+        known = first_seen is not None and bucket_end > first_seen and bucket_start <= last_seen
+        if not row and not known:
+            continue
+        data.append({
+            "start": bucket_start,
+            "end": bucket_end,
+            "date": datetime.fromtimestamp(bucket_start, timezone.utc).isoformat().replace("+00:00", "Z"),
+            "trade_count": row["trade_count"] if row else 0,
+            "notional": row["notional"] if row else 0,
+            "premium": row["premium"] if row else 0,
+        })
+    return {"window": window, "start": start, "end": end, "as_of": now,
+            "coverage": {"first_trade_at": first_seen, "last_trade_at": last_seen},
+            "data": data, "filters": {"chain_id": chain_id}}
 
 
 def get_global_volume(conn, interval="day", symbol=None, days=30, expiry=None, chain_id=None):
@@ -1044,6 +1121,25 @@ def get_market_pulse(conn, chain_id=None):
         FROM trades {_where_clause(active_parts)}
     """, active_params).fetchone()
 
+    # Keep every breakdown on the same open-position predicate and captured
+    # timestamp as the headline above, so both chart lenses reconcile exactly.
+    open_asset_rows = conn.execute(f"""
+        SELECT symbol, chain_id, COUNT(*) AS position_count,
+               COALESCE(SUM(notional_f), 0) AS total_notional,
+               COALESCE(SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END), 0) AS call_notional,
+               COALESCE(SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END), 0) AS put_notional
+        FROM trades {_where_clause(active_parts)}
+        GROUP BY symbol, chain_id ORDER BY total_notional DESC
+    """, active_params).fetchall()
+    open_expiry_rows = conn.execute(f"""
+        SELECT expiry, chain_id, COUNT(*) AS position_count,
+               COALESCE(SUM(notional_f), 0) AS total_notional,
+               COALESCE(SUM(CASE WHEN is_put = 0 THEN notional_f ELSE 0 END), 0) AS call_notional,
+               COALESCE(SUM(CASE WHEN is_put = 1 THEN notional_f ELSE 0 END), 0) AS put_notional
+        FROM trades {_where_clause(active_parts)}
+        GROUP BY expiry, chain_id ORDER BY expiry ASC
+    """, active_params).fetchall()
+
     observation_parts = ["symbol != ''"]
     observation_params = []
     _add_chain_filter(observation_parts, observation_params, chain_id)
@@ -1098,6 +1194,22 @@ def get_market_pulse(conn, chain_id=None):
             "count": active["cnt"],
             "notional": active["notional"],
             "premium": active["premium"],
+        },
+        "open_exposure": {
+            "as_of": now,
+            "total_notional": active["notional"],
+            "by_asset": [
+                {"symbol": r["symbol"], **chain_fields(r["chain_id"]),
+                 "position_count": r["position_count"], "total_notional": r["total_notional"],
+                 "call_notional": r["call_notional"], "put_notional": r["put_notional"]}
+                for r in open_asset_rows
+            ],
+            "by_expiry": [
+                {"expiry": r["expiry"], **chain_fields(r["chain_id"]),
+                 "position_count": r["position_count"], "total_notional": r["total_notional"],
+                 "call_notional": r["call_notional"], "put_notional": r["put_notional"]}
+                for r in open_expiry_rows
+            ],
         },
         "filters": {"chain_id": chain_id},
     }

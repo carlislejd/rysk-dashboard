@@ -21,10 +21,10 @@
 
         <section id="docs-start" class="card docs-section">
             <h2>How To Use</h2>
-            <pre class="docs-code">1) Enter a public wallet address below.
+            <pre class="docs-code">1) Enter a public wallet address for account endpoints.
 2) Click "Apply Address".
-3) Click an endpoint card to preview JSON here.
-4) Click "Open Endpoint" to open that URL in a new tab.</pre>
+3) Choose an endpoint card to preview JSON here.
+4) Add only the filters the endpoint supports, then open the URL in a new tab.</pre>
         </section>
 
         <section class="card docs-section">
@@ -45,35 +45,43 @@
             </div>
             <div id="docs-address-status" class="account-status"></div>
             <div class="docs-endpoint-grid">
-                <a class="docs-endpoint" data-path="/api/cli/account/validate?address={address}" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-path="/api/global/execution-timeline?window=24h&amp;chain_id=all" href="#" target="_blank" rel="noopener noreferrer">
+                    <strong>Global Execution Timeline</strong>
+                    <span>GET /api/global/execution-timeline?window=24h|7d&amp;chain_id=...</span>
+                </a>
+                <a class="docs-endpoint" data-path="/api/global/trades?page=1&amp;limit=50&amp;symbol=HYPE&amp;strike=60&amp;from_ts=...&amp;to_ts=..." href="#" target="_blank" rel="noopener noreferrer">
+                    <strong>Global Trades</strong>
+                    <span>GET /api/global/trades?symbol=&amp;strike=&amp;from_ts=&amp;to_ts= (UTC seconds, [from,to))</span>
+                </a>
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/account/validate?address={address}" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Account Validate</strong>
                     <span>GET /api/cli/account/validate?address=...</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/positions/open?address={address}" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/positions/open?address={address}" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Positions Open</strong>
                     <span>GET /api/cli/positions/open?address=...&symbol=...&strategy=...</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/positions/expiring?address={address}&expiry_date=2026-03-13" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/positions/expiring?address={address}&expiry_date=2026-03-13" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Positions Expiring</strong>
                     <span>GET /api/cli/positions/expiring?address=...&expiry_date=YYYY-MM-DD</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/positions/strikes?address={address}&symbol=UBTC" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/positions/strikes?address={address}&symbol=UBTC" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>Positions Strikes</strong>
                     <span>GET /api/cli/positions/strikes?address=...&symbol=...</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/history/summary?address={address}" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/history/summary?address={address}" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Summary</strong>
                     <span>GET /api/cli/history/summary?address=...</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/history/expired?address={address}&outcome=assigned" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/history/expired?address={address}&outcome=assigned" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Expired</strong>
                     <span>GET /api/cli/history/expired?address=...&symbol=...&outcome=...</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/history/deep-dive?address={address}&symbol=WHYPE" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/history/deep-dive?address={address}&symbol=WHYPE" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Deep Dive</strong>
                     <span>GET /api/cli/history/deep-dive?address=...&symbol=...</span>
                 </a>
-                <a class="docs-endpoint" data-path="/api/cli/history/expiry-prices?address={address}&symbol=UBTC" href="#" target="_blank" rel="noopener noreferrer">
+                <a class="docs-endpoint" data-requires-address data-path="/api/cli/history/expiry-prices?address={address}&symbol=UBTC" href="#" target="_blank" rel="noopener noreferrer">
                     <strong>History Expiry Prices</strong>
                     <span>GET /api/cli/history/expiry-prices?address=...&symbol=...&expiry_date=...</span>
                 </a>

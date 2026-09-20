@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from participant_services import public_trader_identity
-from trader_services import get_trader_history
+from trader_services import _timeline_bucket, get_trader_history
 
 
 def build_connection():
@@ -35,6 +35,10 @@ def add_trade(conn, index, wallet, chain_id=1, created_at=1_800_000_000, verifie
 
 
 class TestTraderServices(unittest.TestCase):
+    def test_weekly_buckets_are_monday_based_across_month_boundary(self):
+        # 2024-03-01 is a Friday; its UTC bucket starts on Monday Feb 26.
+        self.assertEqual(_timeline_bucket(1709251200, 365), 1708905600)
+
     def test_identity_is_case_insensitive_and_opaque(self):
         first = public_trader_identity("0xAbC", "secret")
         second = public_trader_identity("0xabc", "secret")
@@ -101,6 +105,28 @@ class TestTraderServices(unittest.TestCase):
         self.assertAlmostEqual(by_expiry[1_800_000_000 + 20 * 86400]["apr"], 182.5)
         self.assertIsNone(by_expiry[1_800_000_000]["apr"])
         self.assertAlmostEqual(result["totals"]["weighted_apr"], 182.5)
+        conn.close()
+
+    @patch("trader_services.time.time", return_value=1_800_000_000)
+    def test_visuals_use_full_window_while_table_filters_are_half_open(self, _time):
+        conn = build_connection()
+        # Monday 2026-12-28 and the following Sunday cross a calendar year.
+        add_trade(conn, 1, "0xabc", created_at=1_798_800_000, notional=100)
+        add_trade(conn, 2, "0xabc", created_at=1_799_318_400, notional=300)
+        conn.execute("UPDATE trades SET symbol='ETH', is_put=1 WHERE tx_hash='0x0002'")
+        identity = public_trader_identity("0xabc", "secret")
+        result = get_trader_history(conn, identity["trader_id"], "secret", days=365,
+                                    symbol="ETH", from_ts=1_799_318_400,
+                                    to_ts=1_799_404_800, page=1, limit=1)
+        self.assertEqual(result["pagination"]["total"], 1)
+        self.assertEqual(result["trades"][0]["symbol"], "ETH")
+        # The chart domain is deliberately based on the complete 365-day window.
+        self.assertEqual(sum(point["notional"] for point in result["visuals"]["timeline"]), 400)
+        self.assertEqual(result["visuals"]["bucket"], "week")
+        assets = {row["symbol"]: row for row in result["visuals"]["assets"]}
+        self.assertEqual(assets["ETH"]["puts_notional"], 300)
+        self.assertNotIn("wallet", json.dumps(result).lower())
+        self.assertNotIn("tx_hash", json.dumps(result).lower())
         conn.close()
 
 

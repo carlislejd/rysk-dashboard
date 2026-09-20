@@ -13,6 +13,12 @@
 
     if (!input || !applyBtn || !statusEl || !outputEl || !selectedEl || !openEndpointEl || !expandBtn || !base) return;
 
+    links.filter((link) => !link.hasAttribute('data-requires-address')).forEach((link) => {
+        const path = link.getAttribute('data-path') || '';
+        link.dataset.resolvedPath = path;
+        link.href = `${window.location.origin}${path}`;
+    });
+
     function setStatus(message, isError) {
         statusEl.textContent = message;
         statusEl.style.color = isError ? "var(--color-error)" : "var(--text-muted)";
@@ -22,7 +28,7 @@
         const address = String(input.value || "").trim();
         if (!ADDRESS_RE.test(address)) {
             setStatus("Enter a valid wallet address (0x + 40 hex chars).", true);
-            links.forEach((link) => {
+            links.filter(link => link.hasAttribute('data-requires-address')).forEach((link) => {
                 link.href = "#";
                 link.dataset.resolvedPath = "";
             });
@@ -35,7 +41,9 @@
 
         links.forEach((link) => {
             const template = link.getAttribute("data-path") || "";
-            const path = template.replace("{address}", encodeURIComponent(address));
+            const path = link.hasAttribute('data-requires-address')
+                ? template.replace("{address}", encodeURIComponent(address))
+                : template;
             link.dataset.resolvedPath = path;
             link.href = `${window.location.origin}${path}`;
         });

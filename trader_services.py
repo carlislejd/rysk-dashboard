@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone, timedelta
 import math
 import re
 import time
@@ -49,6 +50,60 @@ def _derived_apr(row: Dict[str, Any]) -> Optional[float]:
     return value if math.isfinite(value) else None
 
 
+def _timeline_bucket(timestamp: int, days: int) -> int:
+    """Return a UTC bucket start without relying on SQLite's local timezone."""
+    moment = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+    if days in (30, 90):
+        return int(datetime(moment.year, moment.month, moment.day, tzinfo=timezone.utc).timestamp())
+    if days == 365:
+        monday = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+        return int((monday - timedelta(days=monday.weekday())).timestamp())
+    return int(datetime(moment.year, moment.month, 1, tzinfo=timezone.utc).timestamp())
+
+
+def _next_timeline_bucket(bucket: int, days: int) -> int:
+    moment = datetime.fromtimestamp(bucket, tz=timezone.utc)
+    if days in (30, 90):
+        return bucket + SECONDS_PER_DAY
+    if days == 365:
+        return bucket + 7 * SECONDS_PER_DAY
+    year, month = moment.year, moment.month
+    return int(datetime(year + (month == 12), 1 if month == 12 else month + 1, 1, tzinfo=timezone.utc).timestamp())
+
+
+def _full_window_visuals(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
+    """Build public aggregates from the whole matching window, never a page."""
+    by_bucket: Dict[int, Dict[str, float]] = {}
+    assets: Dict[str, Dict[str, float]] = {}
+    for row in rows:
+        created_at = int(row["created_at"])
+        bucket = _timeline_bucket(created_at, days)
+        point = by_bucket.setdefault(bucket, {"notional": 0.0, "premium": 0.0, "trades": 0})
+        point["notional"] += float(row["notional_f"] or 0)
+        point["premium"] += float(row["premium_f"] or 0)
+        point["trades"] += 1
+        symbol = row["symbol"] or "Unknown"
+        asset = assets.setdefault(symbol, {"notional": 0.0, "premium": 0.0, "trades": 0, "calls_notional": 0.0, "puts_notional": 0.0})
+        asset["notional"] += float(row["notional_f"] or 0)
+        asset["premium"] += float(row["premium_f"] or 0)
+        asset["trades"] += 1
+        asset["puts_notional" if row["is_put"] else "calls_notional"] += float(row["notional_f"] or 0)
+
+    timeline = []
+    if by_bucket:
+        cursor, end = min(by_bucket), max(by_bucket)
+        while cursor <= end:
+            value = by_bucket.get(cursor, {"notional": 0.0, "premium": 0.0, "trades": 0})
+            next_cursor = _next_timeline_bucket(cursor, days)
+            timeline.append({"start": cursor, "end": next_cursor, **value})
+            cursor = next_cursor
+    return {
+        "bucket": "day" if days in (30, 90) else "week" if days == 365 else "month",
+        "timeline": timeline,
+        "assets": [{"symbol": symbol, **value} for symbol, value in sorted(assets.items(), key=lambda item: item[1]["notional"], reverse=True)],
+    }
+
+
 def get_trader_history(
     conn,
     trader_id: str,
@@ -57,6 +112,9 @@ def get_trader_history(
     chain_id: Optional[int] = None,
     page: int = 1,
     limit: int = 50,
+    symbol: Optional[str] = None,
+    from_ts: Optional[int] = None,
+    to_ts: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Return public-safe history for a verified trader identity.
 
@@ -78,7 +136,18 @@ def get_trader_history(
     if chain_id is not None:
         parts.append("t.chain_id=?")
         params.append(chain_id)
+    base_parts, base_params = list(parts), list(params)
+    if symbol:
+        parts.append("upper(t.symbol)=?")
+        params.append(str(symbol).upper())
+    if from_ts is not None:
+        parts.append("t.created_at >= ?")
+        params.append(int(from_ts))
+    if to_ts is not None:
+        parts.append("t.created_at < ?")
+        params.append(int(to_ts))
     where = _where_clause(parts)
+    base_where = _where_clause(base_parts)
     base_sql = "FROM trades t JOIN trade_wallets w ON t.chain_id=w.chain_id AND t.tx_hash=w.tx_hash"
     total = conn.execute(f"SELECT COUNT(*) {base_sql} {where}", params).fetchone()[0]
 
@@ -101,6 +170,9 @@ def get_trader_history(
     ).fetchall():
         _add_row(aggregate, _safe_trade_row(dict(row)))
     finished = _finish_aggregate(aggregate)
+    visual_rows = [dict(row) for row in conn.execute(
+        f"SELECT t.created_at,t.symbol,t.notional_f,t.premium_f,t.is_put {base_sql} {base_where}", base_params
+    ).fetchall()]
     trades = [
         {
             "symbol": row["symbol"],
@@ -130,5 +202,6 @@ def get_trader_history(
         },
         "trades": trades,
         "pagination": {"page": page, "limit": limit, "pages": max(1, -(-total // limit)), "total": total},
-        "filters": {"days": days, "chain_id": chain_id},
+        "filters": {"days": days, "chain_id": chain_id, "symbol": symbol, "from_ts": from_ts, "to_ts": to_ts},
+        "visuals": _full_window_visuals(visual_rows, days),
     }

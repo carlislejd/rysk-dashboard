@@ -229,6 +229,30 @@ premium and entry APR; neither owner addresses nor transaction hashes are
 returned by the profile API. It is separate from the wallet-based live
 Portfolio page. Trade counts remain available; participant totals do not.
 
+### Interactive visual summaries
+
+Global and Portfolio pair their detailed tables with exposure, execution,
+expiry and outcome charts. Selections are local to the related section and
+have keyboard-accessible controls and a Clear action. Open exposure is strike
+notional for unexpired rows without an outcome, not TVL or marked portfolio
+value. Portfolio premium charts retain the existing trade-date/expiry-date
+basis and do not represent complete investment P&L.
+
+`GET /api/global/execution-timeline?window=24h` accepts `24h` or `7d` and an
+optional `chain_id`. `/api/global/market-pulse` includes open-exposure
+breakdowns computed at the same timestamp as its headline totals.
+`/api/global/trades` supports `symbol`, `expiry`, `strike`, `open_only=true`,
+`from_ts`, and `to_ts`, in addition to chain and pagination parameters.
+Time bounds are UTC Unix seconds, inclusive at `from_ts` and exclusive at
+`to_ts`; malformed or reversed bounds return HTTP 400.
+
+The anonymous trader history endpoint also accepts `symbol`, `from_ts` and
+`to_ts`. Its visual aggregates cover the full selected chain/window rather
+than just the current page, keeping the chart context while local selections
+filter the detailed history. Timeline buckets are UTC days for 30/90-day
+windows, Monday-based weeks for one year, and calendar months for all history.
+These views reuse existing stored data and the daily Render refresh.
+
 Premium Efficiency, Annualized Yield by Trade Duration, and Yield by Strategy
 show only assets present in current options inventory. Listing checks are
 cached for five minutes; an outage uses the last successful listing or the

@@ -14,16 +14,22 @@ function renderOpenPositionsPage(page) {
     const container = document.getElementById('open-positions-container');
     if (!container) return;
 
-    if (openPositionsData.length === 0) {
+    const filteredPositions = openPositionsData.filter(position => {
+        const dte = Number(position.days_to_expiry || 0);
+        const dteMatch = !portfolioDteSelection || (portfolioDteSelection === '0-3' ? dte >= 0 && dte <= 3 : portfolioDteSelection === '3-7' ? dte > 3 && dte <= 7 : portfolioDteSelection === '7-14' ? dte > 7 && dte <= 14 : dte > 14);
+        const exposureMatch = !portfolioExposureSelection || ((position.symbol || '').toUpperCase() === portfolioExposureSelection.symbol && (position.type || '').toLowerCase() === portfolioExposureSelection.type);
+        return dteMatch && exposureMatch;
+    });
+    if (filteredPositions.length === 0) {
         container.innerHTML = '<p class="empty-state">No open option positions right now.</p>';
         return;
     }
 
-    const total = openPositionsData.length;
+    const total = filteredPositions.length;
     const totalPages = Math.ceil(total / OPEN_POSITIONS_PER_PAGE);
     openPositionsPage = Math.max(1, Math.min(openPositionsPage, totalPages));
     const start = (openPositionsPage - 1) * OPEN_POSITIONS_PER_PAGE;
-    const pageData = openPositionsData.slice(start, start + OPEN_POSITIONS_PER_PAGE);
+    const pageData = filteredPositions.slice(start, start + OPEN_POSITIONS_PER_PAGE);
 
     let html = `
         <table id="current-open-positions-table" class="data-table">
@@ -201,6 +207,9 @@ const OPEN_POSITIONS_PER_PAGE = 5;
 const _positions_cache = new Map();
 let selectedAssetSymbol = null;
 let selectedAssetExpiry = '';
+let portfolioDteSelection = '';
+let portfolioExposureSelection = null;
+let portfolioSelectionAccount = '';
 let historyDataCache = null;
 let historyDataTimestamp = null;
 let historyModalInitialized = false;
@@ -217,6 +226,11 @@ async function loadPositions() {
     const error = document.getElementById('positions-error');
     const notConfigured = document.getElementById('positions-not-configured');
     const previousAsset = selectedAssetSymbol;
+    if (portfolioSelectionAccount !== currentAccount) {
+        portfolioSelectionAccount = currentAccount;
+        portfolioDteSelection = '';
+        portfolioExposureSelection = null;
+    }
 
     loading.style.display = 'block';
     if (error) error.style.display = 'none';
@@ -449,6 +463,7 @@ async function loadHistory() {
         }
 
         const assetOutcomes = summary.asset_outcomes || [];
+        html += `<div class="chart-card" style="margin: 0 0 12px; width:100%;"><h3 class="subsection-title">Outcome composition by asset</h3><div id="history-outcome-chart" class="chart-container rysk-chart" style="height:240px"></div><label>Asset outcome <select id="history-outcome-select"><option value="">All historical outcomes</option></select></label><button id="history-outcome-clear" class="rysk-chart-control" type="button" hidden>Clear selection</button><div id="history-outcome-selection" class="selection-chips" aria-live="polite"></div></div>`;
         if (assetOutcomes.length > 0) {
             html += `<h3 class="subsection-title">Expiry Outcomes by Asset (${assetOutcomes.length})</h3>`;
             html += `<div class="history-actions" style="justify-content: flex-start; margin-bottom: 6px;">`;
@@ -486,9 +501,11 @@ async function loadHistory() {
 
         content.innerHTML = html;
         content.style.display = 'block';
+        renderHistoryOutcomeComposition(expiredPositions);
         renderExpiredSection(expiredPositions, summary);
         renderAprChart(expiredPositions, null);
-        setupOutcomeFilters(expiredPositions, summary);
+        // Outcome filtering is owned by the composition chart/select so the
+        // table and APR scatter always share one selection source.
         renderDeepDiveInline(history);
     } catch (err) {
         loading.style.display = 'none';
@@ -501,6 +518,50 @@ async function loadHistory() {
             detailButton.textContent = '🔍 Deep Dive (Error)';
         }
     }
+}
+
+function renderHistoryOutcomeComposition(expiredPositions) {
+    const api = window.RyskCharts;
+    if (!api) return;
+    const byAsset = {};
+    expiredPositions.forEach(position => {
+        const symbol = (position.symbol || 'Unknown').toUpperCase();
+        const outcome = String(position.outcome || 'Pending/unknown').toLowerCase();
+        const key = outcome === 'returned' ? 'returned' : outcome === 'assigned' ? 'assigned' : 'pending';
+        const entry = byAsset[symbol] || (byAsset[symbol] = { returned: 0, assigned: 0, pending: 0 });
+        entry[key] += Number(position.notional || 0);
+    });
+    const assets = Object.keys(byAsset).sort();
+    if (!assets.length) { api.empty('history-outcome-chart', 'No historical outcomes yet.'); return; }
+    const select = document.getElementById('history-outcome-select');
+    select.innerHTML = `<option value="">All historical outcomes</option>${assets.flatMap(symbol => ['returned', 'assigned', 'pending'].map(outcome => `<option value="${symbol}|${outcome}">${symbol} · ${outcome === 'pending' ? 'Pending / unknown' : outcome}</option>`)).join('')}`;
+    const percent = key => assets.map(symbol => { const total = Object.values(byAsset[symbol]).reduce((a, b) => a + b, 0); return total ? byAsset[symbol][key] / total * 100 : 0; });
+    const drawHistoryComposition = () => api.render('history-outcome-chart', [
+        { type: 'bar', name: 'Returned', x: assets, y: percent('returned'), customdata: assets, marker: { color: assets.map(symbol => select.value === `${symbol}|returned` ? '$highlight' : '$forest') }, hovertemplate: '%{x}<br>Returned: %{y:.1f}%<extra></extra>' },
+        { type: 'bar', name: 'Assigned', x: assets, y: percent('assigned'), customdata: assets, marker: { color: assets.map(symbol => select.value === `${symbol}|assigned` ? '$highlight' : '$put') }, hovertemplate: '%{x}<br>Assigned: %{y:.1f}%<extra></extra>' },
+        { type: 'bar', name: 'Pending / unknown', x: assets, y: percent('pending'), customdata: assets, marker: { color: assets.map(symbol => select.value === `${symbol}|pending` ? '$highlight' : '$muted') }, hovertemplate: '%{x}<br>Pending / unknown: %{y:.1f}%<extra></extra>' },
+    ], { barmode: 'stack', margin: { l: 48, r: 12, t: 8, b: 42 }, height: 240, yaxis: { title: 'Historical notional (%)', range: [0, 100], ticksuffix: '%' }, legend: { orientation: 'h' } });
+    drawHistoryComposition();
+    const apply = value => {
+        drawHistoryComposition();
+        const [symbol, outcome] = value ? value.split('|') : ['', ''];
+        const selected = document.getElementById('history-outcome-selection');
+        const filtered = symbol ? expiredPositions.filter(p => (p.symbol || '').toUpperCase() === symbol && (outcome === 'pending' ? !['returned', 'assigned'].includes(String(p.outcome || '').toLowerCase()) : String(p.outcome || '').toLowerCase() === outcome)) : expiredPositions;
+        if (selected) selected.innerHTML = value ? `<span class="selection-chip">${symbol} · ${outcome} </span>` : '';
+        document.getElementById('history-outcome-clear').hidden = !value;
+        renderExpiredSection(filtered, { ...(historyDataCache?.summary || {}), expired_count: filtered.length }, null, 1); renderAprChart(filtered, null);
+    };
+    select.onchange = () => apply(select.value);
+    const allButton = document.getElementById('outcomes-show-all');
+    if (allButton) allButton.onclick = () => { select.value = ''; apply(''); };
+    const toggleButton = document.getElementById('outcomes-toggle-assets');
+    if (toggleButton) toggleButton.onclick = () => {
+        accountOutcomesExpanded = !accountOutcomesExpanded;
+        document.querySelectorAll('[data-outcome-extra="true"]').forEach(card => card.style.display = accountOutcomesExpanded ? '' : 'none');
+        toggleButton.textContent = accountOutcomesExpanded ? 'Show fewer' : 'Show all assets';
+    };
+    document.getElementById('history-outcome-clear').onclick = () => { select.value = ''; apply(''); };
+    api.bindClick('history-outcome-chart', event => { const symbol = event?.points?.[0]?.customdata, outcome = event?.points?.[0]?.data?.name?.toLowerCase().replace(' / unknown', '') || ''; if (!symbol) return; const value = `${symbol}|${outcome === 'pending' ? 'pending' : outcome}`; select.value = select.value === value ? '' : value; apply(select.value); });
 }
 
 function buildExpiredSection(expiredPositions, summary, filterSymbol = null, page = 1, pageSize = 5) {
@@ -1287,15 +1348,15 @@ function renderPortfolioHealth(positionsData, historyData) {
             <div class="summary-subtext">${dteUnder3d + dte3to7d} of ${total} within 7d</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">&lt; 3 Days</div>
+            <div class="summary-label">0—3 Days</div>
             <div class="summary-value">${dteUnder3d}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">3—7 Days</div>
+            <div class="summary-label">&gt;3—7 Days</div>
             <div class="summary-value">${dte3to7d}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">7—14 Days</div>
+            <div class="summary-label">&gt;7—14 Days</div>
             <div class="summary-value">${dte7to14d}</div>
         </div>
         <div class="summary-card">
@@ -1307,6 +1368,8 @@ function renderPortfolioHealth(positionsData, historyData) {
             <div class="summary-value">${summary.open_weighted_apr != null ? formatPercentage(summary.open_weighted_apr) : '—'}</div>
         </div>
     `;
+
+    renderPortfolioExposureCharts(openPositions);
 
     // Expiring this week alert
     if (expiringThisWeek.length > 0) {
@@ -1360,6 +1423,46 @@ function renderPortfolioHealth(positionsData, historyData) {
     }
 
     healthContent.style.display = 'block';
+}
+
+function renderPortfolioExposureCharts(openPositions) {
+    const api = window.RyskCharts;
+    if (!api) return;
+    const bins = [
+        { key: '0-3', label: '0–3 days', test: dte => dte >= 0 && dte <= 3 },
+        { key: '3-7', label: '>3–7 days', test: dte => dte > 3 && dte <= 7 },
+        { key: '7-14', label: '>7–14 days', test: dte => dte > 7 && dte <= 14 },
+        { key: '14+', label: '>14 days', test: dte => dte > 14 },
+    ];
+    const amount = (filter, type) => openPositions.filter(p => filter(Number(p.days_to_expiry || 0)) && (p.type || '').toLowerCase() === type).reduce((sum, p) => sum + Number(p.notional || 0), 0);
+    api.render('portfolio-dte-chart', [
+        { type: 'bar', name: 'Calls', x: bins.map(b => b.label), y: bins.map(b => amount(b.test, 'call')), customdata: bins.map(b => b.key), marker: { color: bins.map(b => portfolioDteSelection === b.key ? '$highlight' : '$call') }, hovertemplate: '%{x}<br>Calls: $%{y:,.0f}<extra></extra>' },
+        { type: 'bar', name: 'Puts', x: bins.map(b => b.label), y: bins.map(b => amount(b.test, 'put')), customdata: bins.map(b => b.key), marker: { color: bins.map(b => portfolioDteSelection === b.key ? '$highlight' : '$put') }, hovertemplate: '%{x}<br>Puts: $%{y:,.0f}<extra></extra>' },
+    ], { barmode: 'stack', margin: { l: 52, r: 12, t: 8, b: 42 }, yaxis: { title: 'Notional ($)', tickprefix: '$' }, legend: { orientation: 'h' } });
+    const assets = [...new Set(openPositions.map(p => (p.symbol || 'Unknown').toUpperCase()))].sort();
+    const dteSelect = document.getElementById('portfolio-dte-select');
+    const exposureSelect = document.getElementById('portfolio-exposure-select');
+    if (dteSelect) { dteSelect.value = portfolioDteSelection; dteSelect.onchange = () => { portfolioDteSelection = dteSelect.value; openPositionsPage = 1; renderOpenPositionsPage(); renderPortfolioExposureCharts(openPositions); }; }
+    if (exposureSelect) { exposureSelect.innerHTML = `<option value="">All exposure</option>${assets.flatMap(symbol => ['call', 'put'].map(type => `<option value="${symbol}|${type}">${symbol} ${type}</option>`)).join('')}`; exposureSelect.value = portfolioExposureSelection ? `${portfolioExposureSelection.symbol}|${portfolioExposureSelection.type}` : ''; exposureSelect.onchange = () => { const [symbol, type] = exposureSelect.value.split('|'); portfolioExposureSelection = symbol ? { symbol, type } : null; openPositionsPage = 1; renderOpenPositionsPage(); renderPortfolioExposureCharts(openPositions); }; }
+    const assetAmount = (symbol, type) => openPositions.filter(p => (p.symbol || 'Unknown').toUpperCase() === symbol && (p.type || '').toLowerCase() === type).reduce((sum, p) => sum + Number(p.notional || 0), 0);
+    api.render('portfolio-asset-chart', [
+        { type: 'bar', orientation: 'h', name: 'Calls', y: assets, x: assets.map(symbol => assetAmount(symbol, 'call')), customdata: assets.map(symbol => ({ symbol, type: 'call' })), marker: { color: assets.map(symbol => portfolioExposureSelection?.symbol === symbol && portfolioExposureSelection?.type === 'call' ? '$highlight' : '$call') }, hovertemplate: '%{y}<br>Calls: $%{x:,.0f}<extra></extra>' },
+        { type: 'bar', orientation: 'h', name: 'Puts', y: assets, x: assets.map(symbol => assetAmount(symbol, 'put')), customdata: assets.map(symbol => ({ symbol, type: 'put' })), marker: { color: assets.map(symbol => portfolioExposureSelection?.symbol === symbol && portfolioExposureSelection?.type === 'put' ? '$highlight' : '$put') }, hovertemplate: '%{y}<br>Puts: $%{x:,.0f}<extra></extra>' },
+    ], { barmode: 'stack', margin: { l: 52, r: 12, t: 8, b: 36 }, xaxis: { title: 'Notional ($)', tickprefix: '$' }, legend: { orientation: 'h' } });
+    api.bindClick('portfolio-dte-chart', event => { const key = event?.points?.[0]?.customdata; if (!key) return; portfolioDteSelection = portfolioDteSelection === key ? '' : key; openPositionsPage = 1; renderOpenPositionsPage(); renderPortfolioExposureCharts(openPositions); });
+    api.bindClick('portfolio-asset-chart', event => { const hit = event?.points?.[0]?.customdata; if (!hit) return; portfolioExposureSelection = portfolioExposureSelection?.symbol === hit.symbol && portfolioExposureSelection?.type === hit.type ? null : hit; openPositionsPage = 1; renderOpenPositionsPage(); renderPortfolioExposureCharts(openPositions); });
+    updatePortfolioSelectionChips();
+}
+
+function updatePortfolioSelectionChips() {
+    const chips = document.getElementById('portfolio-selection-chips'), clear = document.getElementById('portfolio-clear-selection');
+    if (!chips || !clear) return;
+    const labels = [];
+    if (portfolioDteSelection) labels.push(`Expiry ${portfolioDteSelection === '14+' ? '>14 days' : portfolioDteSelection + ' days'}`);
+    if (portfolioExposureSelection) labels.push(`${portfolioExposureSelection.symbol} ${portfolioExposureSelection.type}`);
+    chips.innerHTML = labels.map(label => `<span class="selection-chip">${label}</span>`).join('');
+    clear.hidden = labels.length === 0;
+    clear.onclick = () => { portfolioDteSelection = ''; portfolioExposureSelection = null; openPositionsPage = 1; renderOpenPositionsPage(); renderPortfolioExposureCharts(openPositionsData); };
 }
 
 // ── Premium PnL (Account) ──
@@ -1678,7 +1781,18 @@ function renderAccountPnl(historyData, openPositions) {
             yaxis2: { title: `Per ${dateLabel} ($)`, overlaying: 'y', side: 'right', gridcolor: 'transparent', tickfont: { size: 11 }, tickprefix: '$' },
             legend: { orientation: 'h', y: -0.12, font: { size: 11 } },
             bargap: 0.15,
-        }, { responsive: true, displayModeBar: false });
+        }, { responsive: true, displayModeBar: false }).then(() => {
+            const chart = document.getElementById('pnl-chart-account');
+            chart?.removeAllListeners?.('plotly_click');
+            chart?.on?.('plotly_click', event => {
+                const date = event?.points?.[0]?.x;
+                const month = typeof date === 'string' ? date.slice(0, 7) : '';
+                if (!month || month === 'Unknown') return;
+                _pnlView = 'monthly'; _pnlSelectedMonth = month;
+                document.querySelectorAll('#pnl-view-tabs .tab-button').forEach(button => button.classList.toggle('active', button.dataset.pnlView === 'monthly'));
+                _renderPnlFromCache();
+            });
+        });
     } else if (chartEl) {
         if (typeof Plotly !== 'undefined' && chartEl.classList.contains('js-plotly-plot')) {
             Plotly.purge(chartEl);

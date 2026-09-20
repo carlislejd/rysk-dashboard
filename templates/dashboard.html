@@ -79,6 +79,9 @@
         <section class="card">
             <h2>Portfolio Health</h2>
             <div id="health-content" style="display: none;">
+                <div class="chart-grid portfolio-health-charts"><div><h3 class="subsection-title">Notional by expiry</h3><div id="portfolio-dte-chart" class="chart-container rysk-chart" style="height:240px"></div><label>Expiry bucket <select id="portfolio-dte-select"><option value="">All buckets</option><option value="0-3">0–3 days</option><option value="3-7">&gt;3–7 days</option><option value="7-14">&gt;7–14 days</option><option value="14+">&gt;14 days</option></select></label></div><div><h3 class="subsection-title">Asset exposure</h3><div id="portfolio-asset-chart" class="chart-container rysk-chart" style="height:240px"></div><label>Asset / type <select id="portfolio-exposure-select"><option value="">All exposure</option></select></label></div></div>
+                <div id="portfolio-selection-chips" class="selection-chips" aria-live="polite"></div>
+                <button id="portfolio-clear-selection" class="rysk-chart-control" type="button" hidden>Clear selection</button>
                 <div class="summary-grid" id="health-grid"></div>
                 <div id="health-expiring" style="margin-top: 16px;"></div>
             </div>
@@ -124,8 +127,8 @@
                 </div>
                 <!-- Month Tabs (visible only in Monthly view) -->
                 <div class="tabs tab-carousel pnl-month-tabs" id="pnl-month-tabs" style="display: none;"></div>
-                <div class="summary-grid" id="pnl-grid"></div>
                 <div id="pnl-chart-account" class="chart-container" style="margin-top: 16px;"></div>
+                <div class="summary-grid" id="pnl-grid"></div>
             </div>
         </section>
 

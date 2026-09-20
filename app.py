@@ -4,6 +4,7 @@ Flask application for Rysk Options Dashboard.
 
 from flask import Flask, render_template, jsonify, request
 import os
+import math
 from cohort_services import (
     get_retention_cohorts, get_retention_audit,
     public_retention_cohorts, public_retention_audit,
@@ -31,6 +32,7 @@ from global_services import (
     get_global_summary,
     get_global_trades,
     get_global_volume,
+    get_global_execution_timeline,
     get_asset_summary,
     get_asset_detail,
     get_outcome_summary,
@@ -97,6 +99,27 @@ def resolve_chain_filter():
     if value is None:
         value = request.args.get("chain", None)
     return parse_chain_filter(value)
+
+
+def resolve_trade_date_filters():
+    """Optional UTC epoch bounds; upper bounds are exclusive."""
+    values = {}
+    for key in ('from_ts', 'to_ts'):
+        raw = request.args.get(key)
+        if raw is None:
+            values[key] = None
+            continue
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f'{key} must be an integer')
+        if not 0 <= value <= 253402300799:
+            raise ValueError(f'{key} is outside the supported date range')
+        values[key] = value
+    if (values['from_ts'] is not None and values['to_ts'] is not None
+            and values['from_ts'] >= values['to_ts']):
+        raise ValueError('from_ts must be before to_ts')
+    return values
 
 
 @app.route('/')
@@ -576,6 +599,8 @@ def api_trader_history(trader_id):
             if not minimum <= value <= maximum:
                 raise ValueError(f'{key} must be between {minimum} and {maximum}')
             values[key] = value
+        values.update(resolve_trade_date_filters())
+        values['symbol'] = request.args.get('symbol', '').strip() or None
         chain_id = resolve_chain_filter()
     except ValueError as exc:
         return jsonify({'success': False, 'error': str(exc)}), 400
@@ -665,23 +690,55 @@ def api_global_summary():
 def api_global_trades():
     """Paginated global trades feed"""
     try:
-        page = request.args.get("page", 1, type=int)
-        limit = request.args.get("limit", 50, type=int)
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 50))
         symbol = request.args.get("symbol", "").strip() or None
         expiry = request.args.get("expiry", None, type=int)
+        dates = resolve_trade_date_filters()
+        strike_raw = request.args.get('strike')
+        strike = float(strike_raw) if strike_raw is not None else None
+        if strike is not None and (not math.isfinite(strike) or strike < 0):
+            raise ValueError('strike must be a finite nonnegative number')
+        if page < 1 or not 1 <= limit <= 200:
+            raise ValueError('page must be positive and limit must be between 1 and 200')
         chain_id = resolve_chain_filter()
         iv = request.args.get("iv", "").lower() in ("1", "true")
+        open_only = request.args.get('open_only', '').lower() in ('1', 'true')
         conn = get_db()
         try:
             data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry,
-                                     chain_id=chain_id, alias_secret=PARTICIPANT_ALIAS_SECRET)
+                                     chain_id=chain_id, alias_secret=PARTICIPANT_ALIAS_SECRET,
+                                     strike=strike, open_only=open_only, **dates)
         finally:
             conn.close()
         if iv:
             enrich_trades_with_iv(data["trades"])
         return jsonify({"success": True, **data})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/global/execution-timeline')
+def api_global_execution_timeline():
+    """Coverage-aware execution buckets for the recent activity section."""
+    try:
+        window = request.args.get('window', '24h')
+        if window not in ('24h', '7d'):
+            raise ValueError('window must be 24h or 7d')
+        chain_id = resolve_chain_filter()
+        conn = get_db()
+        try:
+            data = get_global_execution_timeline(conn, window=window, chain_id=chain_id)
+        finally:
+            conn.close()
+        return jsonify({'success': True, **data})
+    except ValueError as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 400
+    except Exception:
+        app.logger.exception('Execution timeline failed')
+        return jsonify({'success': False, 'error': 'Execution timeline unavailable'}), 500
 
 @app.route('/api/global/volume')
 def api_global_volume():

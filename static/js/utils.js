@@ -38,6 +38,7 @@ function replotAllCharts() {
             'yaxis.gridcolor': theme.gridColor,
         });
     });
+    document.dispatchEvent(new CustomEvent('rysk:themechange'));
 }
 
 function getPlotlyTheme() {
@@ -54,6 +55,114 @@ function getPlotlyTheme() {
         // Marker colors stay consistent across themes (the accent/semantic colors handle contrast)
     };
 }
+
+// Shared Plotly surface. Pages supply data and domain-specific interactions; this
+// layer keeps the visual language, resize behavior, and accessible empty states
+// consistent without each page attaching its own window listeners.
+window.RyskCharts = (() => {
+    const observers = new WeakMap();
+    const clickHandlers = new WeakMap();
+    const renders = new WeakMap();
+    const palette = () => {
+        const light = document.documentElement.getAttribute('data-theme') === 'light';
+        return {
+            call: light ? '#437b91' : '#90c6d3', put: light ? '#b14b43' : '#ee9b92',
+            premium: light ? '#86652b' : '#e8c181', forest: light ? '#326651' : '#a7dbb7',
+            muted: light ? '#68776b' : '#93a6a0', text: light ? '#20312c' : '#eef2eb',
+            grid: light ? '#e5e7de' : '#2b3a39', paper: 'transparent',
+            highlight: light ? '#7c639b' : '#baa9d5',
+        };
+    };
+    const baseLayout = (overrides = {}) => {
+        const colors = palette();
+        return {
+            paper_bgcolor: colors.paper, plot_bgcolor: colors.paper,
+            font: { family: 'DM Sans, sans-serif', color: colors.muted, size: 11 },
+            margin: { l: 52, r: 20, t: 16, b: 40 },
+            hoverlabel: { bgcolor: getPlotlyTheme().annotationBg, bordercolor: colors.grid, font: { family: 'DM Sans, sans-serif', color: colors.text, size: 12 } },
+            xaxis: { showgrid: false, zeroline: false, fixedrange: true },
+            yaxis: { gridcolor: colors.grid, zeroline: false, fixedrange: true },
+            legend: { orientation: 'h', y: -0.2, x: 0, font: { size: 10 } },
+            ...overrides,
+        };
+    };
+    const resolveTokens = value => {
+        // Plotly accepts Date instances for temporal axes. They have no enumerable
+        // properties, so treating them as a plain object would silently turn them
+        // into `{}` during a theme refresh.
+        if (value instanceof Date) return value;
+        if (Array.isArray(value)) return value.map(resolveTokens);
+        if (!value || typeof value !== 'object') {
+            if (typeof value === 'string' && value.startsWith('$')) return palette()[value.slice(1)] || value;
+            return value;
+        }
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolveTokens(entry)]));
+    };
+    // Callers sometimes need an array of colors for selected bars, where a token
+    // string is inconvenient. Preserve those semantic palette values as tokens
+    // before caching so a theme switch keeps both the selection and its contrast.
+    const tokenisePalette = value => {
+        if (value instanceof Date) return value;
+        if (Array.isArray(value)) return value.map(tokenisePalette);
+        if (!value || typeof value !== 'object') {
+            if (typeof value !== 'string' || value.startsWith('$')) return value;
+            const token = Object.entries(palette()).find(([, color]) => color === value)?.[0];
+            return token ? `$${token}` : value;
+        }
+        return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, tokenisePalette(entry)]));
+    };
+    const ensureResize = element => {
+        if (observers.has(element) || typeof ResizeObserver === 'undefined') return;
+        let frame;
+        const observer = new ResizeObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                if (element.isConnected && element.data && typeof Plotly !== 'undefined') Plotly.Plots.resize(element);
+            });
+        });
+        observer.observe(element); observers.set(element, observer);
+    };
+    const render = (id, traces, layout = {}, config = {}) => {
+        const element = typeof id === 'string' ? document.getElementById(id) : id;
+        if (!element || typeof Plotly === 'undefined') return null;
+        const wasEmpty = element.classList.contains('rysk-chart-empty');
+        element.classList.remove('rysk-chart-empty');
+        if (wasEmpty) element.textContent = '';
+        element.removeAttribute('aria-live');
+        element.setAttribute('role', 'img'); element.setAttribute('tabindex', '0');
+        element.setAttribute('aria-label', layout?.title?.text || element.dataset?.chartLabel || element.getAttribute('aria-label') || 'Interactive chart');
+        const source = { traces: tokenisePalette(traces || []), layout: tokenisePalette(layout), config };
+        renders.set(element, source);
+        Plotly.react(element, resolveTokens(source.traces), baseLayout(resolveTokens(source.layout)), { responsive: true, displayModeBar: false, scrollZoom: false, ...config });
+        ensureResize(element); return element;
+    };
+    const empty = (id, message = 'No data is available for this selection.') => {
+        const element = typeof id === 'string' ? document.getElementById(id) : id;
+        if (!element) return;
+        if (typeof Plotly !== 'undefined' && element.data) Plotly.purge(element);
+        renders.delete(element);
+        element.classList.add('rysk-chart-empty'); element.setAttribute('role', 'status');
+        element.setAttribute('aria-live', 'polite'); element.removeAttribute('tabindex'); element.textContent = message;
+    };
+    const bindClick = (id, handler) => {
+        const element = typeof id === 'string' ? document.getElementById(id) : id;
+        if (!element || typeof handler !== 'function') return;
+        const invoke = event => handler(event);
+        if (element.removeAllListeners) element.removeAllListeners('plotly_click');
+        if (element.on) element.on('plotly_click', invoke);
+        const keydown = event => { if ((event.key === 'Enter' || event.key === ' ') && element.data?.length) { event.preventDefault(); handler(null, event); } };
+        const previous = clickHandlers.get(element);
+        if (previous) element.removeEventListener('keydown', previous);
+        element.addEventListener('keydown', keydown); clickHandlers.set(element, keydown);
+    };
+    document.addEventListener('rysk:themechange', () => {
+        document.querySelectorAll('.rysk-chart').forEach(element => {
+            const state = renders.get(element);
+            if (state && !element.classList.contains('rysk-chart-empty')) render(element, state.traces, state.layout, state.config);
+        });
+    });
+    return { colors: palette, layout: baseLayout, render, empty, bindClick };
+})();
 
 // Apply theme on load
 initTheme();

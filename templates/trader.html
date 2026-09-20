@@ -34,6 +34,21 @@
                 <div class="hero-kpi"><div class="hero-kpi-label">Executions</div><div class="hero-kpi-value" id="trader-trades">—</div><div class="hero-kpi-sub">recorded in this view</div></div>
             </section>
 
+            <section class="card trader-visuals" aria-labelledby="trader-visuals-title">
+                <div class="section-heading"><div><h2 id="trader-visuals-title">Execution profile</h2><p class="card-subtitle">Full-window activity; selecting a point narrows the recorded tape.</p></div><div class="tabs" id="trader-metric-tabs"><button class="tab-button active" data-trader-metric="notional" type="button">Notional</button><button class="tab-button" data-trader-metric="premium" type="button">Premium</button></div><button id="trader-clear-filters" class="rysk-chart-control" type="button" hidden>Clear selection</button></div>
+                <div class="chart-controls" aria-label="Execution filters">
+                    <label>Asset <select id="trader-symbol-filter" class="account-filter"><option value="">All assets</option></select></label>
+                    <label>From <input id="trader-from-filter" type="date"></label>
+                    <label>To <input id="trader-to-filter" type="date"></label>
+                    <button id="trader-date-apply" class="rysk-chart-control" type="button">Apply dates</button>
+                </div>
+                <div id="trader-selection-chips" class="selection-chips" aria-live="polite"></div>
+                <div class="chart-grid">
+                    <div><h3 class="subsection-title">Execution timeline</h3><div id="trader-timeline-chart" class="chart-container rysk-chart" style="height:240px" aria-label="Execution timeline"></div></div>
+                    <div><h3 class="subsection-title">Asset composition</h3><div id="trader-assets-chart" class="chart-container rysk-chart" style="height:240px" aria-label="Notional by asset"></div></div>
+                </div>
+            </section>
+
             <div class="act-divider" id="trader-executions"><div class="act-title">Recorded executions</div><div class="act-subtitle">Historical trade tape only</div></div>
             <section class="card trader-trades-card">
                 <p class="card-subtitle trader-apr-note">Entry APR annualizes premium at trade entry; it is not realized profit or a return forecast.</p>
@@ -46,6 +61,7 @@
             {% include 'partials/footer.html' %}
         </main>
     </div>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/trader.js') }}"></script>
 </body>

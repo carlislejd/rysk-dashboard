@@ -11,6 +11,93 @@ let assetsExpanded = false;
 let expiryExpanded = false;
 let detailExpiryExpanded = false;
 let outcomesExpanded = false;
+let marketPulse = null;
+let exposureView = 'asset';
+let executionWindow = '24h';
+let executionMetric = 'notional';
+let executionRequest = 0;
+let executionTimelineRows = [];
+let recentRequest = 0;
+let openPositionRequest = 0;
+let recentPage = 1;
+let recentFilters = {};
+let recentChainOverride = null;
+let openPositionFilters = {};
+let openPositionPage = 1;
+
+function chartPalette() {
+    return window.RyskCharts?.colors?.() || { call: '#67997e', put: '#c98d68', premium: '#9aaaca', forest: '#315c45', muted: '#8a887f', grid: 'rgba(90,85,75,.15)', text: '#2a342d', paper: 'transparent', highlight: '#d4af62' };
+}
+
+function renderGlobalChart(id, traces, layout) {
+    if (window.RyskCharts?.render) return window.RyskCharts.render(id, traces, layout, { displayModeBar: false });
+    if (typeof Plotly === 'undefined') return;
+    const theme = getPlotlyTheme();
+    return Plotly.react(id, traces, { paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', font: { family: 'DM Sans, sans-serif', color: theme.fontColor }, margin: { l: 52, r: 12, t: 12, b: 38 }, height: 245, ...layout }, { responsive: true, displayModeBar: false });
+}
+
+function bindGlobalChart(id, handler) {
+    if (window.RyskCharts?.bindClick) return window.RyskCharts.bindClick(id, handler);
+    const el = document.getElementById(id);
+    if (!el || !el.on) return;
+    el.removeAllListeners?.('plotly_click'); el.on('plotly_click', handler);
+}
+
+function setRecentFilter(next, chainOverride = null) {
+    recentFilters = { ...recentFilters, ...next };
+    if (chainOverride !== null) recentChainOverride = chainOverride;
+    recentPage = 1;
+    renderSelectionChips();
+    refreshExecutionHighlight();
+    if (marketPulse?.popular_strikes) renderTrendingStrikes(marketPulse.popular_strikes);
+    loadRecent();
+}
+
+function clearRecentFilters() { recentFilters = {}; recentChainOverride = null; recentPage = 1; renderSelectionChips(); refreshExecutionHighlight(); if (marketPulse?.popular_strikes) renderTrendingStrikes(marketPulse.popular_strikes); loadRecent(); }
+
+function refreshExecutionHighlight() {
+    renderExecutionTimeline();
+}
+
+function setOpenPositionFilter(next) {
+    openPositionFilters = next;
+    openPositionPage = 1;
+    renderSelectionChips();
+    if (marketPulse?.open_exposure) {
+        renderOpenExposure(marketPulse.open_exposure);
+        renderExpiryRunway(marketPulse.open_exposure);
+    }
+    loadOpenPositionDetails();
+}
+
+function clearOpenPositionFilters() {
+    ++openPositionRequest;
+    setOpenPositionFilter({});
+}
+
+function renderSelectionChips() {
+    const labels = [];
+    if (recentFilters.symbol) labels.push(`${shortSymbol(recentFilters.symbol)}${recentFilters.strike != null ? ` ${formatStrike(recentFilters.strike)}` : ''}`);
+    if (recentChainOverride != null) labels.push(chainLabel({ chain_id: recentChainOverride }));
+    if (recentFilters.expiry) labels.push(`Expiry ${formatUnixDate(recentFilters.expiry)}`);
+    if (recentFilters.from_ts) labels.push(`From ${new Date(recentFilters.from_ts * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC`);
+    if (recentFilters.to_ts) labels.push(`Before ${new Date(recentFilters.to_ts * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC`);
+    const el = document.getElementById('execution-selection');
+    if (el) {
+        el.innerHTML = labels.length ? `<span>Showing ${escapeAttr(labels.join(' · '))}</span> <button class="text-action" type="button" data-clear-recent>Clear</button>` : '';
+        el.querySelector('[data-clear-recent]')?.addEventListener('click', clearRecentFilters);
+    }
+    const openLabels = [];
+    if (openPositionFilters.symbol) openLabels.push(shortSymbol(openPositionFilters.symbol));
+    if (openPositionFilters.expiry) openLabels.push(`Expiry ${formatUnixDate(openPositionFilters.expiry)}`);
+    if (openPositionFilters.chain_id != null) openLabels.push(chainLabel({ chain_id: openPositionFilters.chain_id }));
+    ['open-exposure-selection', 'expiry-runway-selection'].forEach(id => {
+        const element = document.getElementById(id);
+        if (!element) return;
+        element.innerHTML = openLabels.length ? `<span>Showing ${escapeAttr(openLabels.join(' · '))} open positions</span> <button class="text-action" type="button" data-clear-open>Clear</button>` : '';
+        element.querySelector('[data-clear-open]')?.addEventListener('click', clearOpenPositionFilters);
+    });
+}
 
 // ── Helpers ──
 
@@ -1472,21 +1559,93 @@ function renderExpiryExplorer() {
     }
 }
 
-// ── Recent Activity (top 10) ──
+// ── Linked execution tape ──
 
-async function loadRecent() {
+function recentQuery(page) {
+    const params = new URLSearchParams({ limit: '10', page: String(page) });
+    Object.entries(recentFilters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') params.set(key, String(value));
+    });
+    return withChain(`/api/global/trades?${params.toString()}`, recentChainOverride ?? selectedChain);
+}
+
+function selectExecutionBucket(fromTs, toTs) {
+    if (recentFilters.from_ts === fromTs && recentFilters.to_ts === toTs) {
+        delete recentFilters.from_ts;
+        delete recentFilters.to_ts;
+        setRecentFilter({});
+    } else {
+        setRecentFilter({ from_ts: fromTs, to_ts: toTs });
+    }
+}
+
+function renderExecutionTimeline() {
+    const rows = executionTimelineRows;
+    const select = document.getElementById('execution-bucket-select');
+    if (select) {
+        select.innerHTML = '<option value="">Select a time bucket</option>' + rows.map((row, i) => `<option value="${i}">${row.date.replace('T', ' ').slice(0, 16)} UTC${row.partial ? ' · partial' : ''}</option>`).join('');
+        const selected = rows.findIndex(row => row.start === recentFilters.from_ts && row.end === recentFilters.to_ts);
+        select.value = selected < 0 ? '' : String(selected);
+        select.onchange = () => {
+            if (select.value === '') { delete recentFilters.from_ts; delete recentFilters.to_ts; setRecentFilter({}); return; }
+            const row = rows[Number(select.value)];
+            if (row) selectExecutionBucket(row.start, row.end);
+        };
+    }
+    if (!rows.length) {
+        window.RyskCharts?.empty?.('execution-timeline-chart', 'No recorded coverage for this window.');
+        return;
+    }
+    renderGlobalChart('execution-timeline-chart', [{
+        type: 'bar', x: rows.map(row => row.date), y: rows.map(row => row[executionMetric]),
+        customdata: rows.map(row => [row.start, row.end, row.trade_count]),
+        marker: { color: rows.map(row => row.start === recentFilters.from_ts && row.end === recentFilters.to_ts ? '$highlight' : executionMetric === 'premium' ? '$premium' : '$forest') },
+        hovertemplate: '%{x|%b %d, %H:%M UTC}<br>$%{y:,.0f}<br>%{customdata[2]} executions<extra></extra>',
+    }], { height: 220, bargap: .12, xaxis: { type: 'date', showgrid: false, fixedrange: true, tickformat: executionWindow === '24h' ? '%H:%M' : '%b %d' }, yaxis: { tickprefix: '$', tickformat: '~s', gridcolor: '$grid', zeroline: false, fixedrange: true } });
+    bindGlobalChart('execution-timeline-chart', event => {
+        const point = event?.points?.[0];
+        if (point) selectExecutionBucket(...point.customdata.slice(0, 2));
+    });
+}
+
+async function loadExecutionTimeline() {
+    const version = ++executionRequest;
+    try {
+        const response = await fetch(withChain(`/api/global/execution-timeline?window=${executionWindow}`));
+        const data = await response.json();
+        if (version !== executionRequest) return;
+        if (!response.ok || !data.success) throw new Error(data.error || 'Timeline unavailable');
+        executionTimelineRows = data.data || [];
+        renderExecutionTimeline();
+        const observation = document.getElementById('execution-observation');
+        if (observation) {
+            const latest = data.coverage?.last_trade_at;
+            observation.textContent = latest ? `Latest recorded execution: ${new Date(latest * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC. Current bucket is partial.` : 'No recorded history for this chain.';
+        }
+    } catch (error) {
+        if (version !== executionRequest) return;
+        executionTimelineRows = [];
+        window.RyskCharts?.empty?.('execution-timeline-chart', 'Execution timeline is unavailable.');
+        const select = document.getElementById('execution-bucket-select');
+        if (select) select.innerHTML = '<option value="">Timeline unavailable</option>';
+    }
+}
+
+async function loadRecent(page = recentPage) {
+    recentPage = page;
+    const version = ++recentRequest;
     const requestChain = selectedChain;
     const loading = document.getElementById('recent-loading');
     const content = document.getElementById('recent-content');
     try {
-        const resp = await fetch(withChain('/api/global/trades?limit=5&iv=true'));
+        const resp = await fetch(recentQuery(page));
         const data = await resp.json();
-        if (requestChain !== selectedChain) return;
+        if (requestChain !== selectedChain || version !== recentRequest) return;
         if (!data.success) throw new Error(data.error);
 
         document.querySelector('[data-export-table="recent-table"]').disabled = !data.trades.length;
         if (!data.trades.length) {
-            loading.textContent = 'No recorded trades for this chain.';
+            loading.textContent = 'No recorded trades match these filters.';
             loading.style.display = 'block'; content.style.display = 'none'; return;
         }
         document.getElementById('recent-body').innerHTML = data.trades.map(t => `<tr>
@@ -1502,13 +1661,135 @@ async function loadRecent() {
             <td>${t.iv != null ? formatPercentage(t.iv, 1) : '—'}</td>
             <td>${traderHistoryLink(t)}</td>
         </tr>`).join('');
+        document.getElementById('recent-pager').innerHTML = `
+            <button class="pager-btn" type="button" data-recent-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''}>Prev</button>
+            <span>Page ${data.page} of ${data.pages} · ${formatNumber(data.total, 0)} trades</span>
+            <button class="pager-btn" type="button" data-recent-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
+        document.querySelectorAll('[data-recent-page]').forEach(button => button.addEventListener('click', () => loadRecent(Number(button.dataset.recentPage))));
 
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
-        if (requestChain !== selectedChain) return;
+        if (requestChain !== selectedChain || version !== recentRequest) return;
         loading.textContent = 'Failed to load recent trades: ' + e.message;
+        loading.style.display = 'block'; content.style.display = 'none';
     }
+}
+
+async function loadOpenPositionDetails(page = openPositionPage) {
+    const version = ++openPositionRequest;
+    openPositionPage = page;
+    const detail = document.getElementById('open-position-detail');
+    if (!Object.keys(openPositionFilters).length) { detail.hidden = true; renderSelectionChips(); return; }
+    const params = new URLSearchParams({ limit: '10', page: String(page), open_only: 'true' });
+    Object.entries(openPositionFilters).forEach(([key, value]) => params.set(key, String(value)));
+    try {
+        const response = await fetch(withChain(`/api/global/trades?${params.toString()}`, openPositionFilters.chain_id ?? selectedChain));
+        const data = await response.json();
+        if (version !== openPositionRequest) return;
+        if (!response.ok || !data.success) throw new Error(data.error || 'Open positions unavailable');
+        document.getElementById('open-position-body').innerHTML = data.trades.map(t => `<tr><td>${formatUnixDateTime(t.created_at)}</td><td>${escapeAttr(shortSymbol(t.symbol))}</td><td>${chainBadge(t)}</td><td>${t.type}</td><td>${formatStrike(t.strike)}</td><td>${formatUnixDate(t.expiry)}</td><td>${compactCurrency(t.notional)}</td></tr>`).join('');
+        if (!data.trades.length) document.getElementById('open-position-body').innerHTML = '<tr><td colspan="7">No open positions match these filters.</td></tr>';
+        document.getElementById('open-position-pager').innerHTML = `<button class="pager-btn" data-open-page="${data.page - 1}" ${data.page <= 1 ? 'disabled' : ''}>Prev</button><span>Page ${data.page} of ${data.pages}</span><button class="pager-btn" data-open-page="${data.page + 1}" ${data.page >= data.pages ? 'disabled' : ''}>Next</button>`;
+        document.querySelectorAll('[data-open-page]').forEach(button => button.addEventListener('click', () => loadOpenPositionDetails(Number(button.dataset.openPage))));
+        detail.hidden = false; renderSelectionChips();
+    } catch (_) {
+        if (version !== openPositionRequest) return;
+        document.getElementById('open-position-pager').innerHTML = '';
+        document.getElementById('open-position-body').innerHTML = '<tr><td colspan="7">Open position details are unavailable.</td></tr>';
+        detail.hidden = false;
+    }
+}
+
+function renderOpenExposure(exposure) {
+    const rows = exposureView === 'expiry' ? exposure.by_expiry : exposure.by_asset;
+    const chartId = 'open-exposure-chart';
+    if (!rows?.length) { window.RyskCharts?.empty?.(chartId, 'No open exposure is recorded.'); return; }
+    const palette = chartPalette();
+    const labels = rows.map(row => exposureView === 'expiry' ? `${formatUnixDate(row.expiry)} · ${row.chain_short_name || chainLabel(row)}` : `${shortSymbol(row.symbol)} · ${row.chain_short_name || chainLabel(row)}`);
+    const select = document.getElementById('open-exposure-select');
+    if (select) {
+        select.innerHTML = '<option value="">Select a bar</option>' + rows.map((row, index) => `<option value="${index}">${escapeAttr(labels[index])}</option>`).join('');
+        select.onchange = () => { if (select.value !== '') selectOpenExposure(rows[Number(select.value)]); };
+    }
+    renderGlobalChart(chartId, [
+        { type: 'bar', orientation: 'h', name: 'Calls', y: labels, x: rows.map(row => row.call_notional), customdata: rows, marker: { color: '$call', opacity: rows.map(row => !Object.keys(openPositionFilters).length || (openPositionFilters.chain_id === row.chain_id && (exposureView === 'expiry' ? row.expiry === openPositionFilters.expiry : row.symbol === openPositionFilters.symbol)) ? 1 : 0.45) }, hovertemplate: '%{y}<br>Calls $%{x:,.0f}<extra></extra>' },
+        { type: 'bar', orientation: 'h', name: 'Puts', y: labels, x: rows.map(row => row.put_notional), customdata: rows, marker: { color: '$put', opacity: rows.map(row => !Object.keys(openPositionFilters).length || (openPositionFilters.chain_id === row.chain_id && (exposureView === 'expiry' ? row.expiry === openPositionFilters.expiry : row.symbol === openPositionFilters.symbol)) ? 1 : 0.45) }, hovertemplate: '%{y}<br>Puts $%{x:,.0f}<extra></extra>' },
+    ], { height: Math.max(240, rows.length * 27 + 60), margin: { l: 124, r: 12, t: 8, b: 48 }, barmode: 'stack', showlegend: true, legend: { orientation: 'h', y: -0.12 }, xaxis: { tickprefix: '$', tickformat: '~s', gridcolor: '$grid', zeroline: false, fixedrange: true, nticks: 4 }, yaxis: { autorange: 'reversed', fixedrange: true, tickfont: { size: 10 } } });
+    bindGlobalChart(chartId, event => {
+        selectOpenExposure(event?.points?.[0]?.customdata);
+    });
+}
+
+function selectOpenExposure(row) {
+    if (!row) return;
+    const key = exposureView === 'expiry' ? 'expiry' : 'symbol';
+    const next = { ...openPositionFilters };
+    if (next[key] === row[key] && next.chain_id === row.chain_id) delete next[key];
+    else { next[key] = row[key]; next.chain_id = row.chain_id; }
+    if (!next.symbol && !next.expiry) delete next.chain_id;
+    setOpenPositionFilter(next);
+    placeOpenDetail('open-exposure-selection');
+}
+
+function renderExpiryRunway(exposure) {
+    const rows = exposure.by_expiry || [];
+    if (!rows.length) { window.RyskCharts?.empty?.('expiry-runway-chart', 'No upcoming expiries are recorded.'); return; }
+    const palette = chartPalette();
+    const select = document.getElementById('expiry-runway-select');
+    if (select) {
+        select.innerHTML = '<option value="">Select an expiry</option>' + rows.map((row, index) => `<option value="${index}">${formatUnixDate(row.expiry)} · ${escapeAttr(row.chain_short_name || chainLabel(row))}</option>`).join('');
+        select.onchange = () => { if (select.value !== '') selectExpiryRunway(rows[Number(select.value)]); };
+    }
+    renderGlobalChart('expiry-runway-chart', [{ type: 'bar', x: rows.map(row => `${formatUnixDate(row.expiry)} · ${chainLabel(row)}`), y: rows.map(row => row.total_notional), customdata: rows, marker: { color: rows.map(row => row.expiry === openPositionFilters.expiry && row.chain_id === openPositionFilters.chain_id ? '$highlight' : '$forest') }, hovertemplate: '%{x}<br>$%{y:,.0f} open notional<extra></extra>' }], { height: 210, xaxis: { showgrid: false, fixedrange: true }, yaxis: { tickprefix: '$', tickformat: '~s', gridcolor: palette.grid, zeroline: false, fixedrange: true } });
+    bindGlobalChart('expiry-runway-chart', event => {
+        selectExpiryRunway(event?.points?.[0]?.customdata);
+    });
+}
+
+function selectExpiryRunway(row) {
+    if (!row) return;
+    const next = { ...openPositionFilters };
+    if (next.expiry === row.expiry && next.chain_id === row.chain_id) delete next.expiry;
+    else { next.expiry = row.expiry; next.chain_id = row.chain_id; }
+    if (!next.symbol && !next.expiry) delete next.chain_id;
+    setOpenPositionFilter(next);
+    placeOpenDetail('expiry-runway-selection');
+}
+
+function renderTrendingStrikes(strikes) {
+    if (!strikes?.length) { window.RyskCharts?.empty?.('trending-strikes-chart', 'No trending strikes in the past 7 days.'); return; }
+    const palette = chartPalette();
+    const rows = [...strikes].sort((a, b) => b.volume - a.volume);
+    const select = document.getElementById('trending-strikes-select');
+    if (select) {
+        select.innerHTML = '<option value="">Select a group</option>' + rows.map((row, index) => `<option value="${index}">${escapeAttr(shortSymbol(row.symbol))} · ${escapeAttr(row.chain_short_name || chainLabel(row))} · ${escapeAttr(formatStrike(row.strike))}</option>`).join('');
+        select.onchange = () => { if (select.value !== '') selectTrendingStrike(rows[Number(select.value)]); };
+    }
+    renderGlobalChart('trending-strikes-chart', [{ type: 'bar', orientation: 'h', y: rows.map(row => `${shortSymbol(row.symbol)} · ${row.chain_short_name || chainLabel(row)} · ${formatStrike(row.strike)}`), x: rows.map(row => row.volume), customdata: rows, marker: { color: rows.map(row => recentFilters.symbol === row.symbol && Number(recentFilters.strike) === Number(row.strike) && recentChainOverride === row.chain_id ? '$highlight' : '$forest') }, hovertemplate: '%{y}<br>$%{x:,.0f} notional<extra></extra>' }], { height: Math.max(180, rows.length * 42), margin: { l: 145, r: 12, t: 8, b: 28 }, xaxis: { tickprefix: '$', tickformat: '~s', gridcolor: palette.grid, zeroline: false, fixedrange: true }, yaxis: { autorange: 'reversed', fixedrange: true } });
+    bindGlobalChart('trending-strikes-chart', event => {
+        selectTrendingStrike(event?.points?.[0]?.customdata);
+    });
+}
+
+function selectTrendingStrike(row) {
+    if (!row) return;
+    if (recentFilters.symbol === row.symbol && Number(recentFilters.strike) === Number(row.strike) && recentChainOverride === row.chain_id) {
+        delete recentFilters.symbol;
+        delete recentFilters.strike;
+        recentChainOverride = null;
+        setRecentFilter({});
+    } else {
+        const range = recentFilters.from_ts != null ? {} : { from_ts: Math.floor(Date.now() / 1000) - 7 * 86400, to_ts: Math.floor(Date.now() / 1000) + 1 };
+        setRecentFilter({ symbol: row.symbol, strike: row.strike, ...range }, row.chain_id);
+    }
+    document.getElementById('act-activity')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+}
+
+function placeOpenDetail(selectionId) {
+    const detail = document.getElementById('open-position-detail');
+    const anchor = document.getElementById(selectionId);
+    if (detail && anchor?.parentElement) anchor.parentElement.appendChild(detail);
 }
 
 // ── Market Pulse ──
@@ -1527,6 +1808,7 @@ async function loadMarketPulse() {
         const act = data.activity;
         const dte = data.avg_dte;
         const active = data.active_positions;
+        marketPulse = data;
         const volIndicator = act.volume_vs_daily_avg !== null
             ? (act.volume_vs_daily_avg > 0 ? `+${act.volume_vs_daily_avg}%` : `${act.volume_vs_daily_avg}%`)
             : '—';
@@ -1554,6 +1836,9 @@ async function loadMarketPulse() {
             <table class="data-table"><thead><tr><th>Asset</th><th>Chain</th><th>Strike</th><th>Type</th><th>Trades</th><th>Notional</th><th>Avg APR</th></tr></thead>
             <tbody>${data.popular_strikes.map(s => `<tr><td><span class="token-badge">${escapeAttr(shortSymbol(s.symbol))}</span></td><td>${chainBadge(s)}</td><td>${formatStrike(s.strike)}</td><td>${s.dominant_type || '—'}</td><td>${s.count}</td><td>${compactCurrency(s.volume)}</td><td>${formatPercentage(s.avg_apr)}</td></tr>`).join('')}</tbody></table>`
             : '<div class="empty-state"><strong>No trending strikes in the past 7 days</strong><p>Use the asset explorer to inspect the historical strike distribution.</p></div>';
+        renderOpenExposure(data.open_exposure || { by_asset: [], by_expiry: [] });
+        renderExpiryRunway(data.open_exposure || { by_expiry: [] });
+        renderTrendingStrikes(data.popular_strikes || []);
 
         loading.style.display = 'none';
         content.style.display = 'block';
@@ -1889,6 +2174,7 @@ function loadGlobalDashboard() {
     return Promise.allSettled([
         loadNextExpiryPositions(),
         loadMarketPulse(),
+        loadExecutionTimeline(),
         loadRecent(),
         loadAssets(),
         loadExpiryExplorer(),
@@ -1917,6 +2203,14 @@ function setChainFilter(chain) {
     selectedAssetChain = null;
     selectedExpiry = null;
     selectedExplorerExpiry = null;
+    recentFilters = {};
+    recentChainOverride = null;
+    ++openPositionRequest;
+    recentPage = 1;
+    openPositionFilters = {};
+    openPositionPage = 1;
+    document.getElementById('open-position-detail').hidden = true;
+    renderSelectionChips();
     assetsExpanded = false;
     expiryExpanded = false;
     detailExpiryExpanded = false;
@@ -1987,6 +2281,25 @@ document.addEventListener('DOMContentLoaded', () => {
             setChainFilter(btn.dataset.chain || 'all');
         });
     }
+
+    document.getElementById('exposure-view-tabs')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-exposure-view]'); if (!button) return;
+        exposureView = button.dataset.exposureView;
+        document.querySelectorAll('[data-exposure-view]').forEach(item => { const active = item === button; item.classList.toggle('active', active); item.setAttribute('aria-pressed', String(active)); });
+        if (marketPulse?.open_exposure) renderOpenExposure(marketPulse.open_exposure);
+    });
+    document.getElementById('execution-window-tabs')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-execution-window]'); if (!button) return;
+        executionWindow = button.dataset.executionWindow;
+        document.querySelectorAll('[data-execution-window]').forEach(item => item.classList.toggle('active', item === button));
+        clearRecentFilters(); loadExecutionTimeline();
+    });
+    document.getElementById('execution-metric-tabs')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-execution-metric]'); if (!button) return;
+        executionMetric = button.dataset.executionMetric;
+        document.querySelectorAll('[data-execution-metric]').forEach(item => item.classList.toggle('active', item === button));
+        renderExecutionTimeline();
+    });
 
     const assetToggle = document.getElementById('asset-list-toggle');
     if (assetToggle) {

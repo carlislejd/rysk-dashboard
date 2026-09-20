@@ -227,6 +227,17 @@ body[data-page="account"] .hero-kpis, .analytics-kpis { grid-template-columns: r
 .analytics-chart-card h2 { margin: 7px 0; }
 .analytics-field > span { font: 10px var(--font-sans); letter-spacing: .3px; }
 .docs-code { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; font: 11px/1.9 var(--font-mono); overflow: auto; }
+.docs-page .page-intro { padding-bottom: 20px; }
+.docs-page .account-bar { border-left: 3px solid var(--accent); }
+.docs-page .docs-section { max-width: 1180px; }
+.docs-page .docs-section h2 { margin-bottom: 6px; }
+.docs-page .subtitle { color: var(--text-muted); font-size: 11px; }
+.docs-page .subtitle code { color: var(--accent); padding: 3px 6px; border-radius: 4px; background: var(--accent-dim); }
+.docs-endpoint-grid { gap: 10px; }
+.docs-endpoint { min-height: 100px; border-color: var(--border); }
+.docs-endpoint:hover, .docs-endpoint:focus-visible { border-color: var(--accent); background: var(--accent-dim); transform: none; box-shadow: none; }
+.docs-endpoint strong { font-weight: 600; letter-spacing: -.1px; }
+.docs-output-toolbar { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .docs-endpoint { padding: 18px; background: var(--bg); }
 .docs-endpoint span { font-size: 10px; overflow-wrap: anywhere; }
 .docs-address-input { min-width: 0; }
@@ -401,6 +412,16 @@ body[data-page="account"] .hero-kpis, .analytics-kpis { grid-template-columns: r
 .participant-activity-card { overflow: visible; }
 .participant-leaderboard-grid, .participant-segment-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
 .participant-panel { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+.participant-apr-chart-wrap { margin-top: 18px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: hidden; }
+.chart-container.rysk-chart { min-height: 220px; }
+.chart-container.rysk-chart.compact-chart { min-height: 220px; height: 220px; }
+.chart-container.rysk-chart.rysk-chart-empty { display: grid; place-items: center; min-height: 220px; padding: 18px; color: var(--text-muted); font-size: 11px; text-align: center; }
+.chart-section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.chart-section-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; padding: 5px 9px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text-secondary); background: var(--bg); font-size: 10px; }
+.filter-chip button { border: 0; padding: 0; color: inherit; background: transparent; font: inherit; }
+.rysk-chart { outline: none; }
+.rysk-chart:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .participant-panel-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 13px 15px; border-bottom: 1px solid var(--border); }
 .participant-panel-heading > span { color: var(--text-secondary); font: 600 10px/1.3 var(--font-sans); letter-spacing: .9px; }
 .participant-panel-heading small { color: var(--text-muted); font-size: 10px; text-align: right; }
@@ -413,6 +434,9 @@ body[data-page="account"] .hero-kpis, .analytics-kpis { grid-template-columns: r
 .participant-leaderboard-row strong a { color: inherit; text-decoration: none; }
 .participant-leaderboard-row strong a:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .participant-rank { color: var(--text-muted); }
+.participant-amount { display: grid; justify-items: end; gap: 4px; min-width: 0; }
+.participant-amount b { font-weight: 500; }
+.participant-amount i { display: block; width: 100%; max-width: 68px; height: 3px; border-radius: 99px; background: var(--accent); opacity: .68; }
 .participant-segment-head, .participant-segment-row { display: grid; grid-template-columns: minmax(92px, 1.35fr) repeat(3, minmax(54px, .75fr)); gap: 8px; align-items: center; padding: 11px 14px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .participant-segment-head { color: var(--text-muted); font-size: 9px; letter-spacing: .55px; text-transform: uppercase; border-bottom: 1px solid var(--border); }
 .participant-segment-head span:not(:first-child), .participant-segment-row span { text-align: right; }
@@ -442,7 +466,9 @@ body[data-page="account"] .hero-kpis, .analytics-kpis { grid-template-columns: r
 .trader-assigned { color: var(--color-error); }
 .trader-returned { color: var(--accent); }
 @media(max-width: 760px) {
-    .participant-leaderboard-grid, .participant-segment-grid { grid-template-columns: 1fr; }
+    .participant-leaderboard-grid, .participant-segment-grid, .chart-section-grid { grid-template-columns: 1fr; }
+    .chart-container.rysk-chart { min-height: 250px; }
+    .chart-container.rysk-chart.compact-chart, .chart-container.rysk-chart.rysk-chart-empty { min-height: 230px; height: 230px; }
     .trader-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media(max-width: 480px) {
@@ -451,4 +477,51 @@ body[data-page="account"] .hero-kpis, .analytics-kpis { grid-template-columns: r
     .participant-leaderboard-head, .participant-leaderboard-row { grid-template-columns: 18px minmax(70px, 1.2fr) repeat(2, minmax(52px, .78fr)); padding-inline: 10px; font-size: 10px; gap: 4px; }
     .participant-segment-head, .participant-segment-row { grid-template-columns: minmax(86px, 1.22fr) repeat(3, minmax(42px, .72fr)); padding-inline: 10px; font-size: 10px; gap: 4px; }
     .participant-concentration-head, .participant-concentration-row { grid-template-columns: 1fr repeat(2, minmax(72px, .75fr)); padding-inline: 10px; font-size: 10px; gap: 5px; }
+}
+
+/* Shared chart-and-table composition across Global, Portfolio and profiles. */
+.chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 24px;
+    margin-block: 16px;
+}
+.chart-grid > * { min-width: 0; }
+.portfolio-health-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chart-controls, .selection-chips, .chart-selection {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+    margin-block: 12px; color: var(--text-secondary); font-size: 12px;
+}
+.chart-controls label, .portfolio-health-charts label, .chart-card > label {
+    display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    color: var(--text-secondary); font-size: 12px;
+}
+.chart-select, .chart-controls select, .chart-controls input,
+.portfolio-health-charts select, .chart-card > label select {
+    min-height: 36px; max-width: 100%; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 7px;
+    background: var(--bg-raised); color: var(--text-primary);
+    font: 12px 'DM Sans', sans-serif; color-scheme: light dark;
+}
+html[data-theme="light"] .chart-controls input { color-scheme: light; }
+html[data-theme="dark"] .chart-controls input { color-scheme: dark; }
+button.rysk-chart-control, .selection-chip {
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 8px 11px; background: var(--bg-raised);
+    color: var(--text-primary); font: 12px 'DM Sans', sans-serif;
+}
+button.rysk-chart-control, button.selection-chip { cursor: pointer; }
+button.rysk-chart-control:hover, button.selection-chip:hover { border-color: var(--accent); }
+.chart-note { color: var(--text-muted); font-size: 11px; line-height: 1.6; margin-block: 8px 16px; }
+.linked-table { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--border); }
+.linked-table .table-scroll { overflow-x: auto; }
+.trader-visuals .section-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+#health-content .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+    .chart-grid, .portfolio-health-charts { grid-template-columns: minmax(0, 1fr); gap:16px; }
+}
+@media (max-width: 600px) {
+    .chart-controls label { flex:1 1 130px; }
+    .chart-controls input, .chart-controls select { flex:1; min-width:0; }
+    #health-content .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

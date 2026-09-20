@@ -1,0 +1,14 @@
+const assert = require('assert');
+const fs = require('fs');
+const vm = require('vm');
+const c = vm.createContext({Date, URLSearchParams, window:{location:{pathname:'/trader/'+'a'.repeat(64),search:''}},document:{addEventListener(){}}});
+vm.runInContext(fs.readFileSync('static/js/trader.js','utf8'),c);
+assert.equal(vm.runInContext("tsToDate('')",c),'');
+assert.equal(vm.runInContext("tsToDate('garbage')",c),'');
+assert.equal(vm.runInContext("tsToDate('99999999999999999999')",c),'');
+assert.equal(vm.runInContext("tsToDate('0')",c),'1970-01-01');
+assert.equal(vm.runInContext("tsToDate(dateToTs('2024-02-29'))",c),'2024-02-29');
+assert.equal(vm.runInContext("normaliseTimestamp('-1')",c),'');
+assert.equal(vm.runInContext("normaliseTimestamp('253402300800')",c),'');
+assert.match(vm.runInContext("traderDate(1709251200)",c),/Mar 1, 2024/);
+console.log('trader date controls: ok');

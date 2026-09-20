@@ -35,7 +35,7 @@ function chainUrl(path) {
 
 function analyticsPlotLayout(overrides = {}) {
     const theme = getPlotlyTheme();
-    return {
+    const layout = {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { family: 'DM Sans, sans-serif', color: theme.fontColor, size: 11 },
@@ -50,6 +50,9 @@ function analyticsPlotLayout(overrides = {}) {
         legend: { orientation: 'h', y: -0.16, x: 0, font: { size: 10 } },
         ...overrides,
     };
+    // The shared helper supplies the same baseline used by dashboard charts while
+    // preserving Research's deliberate chart proportions and annotations.
+    return window.RyskCharts?.layout ? window.RyskCharts.layout(layout) : layout;
 }
 
 const ANALYTICS_PLOT_CONFIG = { responsive: true, displayModeBar: false, scrollZoom: false };
@@ -756,12 +759,35 @@ function renderLeaderboard(targetId, board, amountKey) {
         target.innerHTML = participantEmpty(board?.status === 'unavailable' ? 'This ranking is unavailable for the selected filters.' : undefined);
         return;
     }
+    const maximum = Math.max(...rows.map(row => Number(row[amountKey]) || 0), 1);
     target.innerHTML = `<div class="participant-leaderboard-head"><span></span><span>Trader</span><span>Amount</span><span>Entry APR</span></div>${rows.map(row => `<div class="participant-leaderboard-row">
         <span class="participant-rank">${escapeAnalyticsHtml(row.rank)}</span>
         <strong><a href="${traderHistoryUrl(row.trader_id)}">${escapeAnalyticsHtml(row.alias)}</a></strong>
-        <span>${compactCurrency(row[amountKey])}</span>
+        <span class="participant-amount"><b>${compactCurrency(row[amountKey])}</b><i style="width:${Math.max(3, Math.min(100, (Number(row[amountKey]) || 0) / maximum * 100))}%"></i></span>
         <span>${participantPercent(row.weighted_apr)}</span>
     </div>`).join('')}`;
+}
+
+function renderAprSegmentChart(segments) {
+    const chart = document.getElementById('apr-segment-chart');
+    if (!chart) return;
+    const visible = (segments || []).filter(segment => segment.status !== 'limited_history' && segment.notional_share_pct != null);
+    if (!visible.length) {
+        window.RyskCharts?.empty(chart, 'No reportable APR segments for this selection.');
+        return;
+    }
+    const colors = window.RyskCharts?.colors?.() || { premium: '#e8c181' };
+    window.RyskCharts?.render(chart, [{
+        type: 'bar', orientation: 'h', y: visible.map(segment => segment.label),
+        x: visible.map(segment => Number(segment.notional_share_pct) || 0),
+        marker: { color: colors.premium, opacity: .82 },
+        text: visible.map(segment => participantPercent(segment.notional_share_pct)), textposition: 'auto',
+        hovertemplate: '<b>%{y}</b><br>%{x:.1f}% of observed notional<extra></extra>',
+    }], {
+        margin: { l: 112, r: 28, t: 8, b: 28 }, showlegend: false,
+        xaxis: { ticksuffix: '%', range: [0, 100], gridcolor: colors.grid, fixedrange: true },
+        yaxis: { fixedrange: true, automargin: true },
+    });
 }
 
 function renderSegments(targetId, segments) {
@@ -801,6 +827,7 @@ function renderParticipantAnalytics(data) {
     const leaderboards = data.leaderboards || {};
     renderLeaderboard('notional-leaderboard', leaderboards.notional, 'notional');
     renderLeaderboard('premium-leaderboard', leaderboards.premium, 'premium');
+    renderAprSegmentChart(data.apr_segments);
     renderSegments('apr-segments', data.apr_segments);
     renderSegments('activity-segments', data.activity_segments);
     renderConcentration(data.concentration);
@@ -831,6 +858,7 @@ async function loadParticipantAnalytics() {
     const coverage = document.getElementById('participant-coverage');
     if (methodology) methodology.textContent = '';
     if (coverage) coverage.textContent = '';
+    window.RyskCharts?.empty('apr-segment-chart', 'Loading APR segments…');
     ['notional-leaderboard', 'premium-leaderboard', 'apr-segments', 'activity-segments', 'participant-concentration'].forEach(id => {
         const element = document.getElementById(id);
         if (element) element.innerHTML = '';
@@ -844,6 +872,7 @@ async function loadParticipantAnalytics() {
     } catch (error) {
         if (requestId !== participantRequestId) return;
         if (status) status.textContent = `Trader activity unavailable: ${error.message}`;
+        window.RyskCharts?.empty('apr-segment-chart', 'APR segments are unavailable for this selection.');
         ['notional-leaderboard', 'premium-leaderboard', 'apr-segments', 'activity-segments', 'participant-concentration'].forEach(id => {
             const element = document.getElementById(id);
             if (element) element.innerHTML = participantEmpty('Analytics unavailable for this selection.');
