@@ -47,13 +47,14 @@ function setRecentFilter(next, chainOverride = null) {
     recentFilters = { ...recentFilters, ...next };
     if (chainOverride !== null) recentChainOverride = chainOverride;
     recentPage = 1;
+    syncRecentNotionalInputs();
     renderSelectionChips();
     refreshExecutionHighlight();
     if (marketPulse?.popular_strikes) renderTrendingStrikes(marketPulse.popular_strikes);
     loadRecent();
 }
 
-function clearRecentFilters() { recentFilters = {}; recentChainOverride = null; recentPage = 1; renderSelectionChips(); refreshExecutionHighlight(); if (marketPulse?.popular_strikes) renderTrendingStrikes(marketPulse.popular_strikes); loadRecent(); }
+function clearRecentFilters() { recentFilters = {}; recentChainOverride = null; recentPage = 1; syncRecentNotionalInputs(); renderSelectionChips(); refreshExecutionHighlight(); if (marketPulse?.popular_strikes) renderTrendingStrikes(marketPulse.popular_strikes); loadRecent(); }
 
 function refreshExecutionHighlight() {
     renderExecutionTimeline();
@@ -75,6 +76,32 @@ function clearOpenPositionFilters() {
     setOpenPositionFilter({});
 }
 
+function syncRecentNotionalInputs() {
+    for (const bound of ['min', 'max']) {
+        const input = document.getElementById(`recent-${bound}-notional`);
+        if (input) {
+            input.value = recentFilters[`${bound}_notional`] ?? '';
+            input.setCustomValidity('');
+        }
+    }
+}
+
+function applyRecentNotionalFilter(event) {
+    event.preventDefault();
+    const minimum = document.getElementById('recent-min-notional');
+    const maximum = document.getElementById('recent-max-notional');
+    maximum.setCustomValidity('');
+    if (!event.currentTarget.reportValidity()) return;
+    const min = minimum.value === '' ? null : Number(minimum.value);
+    const max = maximum.value === '' ? null : Number(maximum.value);
+    if (min !== null && max !== null && min > max) {
+        maximum.setCustomValidity('Maximum notional must be at least the minimum.');
+        maximum.reportValidity();
+        return;
+    }
+    setRecentFilter({ min_notional: min, max_notional: max });
+}
+
 function renderSelectionChips() {
     const labels = [];
     if (recentFilters.symbol) labels.push(`${shortSymbol(recentFilters.symbol)}${recentFilters.strike != null ? ` ${formatStrike(recentFilters.strike)}` : ''}`);
@@ -82,6 +109,10 @@ function renderSelectionChips() {
     if (recentFilters.expiry) labels.push(`Expiry ${formatUnixDate(recentFilters.expiry)}`);
     if (recentFilters.from_ts) labels.push(`From ${new Date(recentFilters.from_ts * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC`);
     if (recentFilters.to_ts) labels.push(`Before ${new Date(recentFilters.to_ts * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC`);
+    for (const bound of ['min', 'max']) {
+        const value = recentFilters[`${bound}_notional`];
+        if (value != null) labels.push(`${bound === 'min' ? 'Min' : 'Max'} notional ${formatCurrency(value)}`);
+    }
     const el = document.getElementById('execution-selection');
     if (el) {
         el.innerHTML = labels.length ? `<span>Showing ${escapeAttr(labels.join(' · '))}</span> <button class="text-action" type="button" data-clear-recent>Clear</button>` : '';
@@ -2199,6 +2230,7 @@ function setChainFilter(chain) {
     selectedExpiry = null;
     selectedExplorerExpiry = null;
     recentFilters = {};
+    syncRecentNotionalInputs();
     recentChainOverride = null;
     ++openPositionRequest;
     recentPage = 1;
@@ -2256,6 +2288,10 @@ function initActNavScrollSpy() {
 // ── Init ──
 
 document.addEventListener('DOMContentLoaded', () => {
+    const notionalForm = document.getElementById('recent-notional-form');
+    notionalForm?.addEventListener('submit', applyRecentNotionalFilter);
+    notionalForm?.addEventListener('input', () => document.getElementById('recent-max-notional').setCustomValidity(''));
+
     loadGlobalDashboard();
 
     // Unified time-range selector — cascades to Overview, PnL, Put/Call

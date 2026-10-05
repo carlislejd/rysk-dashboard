@@ -553,7 +553,7 @@ def get_expiry_overview(conn, chain_id=None):
 
 def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id=None,
                       strike=None, from_ts=None, to_ts=None, open_only=False,
-                      now=None, alias_secret=None):
+                      now=None, alias_secret=None, min_notional=None, max_notional=None):
     """Paginated public trades with composable, half-open UTC time filters."""
     offset = (page - 1) * limit
     where_parts = []
@@ -573,6 +573,12 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
     if to_ts is not None:
         where_parts.append("created_at < ?")
         params.append(to_ts)
+    if min_notional is not None:
+        where_parts.append("notional_f >= ?")
+        params.append(min_notional)
+    if max_notional is not None:
+        where_parts.append("notional_f <= ?")
+        params.append(max_notional)
     if open_only:
         as_of = int(time.time()) if now is None else int(now)
         where_parts.extend(["expiry > ?", "outcome IS NULL"])
@@ -635,6 +641,7 @@ def get_global_trades(conn, page=1, limit=50, symbol=None, expiry=None, chain_id
         "pages": max(1, -(-total // limit)),
         "filters": {"symbol": symbol, "expiry": expiry, "strike": strike,
                     "from_ts": from_ts, "to_ts": to_ts, "open_only": open_only,
+                    "min_notional": min_notional, "max_notional": max_notional,
                     "chain_id": chain_id},
     }
 

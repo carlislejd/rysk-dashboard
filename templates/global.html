@@ -129,6 +129,15 @@
             <div class="chart-title-row"><div><div class="analytics-eyebrow">EXECUTION TAPE</div><h2>Latest trades</h2></div><button class="text-action" data-export-table="recent-table" type="button">Export CSV <span aria-hidden="true">↓</span></button></div><p class="card-subtitle">Choose a bar to filter the paginated execution tape. IV is estimated when available.</p>
             <div class="chart-title-row"><div class="tabs" id="execution-window-tabs" aria-label="Execution time window"><button class="tab-button active" data-execution-window="24h">24h</button><button class="tab-button" data-execution-window="7d">7d</button></div><div class="tabs" id="execution-metric-tabs" aria-label="Execution metric"><button class="tab-button active" data-execution-metric="notional">Notional</button><button class="tab-button" data-execution-metric="premium">Premium</button></div></div>
             <div id="execution-timeline-chart" class="chart-container rysk-chart" aria-label="Execution timeline"></div><label class="visually-hidden" for="execution-bucket-select">Execution time bucket</label><select id="execution-bucket-select" class="chart-select"><option value="">Select a time bucket</option></select><p id="execution-observation" class="chart-note"></p><div id="execution-selection" class="chart-selection" aria-live="polite"></div>
+            <form id="recent-notional-form" class="chart-controls" aria-label="Filter trades by notional">
+                <label for="recent-min-notional">Min notional ($)
+                    <input id="recent-min-notional" type="number" min="0" step="any" placeholder="No minimum" inputmode="decimal">
+                </label>
+                <label for="recent-max-notional">Max notional ($)
+                    <input id="recent-max-notional" type="number" min="0" step="any" placeholder="No maximum" inputmode="decimal">
+                </label>
+                <button class="rysk-chart-control" type="submit">Apply</button>
+            </form>
             <div id="recent-loading" class="loading">Loading...</div>
             <div id="recent-content" style="display: none;">
                 <table id="recent-table" class="data-table">

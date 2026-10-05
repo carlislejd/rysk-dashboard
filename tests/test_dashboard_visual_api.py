@@ -25,6 +25,27 @@ class TestDashboardVisualAPI(unittest.TestCase):
             self.assertEqual(values[key], value)
         self.connection.close.assert_called_once()
 
+    def test_notional_bounds_reach_service(self):
+        for query, minimum, maximum in (
+            ('min_notional=10000.5&max_notional=50000', 10000.5, 50000),
+            ('min_notional=0', 0, None),
+            ('max_notional=0', None, 0),
+            ('min_notional=&max_notional=', None, None),
+        ):
+            with self.subTest(query=query), patch.object(app, 'get_global_trades', return_value={'trades': []}) as service:
+                response = self.client.get('/api/global/trades?' + query)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(service.call_args.kwargs['min_notional'], minimum)
+                self.assertEqual(service.call_args.kwargs['max_notional'], maximum)
+
+    def test_invalid_notional_bounds_are_rejected_before_querying(self):
+        for query in ('min_notional=-1', 'max_notional=-1', 'min_notional=nan',
+                      'max_notional=inf', 'min_notional=text', 'min_notional=1e999',
+                      'min_notional=200&max_notional=100'):
+            with self.subTest(query=query):
+                self.assertEqual(self.client.get('/api/global/trades?' + query).status_code, 400)
+        self.connection.execute.assert_not_called()
+
     def test_existing_asset_drilldown_page_size_remains_supported(self):
         with patch.object(app, 'get_global_trades', return_value={'trades': []}) as service:
             response = self.client.get('/api/global/trades?limit=200&symbol=ETH')

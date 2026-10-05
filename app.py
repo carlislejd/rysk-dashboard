@@ -699,6 +699,16 @@ def api_global_trades():
         strike = float(strike_raw) if strike_raw is not None else None
         if strike is not None and (not math.isfinite(strike) or strike < 0):
             raise ValueError('strike must be a finite nonnegative number')
+        notional_bounds = {}
+        for key in ('min_notional', 'max_notional'):
+            raw = request.args.get(key, '').strip()
+            value = float(raw) if raw else None
+            if value is not None and (not math.isfinite(value) or value < 0):
+                raise ValueError(f'{key} must be a finite nonnegative number')
+            notional_bounds[key] = value
+        minimum, maximum = notional_bounds.values()
+        if minimum is not None and maximum is not None and minimum > maximum:
+            raise ValueError('min_notional must be less than or equal to max_notional')
         if page < 1 or not 1 <= limit <= 200:
             raise ValueError('page must be positive and limit must be between 1 and 200')
         chain_id = resolve_chain_filter()
@@ -708,7 +718,7 @@ def api_global_trades():
         try:
             data = get_global_trades(conn, page=page, limit=limit, symbol=symbol, expiry=expiry,
                                      chain_id=chain_id, alias_secret=PARTICIPANT_ALIAS_SECRET,
-                                     strike=strike, open_only=open_only, **dates)
+                                     strike=strike, open_only=open_only, **notional_bounds, **dates)
         finally:
             conn.close()
         if iv:

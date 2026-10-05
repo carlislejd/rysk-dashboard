@@ -118,6 +118,39 @@ class TestGlobalServices(unittest.TestCase):
         open_payload = get_global_trades(conn, symbol='HYPE', open_only=True, now=150)
         self.assertEqual(open_payload['total'], 4)
 
+    def test_notional_bounds_filter_before_pagination_and_compose(self):
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        conn.row_factory = sqlite3.Row
+        init_db(conn)
+        conn.executemany("""INSERT INTO trades
+            (tx_hash,address,chain_id,created_at,is_buy,is_put,symbol,quantity,strike,
+             price,premium,quantity_f,strike_f,premium_f,notional_f)
+            VALUES (?,'a',?,?,1,0,?,'1','10','1','1',1,10,1,?)""", [
+                ('small', 999, 101, 'HYPE', 99),
+                ('lower', 999, 102, 'HYPE', 100),
+                ('upper', 999, 103, 'HYPE', 200),
+                ('large', 999, 104, 'HYPE', 201),
+                ('other-chain', 1, 105, 'HYPE', 150),
+                ('other-asset', 999, 106, 'ETH', 150),
+                ('old', 999, 99, 'HYPE', 150),
+                ('zero', 999, 108, 'HYPE', 0),
+            ])
+        filters = dict(symbol='HYPE', chain_id=999, from_ts=100, to_ts=200,
+                       min_notional=100, max_notional=200, limit=1)
+        first = get_global_trades(conn, **filters)
+        second = get_global_trades(conn, page=2, **filters)
+        self.assertEqual(first['total'], 2)
+        self.assertEqual(first['pages'], 2)
+        self.assertEqual(first['trades'][0]['tx_hash'], 'upper')
+        self.assertEqual(second['trades'][0]['tx_hash'], 'lower')
+        self.assertEqual(get_global_trades(conn, min_notional=200)['total'], 2)
+        self.assertEqual(get_global_trades(conn, max_notional=100)['total'], 3)
+        self.assertEqual(get_global_trades(conn, min_notional=100, max_notional=100)['total'], 1)
+        self.assertEqual(get_global_trades(conn, max_notional=0)['trades'][0]['tx_hash'], 'zero')
+        self.assertEqual(get_global_trades(conn, min_notional=999)['total'], 0)
+        self.assertEqual(get_global_trades(conn)['total'], 8)
+
     def test_execution_timeline_fills_known_utc_buckets(self):
         conn = sqlite3.connect(':memory:')
         conn.row_factory = sqlite3.Row
