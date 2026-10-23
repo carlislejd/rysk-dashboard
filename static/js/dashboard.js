@@ -21,7 +21,7 @@ function renderOpenPositionsPage(page) {
         return dteMatch && exposureMatch;
     });
     if (filteredPositions.length === 0) {
-        container.innerHTML = '<p class="empty-state">No open option positions right now.</p>';
+        container.innerHTML = `<p class="empty-state">${openPositionsData.length ? 'No open positions match this selection. Clear the exposure filters to see your full book.' : 'No open option positions right now. Your expired positions remain in History below.'}</p>`;
         return;
     }
 
@@ -102,6 +102,14 @@ let splashTypingTimer = null;
 let mainLoadingEl = null;
 let accountChangeEl = null;
 let accountFilterEl = null;
+let accountRequest = null;
+let renderedAccount = '';
+let accountCheckedAt = null;
+let accountEntryPreviousFocus = null;
+
+function currentAccountRequest(request) {
+    return !request || (request === accountRequest && request.address === currentAccount && !request.controller.signal.aborted);
+}
 
 function parseWalletAddresses(value) {
     const seen = new Set();
@@ -165,12 +173,13 @@ function buildUrl(path, params = {}) {
     return query ? `${path}?${query}` : path;
 }
 
-function fetchWithAccount(path, params = {}) {
+function fetchWithAccount(path, params = {}, request = null) {
     const finalParams = { ...params };
-    if (currentAccount) {
-        finalParams.address = currentAccount;
+    const address = request ? request.address : currentAccount;
+    if (address) {
+        finalParams.address = address;
     }
-    return fetch(buildUrl(path, finalParams));
+    return fetch(buildUrl(path, finalParams), request ? { signal: request.controller.signal } : undefined);
 }
 
 function updateAccountUI(address) {
@@ -220,7 +229,7 @@ function getTokenClass(token) {
 }
 
 // Load positions
-async function loadPositions() {
+async function loadPositions(request = null) {
     const loading = document.getElementById('positions-loading');
     const content = document.getElementById('positions-content');
     const error = document.getElementById('positions-error');
@@ -236,15 +245,16 @@ async function loadPositions() {
     if (error) error.style.display = 'none';
 
     try {
-        const response = await fetchWithAccount('/api/positions');
+        const response = await fetchWithAccount('/api/positions', {}, request);
         const data = await response.json();
+        if (!currentAccountRequest(request)) return false;
 
         loading.style.display = 'none';
 
-        if (!data.success) {
+        if (!response.ok || !data.success) {
             error.textContent = data.error || 'Failed to load positions';
             error.style.display = 'block';
-            return;
+            return false;
         }
 
         notConfigured.style.display = 'none';
@@ -267,7 +277,7 @@ async function loadPositions() {
             const hasWeightedApr = weightedApr !== null && weightedApr !== undefined;
             const aprCard = hasWeightedApr ? `
                 <div class="summary-card">
-                    <span class="summary-label">Portfolio APR</span>
+                    <span class="summary-label">Open entry APR</span>
                     <span class="summary-value">${formatPercentage(weightedApr)}</span>
                 </div>
             ` : '';
@@ -374,36 +384,41 @@ async function loadPositions() {
             }
             document.body.classList.remove('sidepanel-open');
         }
+        return true;
     } catch (err) {
+        if (!currentAccountRequest(request)) return false;
         loading.style.display = 'none';
         error.textContent = 'Error loading positions: ' + err.message;
         error.style.display = 'block';
+        return false;
     }
 }
 
 // Load history
-async function loadHistory() {
+async function loadHistory(request = null) {
     const loading = document.getElementById('history-loading');
     const content = document.getElementById('history-content');
     const error = document.getElementById('history-error');
     const notConfigured = document.getElementById('history-not-configured');
     const detailButton = document.getElementById('history-detail-button');
+    if (!historyDataCache) loading.style.display = 'block';
+    error.style.display = 'none';
 
     if (detailButton && !historyDataCache) {
         detailButton.disabled = true;
         detailButton.textContent = '🔍 Deep Dive (Loading...)';
     }
     try {
-        const response = await fetchWithAccount('/api/history');
+        const response = await fetchWithAccount('/api/history', {}, request);
         const data = await response.json();
+        if (!currentAccountRequest(request)) return false;
 
         loading.style.display = 'none';
 
-        if (!data.success) {
+        if (!response.ok || !data.success) {
             error.textContent = data.error || 'Failed to load history';
             error.style.display = 'block';
-            historyDataCache = null;
-            return;
+            return false;
         }
 
         notConfigured.style.display = 'none';
@@ -420,7 +435,6 @@ async function loadHistory() {
         const trades = history.trades || [];
         const expiredPositions = history.expired_positions || [];
         const summary = history.summary || {};
-        accountOutcomesExpanded = false;
 
         historyDataCache = history;
         historyDataTimestamp = new Date();
@@ -463,7 +477,7 @@ async function loadHistory() {
         }
 
         const assetOutcomes = summary.asset_outcomes || [];
-        html += `<div class="chart-card" style="margin: 0 0 12px; width:100%;"><h3 class="subsection-title">Outcome composition by asset</h3><div id="history-outcome-chart" class="chart-container rysk-chart" style="height:240px"></div><label>Asset outcome <select id="history-outcome-select"><option value="">All historical outcomes</option></select></label><button id="history-outcome-clear" class="rysk-chart-control" type="button" hidden>Clear selection</button><div id="history-outcome-selection" class="selection-chips" aria-live="polite"></div></div>`;
+        html += `<div class="chart-card" style="margin: 0 0 12px; width:100%;"><h3 class="subsection-title">Outcome composition by asset <span class="heading-detail">/ all loaded history</span></h3><div id="history-outcome-chart" class="chart-container rysk-chart" style="height:240px"></div><label>Asset outcome <select id="history-outcome-select"><option value="">All historical outcomes</option></select></label><button id="history-outcome-clear" class="rysk-chart-control" type="button" hidden>Clear selection</button><div id="history-outcome-selection" class="selection-chips" aria-live="polite"></div></div>`;
         if (assetOutcomes.length > 0) {
             html += `<h3 class="subsection-title">Expiry Outcomes by Asset (${assetOutcomes.length})</h3>`;
             html += `<div class="history-actions" style="justify-content: flex-start; margin-bottom: 6px;">`;
@@ -502,22 +516,135 @@ async function loadHistory() {
         content.innerHTML = html;
         content.style.display = 'block';
         renderHistoryOutcomeComposition(expiredPositions);
-        renderExpiredSection(expiredPositions, summary);
-        renderAprChart(expiredPositions, null);
+        setupHistoryExplorer(expiredPositions);
         // Outcome filtering is owned by the composition chart/select so the
         // table and APR scatter always share one selection source.
         renderDeepDiveInline(history);
+        return true;
     } catch (err) {
+        if (!currentAccountRequest(request)) return false;
         loading.style.display = 'none';
         error.textContent = 'Error loading history: ' + err.message;
         error.style.display = 'block';
-        historyDataCache = null;
-        historyDataTimestamp = null;
         if (detailButton) {
             detailButton.disabled = true;
             detailButton.textContent = '🔍 Deep Dive (Error)';
         }
+        return false;
     }
+}
+
+const defaultHistoryFilters = () => ({ asset: '', outcome: '', type: '', days: 0, sort: 'recent' });
+let historyFilters = defaultHistoryFilters();
+let historyPage = 1;
+
+function historyText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+}
+
+function historyOutcome(position) {
+    const outcome = String(position.outcome || '').toLowerCase();
+    return ['assigned', 'returned'].includes(outcome) ? outcome : 'pending';
+}
+
+function historyExpiryTime(position) {
+    const seconds = Number(position.expiry);
+    if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+    const date = Date.parse(position.expiry_date || '');
+    return Number.isFinite(date) ? date : null;
+}
+
+function filterWalletHistory(positions, filters = historyFilters, now = Date.now()) {
+    const days = Number(filters.days) || 0;
+    const rows = positions.filter(position => {
+        const expiry = historyExpiryTime(position);
+        return (!filters.asset || String(position.symbol || '').toUpperCase() === filters.asset)
+            && (!filters.outcome || historyOutcome(position) === filters.outcome)
+            && (!filters.type || String(position.type || '').toLowerCase() === filters.type)
+            && (!days || (expiry !== null && expiry >= now - days * 86400000 && expiry <= now));
+    });
+    const number = value => value !== null && value !== '' && Number.isFinite(Number(value)) ? Number(value) : -Infinity;
+    return rows.sort((a, b) => {
+        if (filters.sort === 'premium' || filters.sort === 'apr') {
+            const order = number(b[filters.sort]) - number(a[filters.sort]);
+            if (order && !Number.isNaN(order)) return order;
+        }
+        const left = historyExpiryTime(a), right = historyExpiryTime(b);
+        if (left === null) return right === null ? 0 : 1;
+        if (right === null) return -1;
+        return filters.sort === 'oldest' ? left - right : right - left;
+    });
+}
+
+function historyFiltersActive() {
+    return Boolean(historyFilters.asset || historyFilters.outcome || historyFilters.type || historyFilters.days || historyFilters.sort !== 'recent');
+}
+
+function renderWalletHistory() {
+    const positions = historyDataCache?.expired_positions || [];
+    const filtered = filterWalletHistory(positions);
+    const filters = { asset: 'asset', outcome: 'outcome', type: 'type', days: 'days', sort: 'sort' };
+    Object.entries(filters).forEach(([id, key]) => {
+        const control = document.getElementById(`history-filter-${id}`);
+        if (control) control.value = String(historyFilters[key]);
+    });
+    const summary = document.getElementById('history-filter-summary');
+    if (summary) summary.textContent = `${filtered.length.toLocaleString()} of ${positions.length.toLocaleString()} loaded expired positions${historyDataTimestamp ? ` · checked ${historyDataTimestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}`;
+    const clear = document.getElementById('history-filters-clear');
+    if (clear) clear.hidden = !historyFiltersActive();
+    const exportButton = document.getElementById('history-export');
+    if (exportButton) exportButton.disabled = !filtered.length;
+    renderExpiredSection(filtered, { ...(historyDataCache?.summary || {}), expired_count: positions.length }, null, historyPage);
+    renderAprChart(filtered, null);
+}
+
+function setupHistoryExplorer(positions) {
+    const toolbar = document.getElementById('portfolio-history-toolbar');
+    if (toolbar) toolbar.hidden = false;
+    const asset = document.getElementById('history-filter-asset');
+    const assets = [...new Set(positions.map(position => String(position.symbol || '').toUpperCase()).filter(Boolean))].sort();
+    if (asset) asset.innerHTML = `<option value="">All assets</option>${assets.map(symbol => `<option value="${historyText(symbol)}">${historyText(symbol)}</option>`).join('')}`;
+    ['asset', 'outcome', 'type', 'days', 'sort'].forEach(key => {
+        const control = document.getElementById(`history-filter-${key}`);
+        if (control) control.onchange = () => {
+            historyFilters[key] = key === 'days' ? Number(control.value) : control.value;
+            historyPage = 1;
+            renderHistoryOutcomeComposition(positions);
+            renderWalletHistory();
+        };
+    });
+    const clear = document.getElementById('history-filters-clear');
+    if (clear) clear.onclick = () => {
+        historyFilters = defaultHistoryFilters(); historyPage = 1;
+        renderHistoryOutcomeComposition(positions); renderWalletHistory();
+    };
+    const exportButton = document.getElementById('history-export');
+    if (exportButton) exportButton.onclick = exportWalletHistory;
+    renderWalletHistory();
+}
+
+function walletHistoryCsv(positions) {
+    // Keep addresses and transaction identifiers out of a routine export.
+    const columns = ['Trade date (UTC)', 'Expiry date (UTC)', 'Asset', 'Chain', 'Strategy', 'Side', 'Type', 'Quantity', 'Strike (USD)', 'Premium (USD)', 'Entry APR (%)', 'Outcome', 'Expiry price (USD)'];
+    const quote = value => {
+        let text = String(value ?? '');
+        // Spreadsheet formulas are untrusted even when they come from an API.
+        if (typeof value === 'string' && /^[\s]*[=+\-@]/.test(text)) text = "'" + text;
+        return `"${text.replace(/"/g, '""')}"`;
+    };
+    const rows = positions.map(position => [position.created_at_iso || position.created_at, position.expiry_date, position.symbol, position.chain_name || position.chain_id, position.strategy, position.side, position.type, position.quantity, position.strike, position.premium, position.apr, position.outcome || 'Pending / unknown', position.expiry_price]);
+    return [columns, ...rows].map(row => row.map(quote).join(',')).join('\r\n');
+}
+
+function exportWalletHistory() {
+    const positions = filterWalletHistory(historyDataCache?.expired_positions || []);
+    if (!positions.length) return;
+    const url = URL.createObjectURL(new Blob(['\ufeff' + walletHistoryCsv(positions)], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rysk-option-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function renderHistoryOutcomeComposition(expiredPositions) {
@@ -535,6 +662,7 @@ function renderHistoryOutcomeComposition(expiredPositions) {
     if (!assets.length) { api.empty('history-outcome-chart', 'No historical outcomes yet.'); return; }
     const select = document.getElementById('history-outcome-select');
     select.innerHTML = `<option value="">All historical outcomes</option>${assets.flatMap(symbol => ['returned', 'assigned', 'pending'].map(outcome => `<option value="${symbol}|${outcome}">${symbol} · ${outcome === 'pending' ? 'Pending / unknown' : outcome}</option>`)).join('')}`;
+    select.value = historyFilters.asset && historyFilters.outcome ? `${historyFilters.asset}|${historyFilters.outcome}` : '';
     const percent = key => assets.map(symbol => { const total = Object.values(byAsset[symbol]).reduce((a, b) => a + b, 0); return total ? byAsset[symbol][key] / total * 100 : 0; });
     const drawHistoryComposition = () => api.render('history-outcome-chart', [
         { type: 'bar', name: 'Returned', x: assets, y: percent('returned'), customdata: assets, marker: { color: assets.map(symbol => select.value === `${symbol}|returned` ? '$highlight' : '$forest') }, hovertemplate: '%{x}<br>Returned: %{y:.1f}%<extra></extra>' },
@@ -546,10 +674,10 @@ function renderHistoryOutcomeComposition(expiredPositions) {
         drawHistoryComposition();
         const [symbol, outcome] = value ? value.split('|') : ['', ''];
         const selected = document.getElementById('history-outcome-selection');
-        const filtered = symbol ? expiredPositions.filter(p => (p.symbol || '').toUpperCase() === symbol && (outcome === 'pending' ? !['returned', 'assigned'].includes(String(p.outcome || '').toLowerCase()) : String(p.outcome || '').toLowerCase() === outcome)) : expiredPositions;
-        if (selected) selected.innerHTML = value ? `<span class="selection-chip">${symbol} · ${outcome} </span>` : '';
+        historyFilters.asset = symbol; historyFilters.outcome = outcome; historyPage = 1;
+        if (selected) selected.innerHTML = value ? `<span class="selection-chip">${historyText(symbol)} · ${historyText(outcome)} </span>` : '';
         document.getElementById('history-outcome-clear').hidden = !value;
-        renderExpiredSection(filtered, { ...(historyDataCache?.summary || {}), expired_count: filtered.length }, null, 1); renderAprChart(filtered, null);
+        renderWalletHistory();
     };
     select.onchange = () => apply(select.value);
     const allButton = document.getElementById('outcomes-show-all');
@@ -561,6 +689,9 @@ function renderHistoryOutcomeComposition(expiredPositions) {
         toggleButton.textContent = accountOutcomesExpanded ? 'Show fewer' : 'Show all assets';
     };
     document.getElementById('history-outcome-clear').onclick = () => { select.value = ''; apply(''); };
+    document.getElementById('history-outcome-clear').hidden = !select.value;
+    const selectionLabel = document.getElementById('history-outcome-selection');
+    if (selectionLabel) selectionLabel.textContent = select.value ? `${historyFilters.asset} · ${historyFilters.outcome}` : '';
     api.bindClick('history-outcome-chart', event => { const symbol = event?.points?.[0]?.customdata, outcome = event?.points?.[0]?.data?.name?.toLowerCase().replace(' / unknown', '') || ''; if (!symbol) return; const value = `${symbol}|${outcome === 'pending' ? 'pending' : outcome}`; select.value = select.value === value ? '' : value; apply(select.value); });
 }
 
@@ -577,7 +708,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
         : `${filteredCount} of ${totalCount}${symbolUpper ? ` · ${symbolUpper}` : ''}`;
 
     if (filteredCount === 0) {
-        return `<h3 class="subsection-title">Expired Option Positions (${titleCount})</h3><p class="empty-state">No expired positions yet.</p>`;
+        return `<h3 class="subsection-title">Expired Option Positions (${titleCount})</h3><div class="empty-state portfolio-history-empty"><strong>${historyFiltersActive() ? 'No positions match this selection.' : 'Your history is just getting started.'}</strong><p>${historyFiltersActive() ? 'Clear the filters or choose another expiry window to explore more history.' : 'Expired positions and settlement outcomes appear here. Open positions are shown above.'}</p></div>`;
     }
 
     const totalPages = Math.max(1, Math.ceil(filteredCount / pageSize));
@@ -599,7 +730,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
     }
 
     html += `
-        <table class="data-table">
+        <div class="table-scroll"><table class="data-table">
             <thead>
                 <tr>
                     <th>Date</th>
@@ -642,7 +773,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
         `;
     }
 
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
 
     if (totalPages > 1) {
         html += `
@@ -660,6 +791,7 @@ function buildExpiredSection(expiredPositions, summary, filterSymbol = null, pag
 function renderExpiredSection(expiredPositions, summary, filterSymbol = null, page = 1) {
     const container = document.getElementById('expired-section');
     if (!container) return;
+    historyPage = Math.min(Math.max(page, 1), Math.max(1, Math.ceil(expiredPositions.length / 5)));
     container.innerHTML = buildExpiredSection(expiredPositions, summary, filterSymbol, page);
 
     // Attach pager handlers
@@ -1317,8 +1449,12 @@ function renderPortfolioHealth(positionsData, historyData) {
 
     if (!openPositions.length) {
         healthContent.style.display = 'none';
+        const empty = document.getElementById('health-empty');
+        if (empty) empty.hidden = false;
         return;
     }
+    const empty = document.getElementById('health-empty');
+    if (empty) empty.hidden = true;
 
     // DTE distribution
     const now = Date.now() / 1000;
@@ -1364,7 +1500,7 @@ function renderPortfolioHealth(positionsData, historyData) {
             <div class="summary-value">${dteOver14d}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Portfolio APR</div>
+            <div class="summary-label">Open entry APR</div>
             <div class="summary-value">${summary.open_weighted_apr != null ? formatPercentage(summary.open_weighted_apr) : '—'}</div>
         </div>
     `;
@@ -1527,6 +1663,29 @@ function _renderPnlFromCache() {
     if (_pnlHistoryCache) renderAccountPnl(_pnlHistoryCache, _pnlOpenPositionsCache);
 }
 
+function settledOptionPayoff(positions) {
+    let premium = 0, intrinsic = 0, settledCount = 0, missingCount = 0;
+    const numeric = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+    for (const position of positions) {
+        const outcome = historyOutcome(position);
+        if (outcome === 'pending') continue;
+        settledCount++;
+        const side = String(position.side || '').toLowerCase();
+        const type = String(position.type || '').toLowerCase();
+        if (!numeric(position.premium) || !['buy', 'sell'].includes(side)) { missingCount++; continue; }
+        let payoff = 0;
+        if (outcome === 'assigned') {
+            if (!['call', 'put'].includes(type) || ![position.expiry_price, position.strike, position.quantity].every(numeric)
+                || Number(position.expiry_price) < 0 || Number(position.strike) < 0) { missingCount++; continue; }
+            payoff = Math.max(0, type === 'put' ? Number(position.strike) - Number(position.expiry_price) : Number(position.expiry_price) - Number(position.strike)) * Math.abs(Number(position.quantity));
+        }
+        const sign = side === 'sell' ? 1 : -1;
+        premium += sign * Math.abs(Number(position.premium));
+        intrinsic += sign * payoff;
+    }
+    return { value: settledCount && !missingCount ? premium - intrinsic : null, premium, intrinsic, settledCount, missingCount };
+}
+
 function renderAccountPnl(historyData, openPositions) {
     _pnlHistoryCache = historyData;
     _pnlOpenPositionsCache = openPositions || [];
@@ -1539,8 +1698,8 @@ function renderAccountPnl(historyData, openPositions) {
 
     const expired = historyData?.expired_positions || [];
 
-    // Include active (open) positions — premium is received upfront on
-    // European options, so it counts on both bases (trade date or expiry month)
+    // Include open-position premium as recorded activity on either date basis.
+    // The separate option payoff estimate excludes open positions.
     const activePositionsTagged = (_pnlOpenPositionsCache || []).map(p => ({
         ...p,
         outcome: 'active',  // mark so we can distinguish from settled
@@ -1550,8 +1709,14 @@ function renderAccountPnl(historyData, openPositions) {
 
     if (!allPositions.length) {
         pnlContent.style.display = 'none';
+        const empty = document.getElementById('pnl-empty');
+        if (empty) empty.hidden = false;
         return;
     }
+    const empty = document.getElementById('pnl-empty');
+    if (empty) empty.hidden = true;
+    const pnlStatus = document.getElementById('pnl-data-status');
+    if (pnlStatus) { pnlStatus.hidden = true; pnlStatus.textContent = ''; }
 
     // Update basis hint
     if (basisHint) {
@@ -1641,25 +1806,10 @@ function renderAccountPnl(historyData, openPositions) {
     }).filter(d => d != null);
     const avgDte = dtes.length > 0 ? dtes.reduce((s, d) => s + d, 0) / dtes.length : null;
 
-    // Ending Notional (True PnL) — premium collected minus assignment losses
-    // OTM: full premium kept, no assignment cost → net = premium
-    // ITM: premium kept but assigned. Loss = |expiry_price - strike| * quantity
-    //   Put assigned: bought at strike, worth expiry_price → loss = (strike - expiry_price) * qty
-    //   Call assigned: sold at strike, asset went to expiry_price → loss = (expiry_price - strike) * qty
-    // Active: no realized loss yet → counted as premium only
-    let totalAssignmentLoss = 0;
-    for (const p of itmPositions) {
-        if (p.expiry_price != null && p.strike != null && p.quantity != null) {
-            const qty = Math.abs(p.quantity);
-            const isPut = (p.type || '').toLowerCase() === 'put';
-            if (isPut) {
-                totalAssignmentLoss += Math.max(0, (p.strike - p.expiry_price) * qty);
-            } else {
-                totalAssignmentLoss += Math.max(0, (p.expiry_price - p.strike) * qty);
-            }
-        }
-    }
-    const endingPnl = totalPremium - totalAssignmentLoss;
+    // A settled option payoff is separate from collateral returns and open risk.
+    // Incomplete settlement inputs cannot silently turn into zero intrinsic.
+    const payoff = settledOptionPayoff(filtered);
+    const endingPnl = payoff.value;
 
     const viewLabel = _pnlView === 'monthly' && _pnlSelectedMonth
         ? _formatMonth(_pnlSelectedMonth)
@@ -1673,16 +1823,16 @@ function renderAccountPnl(historyData, openPositions) {
         ? ` · ${pendingPositions.length} settling`
         : '';
 
-    const endingPnlColor = endingPnl >= 0 ? 'var(--accent)' : 'var(--color-error)';
-    const assignmentNote = totalAssignmentLoss > 0
-        ? `${formatCurrency(totalAssignmentLoss)} assignment loss`
-        : 'No assignment losses';
+    const endingPnlColor = endingPnl === null ? 'var(--text-muted)' : endingPnl >= 0 ? 'var(--accent)' : 'var(--color-error)';
+    const assignmentNote = payoff.missingCount
+        ? `${payoff.missingCount} settled positions missing payoff inputs`
+        : payoff.settledCount ? `${payoff.settledCount} settled positions · open / pending excluded` : 'No settled positions';
 
     pnlGrid.innerHTML = `
         <div class="summary-card">
-            <div class="summary-label">Total Premium Collected</div>
+            <div class="summary-label">Recorded premium</div>
             <div class="summary-value" title="${formatCurrency(totalPremium)}">${formatTileCurrency(totalPremium, 2)}</div>
-            <div class="summary-subtext">${filtered.length} positions${activeLabel}${pendingLabel}</div>
+            <div class="summary-subtext">Gross amounts · ${filtered.length} positions${activeLabel}${pendingLabel}</div>
         </div>
         <div class="summary-card">
             <div class="summary-label">Premium Expired OTM</div>
@@ -1701,7 +1851,7 @@ function renderAccountPnl(historyData, openPositions) {
             <div class="summary-subtext">${pendingPositions.length} expired, outcome pending</div>
         </div>` : ''}
         <div class="summary-card">
-            <div class="summary-label">Return Rate</div>
+            <div class="summary-label">Returned at expiry</div>
             <div class="summary-value">${settledCount > 0 ? formatPercentage(returnRate) : '—'}</div>
             <div class="summary-subtext">${settledCount > 0 ? `${otmPositions.length} of ${settledCount} settled` : 'No settled positions'}</div>
         </div>
@@ -1710,7 +1860,7 @@ function renderAccountPnl(historyData, openPositions) {
             <div class="summary-value" title="${formatCurrency(totalNotional)}">${formatTileCurrency(totalNotional, 2)}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Avg APR</div>
+            <div class="summary-label">Average entry APR</div>
             <div class="summary-value">${avgApr != null ? formatPercentage(avgApr) : '—'}</div>
             <div class="summary-subtext">${aprs.length} positions with APR</div>
         </div>
@@ -1719,8 +1869,8 @@ function renderAccountPnl(historyData, openPositions) {
             <div class="summary-value">${avgDte != null ? formatNumber(avgDte, 1) + 'd' : '—'}</div>
         </div>
         <div class="summary-card">
-            <div class="summary-label">Net PnL</div>
-            <div class="summary-value" title="${formatCurrency(endingPnl)}" style="color: ${endingPnlColor};">${formatTileCurrency(endingPnl, 2)}</div>
+            <div class="summary-label">Option payoff estimate</div>
+            <div class="summary-value" title="${endingPnl === null ? 'Unavailable' : formatCurrency(endingPnl)}" style="color: ${endingPnlColor};">${endingPnl === null ? '—' : formatTileCurrency(endingPnl, 2)}</div>
             <div class="summary-subtext">${assignmentNote}</div>
         </div>
     `;
@@ -1802,25 +1952,84 @@ function renderAccountPnl(historyData, openPositions) {
     }
 }
 
-async function loadAllData() {
-    const tasks = [];
+function clearPortfolioView() {
+    historyDataCache = null; historyDataTimestamp = null; accountCheckedAt = null;
+    historyFilters = defaultHistoryFilters(); historyPage = 1;
+    _pnlHistoryCache = null; _pnlOpenPositionsCache = []; _pnlSelectedMonth = null;
+    accountOutcomesExpanded = false;
+    positionsAssetSummary = []; openPositionsData = []; selectedAssetSymbol = null; selectedAssetExpiry = '';
+    portfolioDteSelection = ''; portfolioExposureSelection = null;
+    ['positions-content', 'history-content', 'health-content', 'pnl-content'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.style.display = 'none';
+    });
+    ['positions-error', 'history-error'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.style.display = 'none';
+    });
+    const toolbar = document.getElementById('portfolio-history-toolbar');
+    if (toolbar) toolbar.hidden = true;
+    const summary = document.getElementById('history-filter-summary');
+    if (summary) summary.textContent = '';
+    const exportButton = document.getElementById('history-export');
+    if (exportButton) exportButton.disabled = true;
+    const empty = document.getElementById('pnl-empty');
+    if (empty) empty.hidden = true;
+    const healthEmpty = document.getElementById('health-empty');
+    if (healthEmpty) healthEmpty.hidden = true;
+    const pnlStatus = document.getElementById('pnl-data-status');
+    if (pnlStatus) { pnlStatus.hidden = true; pnlStatus.textContent = ''; }
+    document.body.classList.remove('sidepanel-open');
+    ['hero-net-pnl', 'hero-open-notional', 'hero-open-premium', 'hero-portfolio-apr', 'hero-account-next-expiry'].forEach(id => _setAccountHero(id, '—', 'Awaiting wallet data'));
+}
 
+async function loadAllData() {
     if (!currentAccount) {
         setAccountStatus('Enter a wallet address');
-        await Promise.all(tasks);
         return;
     }
-
-    setAccountStatus('Loading...');
-    tasks.push(loadPositions(), loadHistory());
-
-    await Promise.all(tasks);
+    accountRequest?.controller.abort();
+    const request = { address: currentAccount, controller: new AbortController() };
+    accountRequest = request;
+    if (renderedAccount !== currentAccount) {
+        clearPortfolioView();
+        // A previous account's cache is not evidence that this request succeeded.
+        _positions_cache.delete(currentAccount.toLowerCase());
+        renderedAccount = currentAccount;
+    }
+    const refreshButton = document.getElementById('account-refresh');
+    if (refreshButton) refreshButton.disabled = true;
+    setAccountStatus('Checking positions and history…');
+    const timeout = setTimeout(() => {
+        if (!currentAccountRequest(request)) return;
+        request.controller.abort();
+        setAccountStatus('Refresh timed out. Try again.', true);
+        if (refreshButton) refreshButton.disabled = false;
+        ['positions-loading', 'history-loading'].forEach(id => { const element = document.getElementById(id); if (element) element.style.display = 'none'; });
+    }, 30000);
+    let results;
+    try {
+        results = await Promise.all([loadPositions(request), loadHistory(request)]);
+    } finally {
+        clearTimeout(timeout);
+    }
+    if (!currentAccountRequest(request)) return;
 
     // Render new sections after all data is loaded
     const posData = _positions_cache.get(currentAccount.toLowerCase());
     if (posData) renderPortfolioHealth(posData, historyDataCache);
-    if (historyDataCache) renderAccountPnl(historyDataCache, posData?.open_positions || []);
-    populateAccountHero(posData, historyDataCache);
+    // A leg can move from open positions into history at expiry. Never combine
+    // a refreshed half with an older half: that can omit or double-count it.
+    const complete = results.every(Boolean);
+    if (complete && historyDataCache && posData) renderAccountPnl(historyDataCache, posData.open_positions || []);
+    populateAccountHero(results[0] ? posData : null, results[1] ? historyDataCache : null);
+    const pnlStatus = document.getElementById('pnl-data-status');
+    if (pnlStatus) {
+        pnlStatus.hidden = complete;
+        pnlStatus.textContent = _pnlHistoryCache
+            ? 'Showing the last complete premium snapshot. Positions and history could not both refresh.'
+            : 'Premium totals are unavailable until positions and history both load. Use Refresh to try again.';
+    }
 
     // Resize any Plotly charts after render (handles cases where container just became visible)
     setTimeout(() => {
@@ -1829,7 +2038,14 @@ async function loadAllData() {
         });
     });
 
-    setAccountStatus('');
+    if (refreshButton) refreshButton.disabled = false;
+    if (results.every(Boolean)) {
+        accountCheckedAt = new Date();
+        setAccountStatus(`Checked ${accountCheckedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+    } else {
+        const previous = accountCheckedAt ? ` Last complete check ${accountCheckedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.` : '';
+        setAccountStatus(`Some data could not refresh.${previous}`, true);
+    }
 }
 
 // ── Hero KPI population (account) ──
@@ -1853,31 +2069,16 @@ function populateAccountHero(positionsData, historyData) {
     const openPositions = positionsData?.open_positions || [];
     const expired = historyData?.expired_positions || [];
 
-    // Net PnL (lifetime): premium collected - realized assignment losses
-    // Mirror calc in renderAccountPnl, computed across all expired + open positions
-    let totalPremium = 0;
-    let assignmentLoss = 0;
-    for (const p of expired) {
-        totalPremium += (p.premium || 0);
-        if ((p.outcome || '').toLowerCase() === 'assigned'
-            && p.expiry_price != null && p.strike != null && p.quantity != null) {
-            const qty = Math.abs(p.quantity);
-            const isPut = (p.type || '').toLowerCase() === 'put';
-            const loss = isPut
-                ? Math.max(0, (p.strike - p.expiry_price) * qty)
-                : Math.max(0, (p.expiry_price - p.strike) * qty);
-            assignmentLoss += loss;
-        }
+    // Premium is an activity measure, not total portfolio profit.
+    const rows = [...expired, ...openPositions];
+    const hasPremium = positionsData && historyData && rows.every(position => position.premium != null && Number.isFinite(Number(position.premium)));
+    const totalPremium = rows.reduce((sum, position) => sum + Number(position.premium || 0), 0);
+    _setAccountHero('hero-net-pnl', hasPremium ? formatTileCurrency(totalPremium) : '—', hasPremium ? 'Gross premium · open + expired positions' : 'Waiting for positions and history', '', hasPremium ? formatCurrency(totalPremium) : '');
+
+    if (!positionsData) {
+        ['hero-open-notional', 'hero-open-premium', 'hero-portfolio-apr', 'hero-account-next-expiry'].forEach(id => _setAccountHero(id, '—', 'Positions unavailable'));
+        return;
     }
-    for (const p of openPositions) {
-        totalPremium += (p.premium || 0);
-    }
-    const netPnl = totalPremium - assignmentLoss;
-    const pnlClass = netPnl >= 0 ? 'pos' : 'neg';
-    const pnlSub = assignmentLoss > 0
-        ? `${formatCurrency(totalPremium)} premium · ${formatCurrency(assignmentLoss)} assigned loss`
-        : `${formatCurrency(totalPremium)} premium · no assigned losses`;
-    _setAccountHero('hero-net-pnl', formatTileCurrency(netPnl), pnlSub, pnlClass, formatCurrency(netPnl));
 
     // Open Notional
     _setAccountHero('hero-open-notional',
@@ -1889,7 +2090,7 @@ function populateAccountHero(positionsData, historyData) {
     // Open Premium
     _setAccountHero('hero-open-premium',
         formatTileCurrency(summary.open_premium_total || 0),
-        'Premium received on open legs',
+        'Net premium on open legs',
         '',
         formatCurrency(summary.open_premium_total || 0));
 
@@ -2006,7 +2207,15 @@ function showMainContent() {
 
 function showAccountEntry() {
     if (!splashScreenEl) return;
+    accountEntryPreviousFocus = document.activeElement;
     splashScreenEl.style.display = 'flex';
+    const workspace = document.querySelector('.app-shell');
+    if (workspace) workspace.inert = true;
+    document.body.classList.add('account-entry-open');
+    const cancel = document.getElementById('account-entry-cancel');
+    const forget = document.getElementById('account-forget');
+    if (cancel) cancel.hidden = !currentAccount;
+    if (forget) forget.hidden = !walletAddresses.length;
     if (splashErrorEl) splashErrorEl.style.display = 'none';
     if (splashTypingEl) {
         splashTypingEl.textContent = currentAccount
@@ -2024,6 +2233,37 @@ function hideAccountEntry() {
     if (splashScreenEl) {
         splashScreenEl.style.display = 'none';
     }
+    const workspace = document.querySelector('.app-shell');
+    if (workspace) workspace.inert = false;
+    document.body.classList.remove('account-entry-open');
+    accountEntryPreviousFocus?.focus?.();
+}
+
+function forgetWallets() {
+    accountRequest?.controller.abort();
+    accountRequest = null;
+    walletAddresses = []; selectedWallet = 'all'; currentAccount = ''; renderedAccount = '';
+    defaultAccount = '';
+    try { localStorage.removeItem('dashboardAccounts'); localStorage.removeItem('dashboardAccount'); } catch (_) {}
+    _positions_cache.clear();
+    clearPortfolioView();
+    if (splashAccountInputEl) splashAccountInputEl.value = '';
+    if (accountInputEl) accountInputEl.value = '';
+    updateAccountUI('');
+    setAccountStatus('Saved wallets removed from this browser.');
+    setMainLoading(false);
+    showAccountEntry();
+    if (splashTypingEl) splashTypingEl.textContent = 'Saved wallets removed. Add a public address to start again.';
+}
+
+function readSavedWallets() {
+    try {
+        let values;
+        try { values = JSON.parse(localStorage.getItem('dashboardAccounts') || '[]'); } catch (_) { values = []; }
+        const addresses = Array.isArray(values) ? values.filter(value => typeof value === 'string') : [];
+        const source = addresses.length ? addresses.join(',') : localStorage.getItem('dashboardAccount') || '';
+        return parseWalletAddresses(source).filter(address => /^0x[0-9a-fA-F]{40}$/.test(address)).slice(0, 10);
+    } catch (_) { return []; }
 }
 
 function setMainLoading(isLoading, message = 'Loading account data...') {
@@ -2079,9 +2319,7 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
     updateAccountUI(currentAccount);
     saveWalletAddresses();
 
-    // Reset cached state similar to applyAccountChange
-    historyDataCache = null;
-    historyDataTimestamp = null;
+    // loadAllData clears all wallet-scoped data together when the address changes.
     const detailButton = document.getElementById('history-detail-button');
     if (detailButton) {
         detailButton.disabled = true;
@@ -2096,11 +2334,6 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
         positionsDetail.classList.remove('is-open');
         positionsDetail.style.display = 'none';
     }
-    positionsAssetSummary = [];
-    openPositionsData = [];
-    selectedAssetSymbol = null;
-    selectedAssetExpiry = '';
-
     if (fromSplash) {
         if (splashErrorEl) splashErrorEl.style.display = 'none';
         if (splashLaunchEl) {
@@ -2111,18 +2344,20 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
     }
     setMainLoading(true, 'Loading account data...');
 
+    const load = loadAllData();
+    const launchedRequest = accountRequest;
     try {
-        await loadAllData();
+        await load;
+        if (accountRequest !== launchedRequest) return;
         if (fromSplash) {
             setTimeout(() => {
                 document.querySelectorAll('.js-plotly-plot').forEach(el => {
                     Plotly.Plots.resize(el);
                 });
             }, 100);
-        } else {
-            setAccountStatus('');
         }
     } catch (err) {
+        if (accountRequest !== launchedRequest) return;
         const message = 'Failed to load data: ' + err.message;
         if (fromSplash) {
             stopSplashTyping();
@@ -2135,7 +2370,7 @@ async function launchDashboard(addressInput, { fromSplash = false } = {}) {
             setAccountStatus(message, true);
         }
     } finally {
-        setMainLoading(false);
+        if (accountRequest === launchedRequest) setMainLoading(false);
         if (fromSplash && splashLaunchEl) {
             splashLaunchEl.disabled = false;
             splashLaunchEl.textContent = 'Save & load';
@@ -2653,16 +2888,7 @@ document.addEventListener('DOMContentLoaded', () => {
     accountFilterEl = document.getElementById('account-filter');
     const applyButton = document.getElementById('account-apply');
 
-    let savedAccounts = [];
-    try {
-        const parsed = JSON.parse(localStorage.getItem('dashboardAccounts') || '[]');
-        if (Array.isArray(parsed)) savedAccounts = parsed;
-        if (!savedAccounts.length) {
-            savedAccounts = parseWalletAddresses(localStorage.getItem('dashboardAccount') || '');
-        }
-    } catch (_) {
-        savedAccounts = parseWalletAddresses(localStorage.getItem('dashboardAccount') || '');
-    }
+    const savedAccounts = readSavedWallets();
     const initialAccount = savedAccounts.join(',');
     currentAccount = '';
     if (splashAccountInputEl) {
@@ -2701,12 +2927,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (accountChangeEl) {
         accountChangeEl.addEventListener('click', showAccountEntry);
     }
+    document.getElementById('account-entry-cancel')?.addEventListener('click', hideAccountEntry);
+    document.getElementById('account-forget')?.addEventListener('click', forgetWallets);
+    document.getElementById('account-refresh')?.addEventListener('click', refreshAllData);
     if (accountFilterEl) {
         accountFilterEl.addEventListener('change', () => {
             selectedWallet = accountFilterEl.value;
             syncCurrentAccount();
             updateAccountUI(currentAccount);
-            historyDataCache = null;
             refreshAllData();
         });
     }
@@ -2726,6 +2954,16 @@ document.addEventListener('DOMContentLoaded', () => {
         sidepanelBackdrop.addEventListener('click', closePositionsDetailPanel);
     }
     document.addEventListener('keydown', (event) => {
+        if (splashScreenEl?.style.display === 'flex') {
+            if (event.key === 'Escape' && currentAccount) { event.preventDefault(); hideAccountEntry(); }
+            if (event.key === 'Tab') {
+                const controls = Array.from(splashScreenEl.querySelectorAll('button:not(:disabled), textarea, a[href]')).filter(element => !element.hidden && element.getClientRects().length);
+                const first = controls[0], last = controls[controls.length - 1];
+                if (event.shiftKey && (document.activeElement === first || !splashScreenEl.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
+                else if (!event.shiftKey && (document.activeElement === last || !splashScreenEl.contains(document.activeElement))) { event.preventDefault(); first?.focus(); }
+            }
+            return;
+        }
         if (event.key !== 'Escape') return;
         const detail = document.getElementById('positions-detail');
         if (detail && detail.classList.contains('is-open')) {
@@ -2742,7 +2980,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auto-refresh every 3 minutes
     setInterval(() => {
-        if (currentAccount && mainContentEl && mainContentEl.style.display !== 'none') {
+        if (!document.hidden && currentAccount && mainContentEl && mainContentEl.style.display !== 'none' && splashScreenEl?.style.display !== 'flex') {
             refreshAllData();
         }
     }, 180000);

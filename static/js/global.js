@@ -183,7 +183,7 @@ function traderHistoryLink(trade, chainOverride = undefined) {
 
 function formatUnixDate(ts) {
     if (!ts) return '—';
-    return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 function formatUnixDateTime(ts) {
@@ -385,7 +385,8 @@ function renderAssetCards() {
         const putPct = a.trade_count > 0 ? ((a.put_count / a.trade_count) * 100).toFixed(0) : 0;
         const callPct = a.trade_count > 0 ? ((a.call_count / a.trade_count) * 100).toFixed(0) : 0;
         const expiredTotal = a.expired_count || 0;
-        const returnedPct = expiredTotal > 0 ? ((a.returned / expiredTotal) * 100).toFixed(0) : '—';
+        const knownOutcomes = Number(a.returned || 0) + Number(a.assigned || 0);
+        const returnedPct = knownOutcomes > 0 ? `${((a.returned / knownOutcomes) * 100).toFixed(0)}%` : '—';
         return `
             <div class="asset-card" role="button" tabindex="0" aria-label="Inspect ${escapeAttr(a.symbol)} on ${escapeAttr(chainLabel(a))}" data-asset="${escapeAttr(a.symbol)}" data-chain-id="${escapeAttr(a.chain_id ?? '')}">
                 <div class="asset-card-header">
@@ -398,9 +399,10 @@ function renderAssetCards() {
                     <div class="asset-metric"><span class="asset-metric-label">Premium</span><span class="asset-metric-value">${compactCurrency(a.total_premium)}</span></div>
                     <div class="asset-metric"><span class="asset-metric-label">Avg APR</span><span class="asset-metric-value asset-summary-apr">${formatPercentage(a.avg_apr)}</span></div>
                     <div class="asset-metric"><span class="asset-metric-label">Put / Call</span><span class="asset-metric-value">${putPct}% / ${callPct}%</span></div>
-                    <div class="asset-metric"><span class="asset-metric-label" title="Trades without a recorded outcome; may include past expiries">Unresolved</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
-                    <div class="asset-metric"><span class="asset-metric-label">Outcomes recorded</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
-                    <div class="asset-metric"><span class="asset-metric-label">Returned</span><span class="asset-metric-value" style="color: var(--accent);">${returnedPct}%</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label" title="Recorded, unexpired positions without a settled outcome">Open</span><span class="asset-metric-value">${formatNumber(a.active_count, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Expired</span><span class="asset-metric-value">${formatNumber(expiredTotal, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label">Awaiting outcome</span><span class="asset-metric-value">${formatNumber(a.pending_settlement_count || 0, 0)}</span></div>
+                    <div class="asset-metric"><span class="asset-metric-label" title="Returned as a share of assigned and returned positions with known outcomes">Returned / known</span><span class="asset-metric-value" style="color: var(--accent);">${returnedPct}</span></div>
                 </div>
             </div>
         `;
@@ -1847,7 +1849,7 @@ async function loadMarketPulse() {
         const latest = freshness.last_trade_at;
         const status = document.getElementById('observation-status');
         const stale = latest && (Date.now() / 1000 - latest > 86400);
-        status.textContent = latest ? `Latest recorded trade · ${formatUnixDate(latest)}${stale ? ' · historical dataset' : ' · refreshes every minute'}` : 'No recorded trades for this chain';
+        status.textContent = latest ? `Latest recorded trade · ${formatUnixDate(latest)}${stale ? ' · observations may be incomplete' : ' · latest observed activity'}` : 'No recorded trades for this chain';
         status.classList.toggle('fresh', Boolean(latest && !stale));
         document.getElementById('market-narrative').textContent = act.trades_24h > 0
             ? `${top ? shortSymbol(top.symbol) + ' leads recorded activity. ' : ''}${formatNumber(act.trades_24h, 0)} trades generated ${compactCurrency(act.premium_24h)} in premium over the past 24 hours.`
@@ -2200,6 +2202,7 @@ function loadGlobalDashboard() {
     return Promise.allSettled([
         loadNextExpiryPositions(),
         loadMarketPulse(),
+        loadProtocolOverview(),
         loadExecutionTimeline(),
         loadRecent(),
         loadAssets(),
@@ -2244,6 +2247,7 @@ function setChainFilter(chain) {
     outcomesExpanded = false;
     document.querySelectorAll('#chain-filter-tabs .tab-button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.chain === selectedChain);
+        btn.setAttribute('aria-pressed', String(btn.dataset.chain === selectedChain));
     });
     closeAssetDetail();
     loadGlobalDashboard();
@@ -2375,7 +2379,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auto-refresh market pulse and recent activity every 60 seconds
     setInterval(() => {
+        if (document.hidden) return;
         loadMarketPulse();
+        loadProtocolOverview();
         loadRecent();
     }, 60000);
 

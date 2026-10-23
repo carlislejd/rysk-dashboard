@@ -5,6 +5,7 @@ services:
     runtime: python
     buildCommand: ./scripts/render_build.sh
     startCommand: ./scripts/render_start.sh
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.7"
@@ -16,6 +17,12 @@ services:
         value: "10000"
       - key: RYSK_SYNC_ENABLED
         value: "true"
+      # Optional: exact production HTTPS origin + public Web Analytics site token.
+      # Add this hostname in Cloudflare Web Analytics; use manual JS installation.
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: CF_WEB_ANALYTICS_TOKEN
+        sync: false
       - key: ADMIN_BACKFILL_TOKEN
         generateValue: true
       - key: PARTICIPANT_ALIAS_SECRET

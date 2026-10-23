@@ -7,72 +7,35 @@
     {% include 'partials/head.html' %}
 </head>
 <body data-page="global">
-{% set page = 'global' %}{% set page_label = 'Overview' %}{% set jumps = [('act-now', 'Market overview'), ('act-activity', 'Activity & expiries'), ('act-explore', 'Asset explorer')] %}
+{% set page = 'global' %}{% set page_label = 'Overview' %}{% set jumps = [('act-now', 'Protocol activity'), ('act-activity', 'Activity & expiries'), ('act-explore', 'Asset explorer')] %}
     <div class="app-shell">
         {% include 'partials/sidebar.html' %}
     <main id="workspace" tabindex="-1" class="container app-main">
         <header>
             {% include 'partials/topbar.html' %}
-            <div class="page-intro"><div><div class="page-eyebrow"><span></span> THE OPTIONS LANDSCAPE</div><h1>See the market.<br><em>Find your perspective.</em></h1><p class="page-description">The flow, the premiums, the positions. Your view into Rysk.</p></div><a class="intro-link" href="/analytics">Go deeper in Research <span>↗</span></a></div>
+            <div class="page-intro protocol-intro"><div><div class="page-eyebrow"><span></span> INDEPENDENT PROTOCOL INTELLIGENCE</div><h1>Understand the flow.<br><em>Know your Rysk.</em></h1><p class="page-description">Follow options activity, premiums paid upfront, and the positions behind them.</p></div><a class="portfolio-cta" href="/account"><span data-icon="wallet" aria-hidden="true"></span> Explore my history <span aria-hidden="true">↗</span><small>Public address only. No connection needed.</small></a></div>
         </header>
-
-        <!-- Hero KPI strip — six at-a-glance numbers -->
-        <section class="hero-kpis" id="hero-kpis">
-            <div class="hero-kpi" data-slot="primary">
-                <div class="hero-kpi-label">Open notional <button class="metric-help" data-glossary="Notional" aria-label="What is open notional?">?</button></div>
-                <div class="hero-kpi-value" id="hero-tvl">—</div>
-                <div class="hero-kpi-sub" id="hero-tvl-sub">&nbsp;</div>
-            </div>
-            <div class="hero-kpi">
-                <div class="hero-kpi-label">24h Volume</div>
-                <div class="hero-kpi-value" id="hero-volume-24h">—</div>
-                <div class="hero-kpi-sub" id="hero-volume-24h-sub">&nbsp;</div>
-            </div>
-            <div class="hero-kpi">
-                <div class="hero-kpi-label">24h Premium</div>
-                <div class="hero-kpi-value" id="hero-premium-24h">—</div>
-                <div class="hero-kpi-sub" id="hero-premium-24h-sub">&nbsp;</div>
-            </div>
-            <div class="hero-kpi">
-                <div class="hero-kpi-label">Active Positions</div>
-                <div class="hero-kpi-value" id="hero-active">—</div>
-                <div class="hero-kpi-sub" id="hero-active-sub">&nbsp;</div>
-            </div>
-            <div class="hero-kpi">
-                <div class="hero-kpi-label">Leading asset · 24h</div>
-                <div class="hero-kpi-value" id="hero-hot">—</div>
-                <div class="hero-kpi-sub" id="hero-hot-sub">&nbsp;</div>
-            </div>
-            <div class="hero-kpi">
-                <div class="hero-kpi-label">Next Expiry</div>
-                <div class="hero-kpi-value" id="hero-next-expiry">—</div>
-                <div class="hero-kpi-sub" id="hero-next-expiry-sub">&nbsp;</div>
-            </div>
-        </section>
-
-        <!-- Act sub-nav — sticky anchor links -->
-        <nav class="act-nav" id="act-nav">
-            <a href="#act-now" data-act="act-now" class="active">Market overview</a>
-            <a href="#act-activity" data-act="act-activity">Activity &amp; expiries</a>
-            <a href="#act-explore" data-act="act-explore">Explore</a>
-        </nav>
-
-        <div class="chain-filter-control"><div id="observation-status" class="observation-status" role="status">Checking observed activity…</div>
-            <span class="time-range-label">Chain</span>
-            <div class="tabs chain-filter-tabs" id="chain-filter-tabs">
-                <button class="tab-button active" data-chain="all">All</button>
-                <button class="tab-button" data-chain="hyperevm">HyperEVM</button>
-                <button class="tab-button" data-chain="ethereum">Ethereum</button>
-            </div>
+        <div class="protocol-primer"><strong>Collateral → option sale → upfront premium → settlement</strong><span>Covered calls commit an asset. Cash-secured puts commit cash. At expiry, collateral is returned or exchanged at the strike.</span><a href="https://docs.rysk.finance/getting-started/protocol-and-product/how-it-works" target="_blank" rel="noopener noreferrer">How Rysk works ↗</a></div>
+        <div class="protocol-toolbar">
+            <div><span class="control-label">Network</span><div class="tabs chain-filter-tabs" id="chain-filter-tabs" aria-label="Protocol network"><button class="tab-button active" data-chain="all" aria-pressed="true">All networks</button><button class="tab-button" data-chain="hyperevm" aria-pressed="false">HyperEVM</button><button class="tab-button" data-chain="ethereum" aria-pressed="false">Ethereum</button></div></div>
+            <div><span class="control-label">Activity window</span><div class="tabs" id="protocol-range-tabs" aria-label="Protocol activity window"><button class="tab-button" data-protocol-days="7" aria-pressed="false">7d</button><button class="tab-button active" data-protocol-days="30" aria-pressed="true">30d</button><button class="tab-button" data-protocol-days="90" aria-pressed="false">90d</button></div></div>
         </div>
+        <div id="protocol-status" class="protocol-status" role="status" aria-live="polite">Reading recorded protocol activity…</div>
+        <section id="protocol-kpis" class="protocol-kpis" aria-label="Protocol activity metrics" aria-busy="true">
+            <article class="protocol-kpi"><div class="hero-kpi-label">Executed notional <button class="metric-help" data-glossary="Notional" aria-label="What is executed notional?">?</button></div><strong id="protocol-notional">—</strong><span id="protocol-notional-comparison">Strike × quantity traded</span></article>
+            <article class="protocol-kpi featured"><div class="hero-kpi-label">Premium paid upfront <button class="metric-help" data-glossary="Premium" aria-label="What does premium measure?">?</button></div><strong id="protocol-premium">—</strong><span id="protocol-premium-comparison">Gross premium, before fees</span></article>
+            <article class="protocol-kpi"><div class="hero-kpi-label">Executions</div><strong id="protocol-trades">—</strong><span id="protocol-trades-comparison">Recorded option trades</span></article>
+            <article class="protocol-kpi"><div class="hero-kpi-label">Premium / notional</div><strong id="protocol-yield">—</strong><span id="protocol-yield-comparison">Unannualized · not investment return</span></article>
+        </section>
+        <nav class="act-nav" id="act-nav" aria-label="Overview sections"><a href="#act-now" data-act="act-now" class="active">Protocol activity</a><a href="#act-activity" data-act="act-activity">Activity &amp; expiries</a><a href="#act-explore" data-act="act-explore">Asset explorer</a></nav>
 
         <!-- ════════════════════════════════════════════════════════════════
              ACT 1 — RIGHT NOW
              What's happening this minute / this week
              ════════════════════════════════════════════════════════════════ -->
         <div class="act-divider" id="act-now">
-            <div class="act-title">Market overview</div>
-            <div class="act-subtitle">Start with the big picture. Follow the detail that matters.</div>
+            <div class="act-title">How the protocol is being used</div>
+            <div class="act-subtitle">Premium generation, strategy choice, and where activity concentrates.</div>
         </div>
 
         <div class="market-grid">
@@ -90,6 +53,18 @@
                 <a class="brief-link" href="#act-explore">Explore the underlying assets <span>↗</span></a>
             </section>
         </div>
+        <section class="usage-grid" aria-label="Protocol usage breakdown">
+            <article class="card usage-card"><div class="analytics-eyebrow">THE STRATEGIES</div><h2>What sellers choose</h2><p class="card-subtitle">Share of executed strike notional · <span data-protocol-window>30d</span></p><div id="protocol-strategies" class="usage-content"><p class="loading">Reading strategy mix…</p></div><a class="text-action" href="/analytics#act-yield">Compare premiums by strategy ↗</a></article>
+            <article class="card usage-card"><div class="analytics-eyebrow">THE UNDERLYINGS</div><h2>Where activity goes</h2><p class="card-subtitle">Leading assets by notional · <span data-protocol-window>30d</span></p><div id="protocol-assets" class="usage-content"><p class="loading">Reading asset mix…</p></div><div id="protocol-chains" class="usage-chain-note"></div></article>
+            <article class="card usage-card"><div class="analytics-eyebrow">THE OUTCOMES</div><h2>After expiry</h2><p class="card-subtitle">Expired trades entered in the selected window</p><div id="protocol-outcomes" class="usage-content"><p class="loading">Reading settlement coverage…</p></div><p class="metric-note">Returned and assigned describe settlement, not whether the investment was profitable.</p></article>
+        </section>
+        <div class="exposure-heading"><div><span class="analytics-eyebrow">RECORDED EXPOSURE NOW</span><p id="observation-status" class="observation-status" role="status">Checking observed activity…</p></div><a href="/account">See my positions ↗</a></div>
+        <section class="hero-kpis" id="hero-kpis" aria-label="Recorded current exposure">
+            <div class="hero-kpi" data-slot="primary"><div class="hero-kpi-label">Open strike notional <button class="metric-help" data-glossary="Notional" aria-label="What is open notional?">?</button></div><div class="hero-kpi-value" id="hero-tvl">—</div><div class="hero-kpi-sub" id="hero-tvl-sub"></div></div>
+            <div class="hero-kpi"><div class="hero-kpi-label">24h recorded notional</div><div class="hero-kpi-value" id="hero-volume-24h">—</div><div class="hero-kpi-sub" id="hero-volume-24h-sub"></div></div>
+            <div class="hero-kpi"><div class="hero-kpi-label">24h recorded premium</div><div class="hero-kpi-value" id="hero-premium-24h">—</div><div class="hero-kpi-sub" id="hero-premium-24h-sub"></div></div>
+            <div class="hero-kpi"><div class="hero-kpi-label">Next recorded expiry</div><div class="hero-kpi-value" id="hero-next-expiry">—</div><div class="hero-kpi-sub" id="hero-next-expiry-sub"></div></div>
+        </section>
         <section class="card" aria-labelledby="open-exposure-title">
             <div class="chart-title-row"><div><div class="analytics-eyebrow">OPEN EXPOSURE</div><h2 id="open-exposure-title">Where capital is committed</h2></div><div class="tabs" id="exposure-view-tabs" aria-label="Open exposure grouping"><button class="tab-button active" data-exposure-view="asset" aria-pressed="true">Asset</button><button class="tab-button" data-exposure-view="expiry" aria-pressed="false">Expiry</button></div></div>
             <p class="card-subtitle">Open notional, split by calls and puts. Select a bar to inspect the matching open positions.</p>
@@ -335,5 +310,6 @@
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
     <script src="{{ url_for('static', filename='js/utils.js') }}"></script>
     <script src="{{ url_for('static', filename='js/global.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/protocol.js') }}"></script>
 </body>
 </html>

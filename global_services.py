@@ -159,8 +159,8 @@ def enrich_trades_with_iv(trades):
 def get_global_summary(conn, days=0, chain_id=None):
     """Protocol-level aggregate stats. days=0 means all time."""
     now = int(time.time())
-    where_parts = []
-    params = []
+    where_parts = ["symbol != ''", "created_at < ?"]
+    params = [now]
     if days > 0:
         cutoff = now - days * 86400
         where_parts.append("created_at >= ?")
@@ -179,8 +179,8 @@ def get_global_summary(conn, days=0, chain_id=None):
     day_ago = now - 86400
     week_ago = now - 604800
 
-    day_parts = ["created_at >= ?"]
-    day_params = [day_ago]
+    day_parts = ["symbol != ''", "created_at >= ?", "created_at < ?"]
+    day_params = [day_ago, now]
     _add_chain_filter(day_parts, day_params, chain_id)
     row_24h = conn.execute("""
         SELECT COUNT(*) as trades,
@@ -189,8 +189,8 @@ def get_global_summary(conn, days=0, chain_id=None):
         FROM trades {where}
     """.format(where=_where_clause(day_parts)), day_params).fetchone()
 
-    week_parts = ["created_at >= ?"]
-    week_params = [week_ago]
+    week_parts = ["symbol != ''", "created_at >= ?", "created_at < ?"]
+    week_params = [week_ago, now]
     _add_chain_filter(week_parts, week_params, chain_id)
     row_7d = conn.execute("""
         SELECT COUNT(*) as trades,
@@ -207,26 +207,29 @@ def get_global_summary(conn, days=0, chain_id=None):
         asset_params,
     ).fetchall()]
 
-    # Active vs expired premium split
-    expired_parts = ["outcome IS NOT NULL"]
-    expired_params = []
-    if days > 0:
-        expired_parts.append("created_at >= ?")
-        expired_params.append(now - days * 86400)
-    _add_chain_filter(expired_parts, expired_params, chain_id)
-    expired_where = _where_clause(expired_parts)
-    expired_prem = conn.execute(f"""
-        SELECT COALESCE(SUM(premium_f), 0) FROM trades {expired_where}
-    """, expired_params).fetchone()[0]
+    # Expiry and settlement are distinct: an overdue row with no oracle result
+    # is pending settlement, never an open position.
+    lifecycle = conn.execute(f"""
+        SELECT COALESCE(SUM(CASE WHEN expiry <= ? THEN premium_f ELSE 0 END), 0) AS expired_premium,
+               COALESCE(SUM(CASE WHEN expiry > ? AND outcome IS NULL THEN premium_f ELSE 0 END), 0) AS active_premium,
+               COALESCE(SUM(CASE WHEN expiry > ? AND outcome IS NULL THEN 1 ELSE 0 END), 0) AS active_count,
+               COALESCE(SUM(CASE WHEN expiry <= ? AND (outcome IS NULL OR outcome NOT IN ('Assigned', 'Returned'))
+                                THEN premium_f ELSE 0 END), 0) AS pending_premium,
+               COALESCE(SUM(CASE WHEN expiry <= ? AND (outcome IS NULL OR outcome NOT IN ('Assigned', 'Returned'))
+                                THEN 1 ELSE 0 END), 0) AS pending_count
+        FROM trades {where}
+    """, [now, now, now, now, now, *params]).fetchone()
     total_prem = row["total_premium"] or 0
-    active_prem = total_prem - expired_prem
 
     return {
         "total_trades": row["total_trades"],
         "total_volume": row["total_volume"] or 0,
         "total_premium": total_prem,
-        "expired_premium": expired_prem,
-        "active_premium": active_prem,
+        "expired_premium": lifecycle["expired_premium"],
+        "active_premium": lifecycle["active_premium"],
+        "active_count": lifecycle["active_count"],
+        "pending_settlement_premium": lifecycle["pending_premium"],
+        "pending_settlement_count": lifecycle["pending_count"],
         "avg_apr": row["avg_apr"],
         "assets": assets,
         "last_24h": {
@@ -249,8 +252,8 @@ def get_asset_summary(conn, chain_id=None):
     now = int(time.time())
     day_ago = now - 86400
     week_ago = now - 604800
-    chain_parts = ["symbol != ''"]
-    chain_params = []
+    chain_parts = ["symbol != ''", "created_at < ?"]
+    chain_params = [now]
     _add_chain_filter(chain_parts, chain_params, chain_id)
     chain_where = _where_clause(chain_parts)
 
@@ -280,8 +283,8 @@ def get_asset_summary(conn, chain_id=None):
 
     # 24h stats per asset
     recent_24h = {}
-    recent_parts = ["created_at >= ?", "symbol != ''"]
-    recent_params = [day_ago]
+    recent_parts = ["created_at >= ?", "created_at < ?", "symbol != ''"]
+    recent_params = [day_ago, now]
     _add_chain_filter(recent_parts, recent_params, chain_id)
     for r in conn.execute(f"""
         SELECT symbol,
@@ -300,8 +303,8 @@ def get_asset_summary(conn, chain_id=None):
 
     # 7d stats per asset
     recent_7d = {}
-    week_parts = ["created_at >= ?", "symbol != ''"]
-    week_params = [week_ago]
+    week_parts = ["created_at >= ?", "created_at < ?", "symbol != ''"]
+    week_params = [week_ago, now]
     _add_chain_filter(week_parts, week_params, chain_id)
     for r in conn.execute(f"""
         SELECT symbol,
@@ -320,31 +323,32 @@ def get_asset_summary(conn, chain_id=None):
 
     # Outcome stats per asset
     outcomes_by_asset = {}
-    outcome_parts = ["outcome IS NOT NULL", "symbol != ''"]
-    outcome_params = []
-    _add_chain_filter(outcome_parts, outcome_params, chain_id)
     for r in conn.execute(f"""
         SELECT symbol,
                chain_id,
-               SUM(CASE WHEN outcome = 'Assigned' THEN 1 ELSE 0 END) as assigned,
-               SUM(CASE WHEN outcome = 'Returned' THEN 1 ELSE 0 END) as returned,
-               COUNT(*) as expired_total
+               SUM(CASE WHEN expiry <= ? AND outcome = 'Assigned' THEN 1 ELSE 0 END) as assigned,
+               SUM(CASE WHEN expiry <= ? AND outcome = 'Returned' THEN 1 ELSE 0 END) as returned,
+               SUM(CASE WHEN expiry <= ? THEN 1 ELSE 0 END) as expired_total,
+               SUM(CASE WHEN expiry > ? AND outcome IS NULL THEN 1 ELSE 0 END) as active_count,
+               SUM(CASE WHEN expiry <= ? AND (outcome IS NULL OR outcome NOT IN ('Assigned', 'Returned'))
+                        THEN 1 ELSE 0 END) as pending_count
         FROM trades
-        {_where_clause(outcome_parts)}
+        {chain_where}
         GROUP BY symbol, chain_id
-    """, outcome_params).fetchall():
+    """, [now, now, now, now, now, *chain_params]).fetchall():
         outcomes_by_asset[(r["symbol"], r["chain_id"])] = {
             "assigned": r["assigned"],
             "returned": r["returned"],
             "expired_total": r["expired_total"],
+            "active_count": r["active_count"],
+            "pending_count": r["pending_count"],
         }
 
     assets = []
     for r in all_time:
         sym = r["symbol"]
         key = (sym, r["chain_id"])
-        oc = outcomes_by_asset.get(key, {"assigned": 0, "returned": 0, "expired_total": 0})
-        active_count = r["trade_count"] - oc["expired_total"]
+        oc = outcomes_by_asset[key]
         assets.append({
             "symbol": sym,
             **chain_fields(r["chain_id"]),
@@ -362,8 +366,9 @@ def get_asset_summary(conn, chain_id=None):
             "call_premium": r["call_premium"],
             "avg_quantity": r["avg_quantity"],
             "avg_strike": r["avg_strike"],
-            "active_count": active_count,
+            "active_count": oc["active_count"],
             "expired_count": oc["expired_total"],
+            "pending_settlement_count": oc["pending_count"],
             "assigned": oc["assigned"],
             "returned": oc["returned"],
             "last_24h": recent_24h.get(key, {"trades": 0, "volume": 0, "premium": 0}),

@@ -7,3 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/desk.css') }}">
     <script defer src="{{ url_for('static', filename='js/desk.js') }}"></script>
+    {% if web_analytics %}
+    <script id="rysk-web-analytics" type="application/json">{{ web_analytics | tojson }}</script>
+    <script defer src="{{ url_for('static', filename='js/observability.js') }}"></script>
+    {% endif %}

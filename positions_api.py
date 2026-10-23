@@ -30,6 +30,10 @@ _history_cache = {}
 _expired_positions_store = {}
 
 
+class WalletDataUnavailable(RuntimeError):
+    """The upstream wallet snapshot failed; this is not an empty account."""
+
+
 def _from_wei(value, decimals=18):
     """Convert wei-denominated string/number to float"""
     if value is None:
@@ -81,6 +85,20 @@ def _fetch_json(url, params=None):
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     return response.json()
+
+
+def _fetch_wallet_rows(url, account_address, label):
+    """Only a successful array response can become a cached wallet snapshot."""
+    message = f"Rysk {label} are temporarily unavailable. Please retry."
+    try:
+        rows = _fetch_json(url, params={"address": account_address})
+    except (requests.RequestException, ValueError) as exc:
+        # Request exception text may contain the wallet-bearing request URL.
+        # Keep public errors useful without returning that raw upstream detail.
+        raise WalletDataUnavailable(message) from exc
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise WalletDataUnavailable(message)
+    return rows
 
 
 def _item_chain_id(item: dict):
@@ -201,11 +219,7 @@ def fetch_positions(account_address: str):
     if cached and (time.time() - cached["timestamp"] < CACHE_TTL):
         return cached["data"]
 
-    try:
-        taker_raw = _fetch_json(USER_POSITIONS_URL, params={"address": account_address})
-    except Exception as exc:
-        print(f"Error fetching user positions: {exc}")
-        taker_raw = []
+    taker_raw = _fetch_wallet_rows(USER_POSITIONS_URL, account_address, 'wallet positions')
 
     open_positions = []
     expired_positions = []
@@ -412,11 +426,7 @@ def fetch_history(account_address: str, limit: int = 0):
     if cached and (time.time() - cached["timestamp"] < CACHE_TTL):
         return cached["data"]
 
-    try:
-        raw_history = _fetch_json(TRADE_HISTORY_URL, params={"address": account_address})
-    except Exception as exc:
-        print(f"Error fetching trade history: {exc}")
-        raw_history = []
+    raw_history = _fetch_wallet_rows(TRADE_HISTORY_URL, account_address, 'wallet history records')
 
     trades = []
 
@@ -587,6 +597,9 @@ def fetch_history(account_address: str, limit: int = 0):
     asset_outcome_list.sort(key=lambda x: (-x["assigned_count"], -x["returned_count"], x["symbol"], x.get("chain_id") or 0))
 
     results = {
+        # Keep legacy suppression until /history?address= is verified to filter
+        # by wallet owner rather than asset address. Wallet expiry history and
+        # its summary come from the account-specific /user/positions endpoint.
         "trades": [],
         "expired_positions": expired_sorted if expired_limit is None else expired_sorted[:expired_limit],
         "summary": {

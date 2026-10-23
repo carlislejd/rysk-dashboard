@@ -28,6 +28,9 @@ from dashboard_services import (
     validate_account_address,
 )
 from db import get_db, init_db
+from observability import register_observability
+from protocol_services import get_protocol_overview
+from positions_api import WalletDataUnavailable
 from global_services import (
     get_global_summary,
     get_global_trades,
@@ -60,6 +63,31 @@ PARTICIPANT_ALIAS_SECRET = os.getenv("PARTICIPANT_ALIAS_SECRET", "")
 # Initialize database on startup
 with app.app_context():
     init_db()
+
+register_observability(app)
+
+
+@app.route('/api/global/protocol-overview')
+def api_protocol_overview():
+    """Recorded usage and settlement coverage across comparable entry windows."""
+    try:
+        days = int(request.args.get('days', '30'))
+        if days not in (7, 30, 90):
+            raise ValueError('days must be 7, 30, or 90')
+        chain_id = resolve_chain_filter()
+        conn = get_db()
+        try:
+            payload = get_protocol_overview(conn, days=days, chain_id=chain_id)
+        finally:
+            conn.close()
+        response = jsonify(success=True, **payload)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except ValueError as exc:
+        return jsonify(success=False, error=str(exc)), 400
+    except Exception:
+        app.logger.exception('Protocol overview unavailable')
+        return jsonify(success=False, error='Protocol overview unavailable'), 503
 
 
 def resolve_account_address():
@@ -174,6 +202,8 @@ def api_positions():
             "success": False,
             "error": str(e)
         }), 400
+    except WalletDataUnavailable as e:
+        return jsonify(success=False, error=str(e)), 503
     except Exception as e:
         return jsonify({
             "success": False,
@@ -287,6 +317,8 @@ def api_history():
             "success": False,
             "error": str(e)
         }), 400
+    except WalletDataUnavailable as e:
+        return jsonify(success=False, error=str(e)), 503
     except Exception as e:
         return jsonify({
             "success": False,

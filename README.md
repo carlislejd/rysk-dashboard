@@ -20,6 +20,65 @@ Web dashboard and agent-friendly CLI for managing Rysk option positions.
 
 Shared navigation lives in `templates/partials/`. The workspace design is in `static/css/desk.css`, layered over the existing component styles, and shared interactions are in `static/js/desk.js`.
 
+## Protocol overview and portfolio refresh
+
+The overview starts with recorded strike notional, gross premiums paid upfront,
+executions, and premium/notional over 7, 30, or 90 days. It compares the previous
+window of equal length only when collection is fresh and sufficient earlier
+history exists. Strategy shares use notional; asset rankings keep each chain
+separate. Settlement coverage refers to **expired executions entered within the
+selected window**, with unresolved results shown explicitly. All intervals use
+UTC, with an inclusive start and exclusive end. These are stored observations,
+not proof of complete protocol activity, TVL, or investment returns.
+
+`GET /api/global/protocol-overview?days=30&chain_id=999` serves these metrics.
+The chain filter is optional; only 7, 30, and 90 are valid `days` values.
+Recent collection failures or an overdue sync suppress growth comparisons.
+When no sync watermark exists, the last trade is a conservative freshness
+fallback, not proof that collection completed.
+
+Portfolio separates recorded premiums from a settled **option payoff estimate**
+(premium minus intrinsic settlement value, with direction respected). Open and
+unresolved positions are excluded from that estimate; missing required inputs
+make it unavailable. Fees, collateral acquisition cost and changes in collateral
+value are excluded. The history explorer filters all loaded expiry positions by
+asset, strategy, outcome and expiry date, and exports the matching rows as CSV.
+Wallet changes cancel stale requests; upstream outages produce an unavailable
+state instead of a successful empty account. Clearing saved wallets removes
+addresses from this browser only.
+
+## Cloudflare visitor analytics and service health
+
+The Flask app remains hosted on Render. Cloudflare Web Analytics supports
+[manual installation on an externally hosted site](https://developers.cloudflare.com/web-analytics/get-started/):
+
+1. Add the Rysk production hostname as its **own** site in Cloudflare Web
+   Analytics and choose manual installation. Do not reuse Papertrade Club's token.
+2. Set `CF_WEB_ANALYTICS_TOKEN` to that site's public 32-character beacon token
+   in Render, and `PUBLIC_BASE_URL` to the exact production HTTPS origin (for
+   example, `https://rysk.watch`). Restart/redeploy the service to read the values.
+3. Keep Cloudflare automatic JavaScript injection disabled. The app installs one
+   beacon itself; HTML also sends `Cache-Control: no-transform`.
+4. Visit the production overview or Research page without query parameters and
+   check visits, pageviews and performance in Cloudflare Web Analytics. Browser
+   privacy settings and blockers may prevent recording.
+
+Both variables are optional; without valid configuration, analytics stays off.
+The beacon runs only on `/` and `/analytics` at the configured production origin.
+Portfolio, trader histories, API docs, previews, query-bearing URLs and sensitive
+referrers are excluded. DNT and Global Privacy Control are respected. No custom
+wallet events, account IDs, balances, or P&L are sent. Because wallet pages are
+excluded, Cloudflare metrics intentionally do not measure all dashboard usage.
+See [Cloudflare's beacon data documentation](https://developers.cloudflare.com/speed/observatory/rum-beacon/).
+
+- `GET /healthz`: local SQLite readiness only; HTTP 503 when unavailable. Used by
+  Render's health check. Stale ingestion does not trigger restart loops.
+- `GET /api/status`: aggregate collector freshness, last observed trade, persisted
+  sync watermark and last audit success. Never calls RPC/upstream APIs or exposes
+  wallet addresses, tokens or filesystem paths. It can be `degraded` while the
+  app remains healthy. These operational metrics are distinct from visitor
+  analytics and are not automatically exported to Cloudflare.
+
 ## Setup
 
 1. Install Poetry (if needed):

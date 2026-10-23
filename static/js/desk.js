@@ -25,7 +25,7 @@
     };
     const destinations = [
         ['Overview', '/', 'Protocol flow, market brief, and latest activity', 'overview'],
-        ['Portfolio', '/account', 'Wallet positions, exposure, premium PnL, and history', 'wallet'],
+        ['Portfolio', '/account', 'Wallet positions, exposure, premium, and settlement history', 'wallet'],
         ['Research', '/analytics', 'Executed flow, pricing benchmarks, and volatility', 'research'],
         ['API reference', '/docs', 'Endpoints, CLI, and JSON previews', 'code'],
         ['Asset explorer', '/#act-explore', 'Inspect an underlying, its strikes, and expiries', 'overview'],
