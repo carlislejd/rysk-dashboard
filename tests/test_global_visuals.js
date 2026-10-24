@@ -6,6 +6,7 @@ const node = id => {
   if (!nodes.has(id)) nodes.set(id, { id, innerHTML: '', textContent: '', hidden: false,
     value: '', setCustomValidity(message){ this.validationMessage = message; }, reportValidity(){ return !this.validationMessage; },
     style: {}, dataset: {}, classList: { contains(){ return false; }, toggle(){} },
+    setAttribute(){},
     querySelector(){ return null; }, querySelectorAll(){ return []; }, scrollIntoView(){},
     replaceChildren(){}, parentElement: { appendChild(){} } });
   return nodes.get(id);

@@ -12,6 +12,7 @@ let expiryExpanded = false;
 let detailExpiryExpanded = false;
 let outcomesExpanded = false;
 let marketPulse = null;
+let marketPulseRequest = 0;
 let exposureView = 'asset';
 let executionWindow = '24h';
 let executionMetric = 'notional';
@@ -1823,19 +1824,22 @@ function placeOpenDetail(selectionId) {
 // ── Market Pulse ──
 
 async function loadMarketPulse() {
+    const version = ++marketPulseRequest;
     const requestChain = selectedChain;
+    resetOpenHeadline();
     const loading = document.getElementById('pulse-loading');
     const content = document.getElementById('pulse-content');
     try {
         const resp = await fetch(withChain('/api/global/market-pulse'));
         const data = await resp.json();
-        if (requestChain !== selectedChain) return;
-        if (!data.success) throw new Error(data.error);
+        if (version !== marketPulseRequest || requestChain !== selectedChain) return;
+        if (!resp.ok || !data.success) throw new Error(data.error);
 
         const top = data.top_asset_24h;
         const act = data.activity;
         const dte = data.avg_dte;
         const active = data.active_positions;
+        if (!active || typeof active.notional !== 'number' || !Number.isFinite(active.notional) || active.notional < 0) throw new Error('Open positions unavailable');
         marketPulse = data;
         const volIndicator = act.volume_vs_daily_avg !== null
             ? (act.volume_vs_daily_avg > 0 ? `+${act.volume_vs_daily_avg}%` : `${act.volume_vs_daily_avg}%`)
@@ -1849,6 +1853,8 @@ async function loadMarketPulse() {
         const latest = freshness.last_trade_at;
         const status = document.getElementById('observation-status');
         const stale = latest && (Date.now() / 1000 - latest > 86400);
+        const observed = document.getElementById('protocol-open-observed');
+        observed.textContent = latest ? `Last observed trade: ${new Date(latest * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC${stale ? ' · observations may be incomplete' : ''}` : 'No recorded trades for this network';
         status.textContent = latest ? `Latest recorded trade · ${formatUnixDate(latest)}${stale ? ' · observations may be incomplete' : ' · latest observed activity'}` : 'No recorded trades for this chain';
         status.classList.toggle('fresh', Boolean(latest && !stale));
         document.getElementById('market-narrative').textContent = act.trades_24h > 0
@@ -1871,10 +1877,13 @@ async function loadMarketPulse() {
         loading.style.display = 'none';
         content.style.display = 'block';
     } catch (e) {
-        if (requestChain !== selectedChain) return;
+        if (version !== marketPulseRequest || requestChain !== selectedChain) return;
+        resetOpenHeadline('Open positions unavailable · reload to retry');
         loading.style.display = 'block';
         loading.textContent = 'Market activity is unavailable. Refresh the page to try again.';
         document.getElementById('observation-status').textContent = 'Activity unavailable · refresh to retry';
+    } finally {
+        if (version === marketPulseRequest) document.getElementById('protocol-open-panel')?.setAttribute('aria-busy', 'false');
     }
 }
 
@@ -2151,6 +2160,16 @@ async function loadNextExpiryPositions() {
 
 // ── Hero KPI population ──
 
+function resetOpenHeadline(message = 'Reading recorded open positions…') {
+    setHero('hero-tvl', '—', message);
+    const chainId = chainValueToId(selectedChain);
+    const scope = document.getElementById('protocol-open-scope');
+    if (scope) scope.textContent = `Our recorded positions · ${chainId === null ? 'all networks' : chainLabel({ chain_id: chainId })} · USD`;
+    const observed = document.getElementById('protocol-open-observed');
+    if (observed) observed.textContent = '';
+    document.getElementById('protocol-open-panel')?.setAttribute('aria-busy', 'true');
+}
+
 function setHero(id, value, sub) {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
@@ -2202,6 +2221,7 @@ function loadGlobalDashboard() {
     return Promise.allSettled([
         loadNextExpiryPositions(),
         loadMarketPulse(),
+        loadProtocolTvl(),
         loadProtocolOverview(),
         loadExecutionTimeline(),
         loadRecent(),
@@ -2218,6 +2238,7 @@ function loadGlobalDashboard() {
 function setChainFilter(chain) {
     if (selectedChain === (chain || 'all')) return;
     selectedChain = chain || 'all';
+    resetOpenHeadline();
     ['pulse', 'recent', 'assets', 'expiry', 'next-expiry'].forEach(prefix => {
         const content = document.getElementById(prefix + '-content');
         const loading = document.getElementById(prefix + '-loading');
@@ -2377,10 +2398,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Auto-refresh market pulse and recent activity every 60 seconds
+    // Auto-refresh the current TVL snapshot and recorded activity every 60 seconds.
     setInterval(() => {
         if (document.hidden) return;
         loadMarketPulse();
+        loadProtocolTvl();
         loadProtocolOverview();
         loadRecent();
     }, 60000);

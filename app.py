@@ -30,6 +30,7 @@ from dashboard_services import (
 from db import get_db, init_db
 from observability import register_observability
 from protocol_services import get_protocol_overview
+from tvl_services import get_protocol_tvl, TVLUnavailable
 from positions_api import WalletDataUnavailable
 from global_services import (
     get_global_summary,
@@ -65,6 +66,23 @@ with app.app_context():
     init_db()
 
 register_observability(app)
+
+
+@app.route('/api/global/tvl')
+def api_protocol_tvl():
+    """Published Rysk V12 collateral TVL for the selected network."""
+    try:
+        payload = get_protocol_tvl(chain_id=resolve_chain_filter())
+        response = jsonify(success=True, **payload)
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except ValueError as exc:
+        return jsonify(success=False, error=str(exc)), 400
+    except TVLUnavailable:
+        return jsonify(success=False, error='TVL temporarily unavailable'), 503
+    except Exception:
+        app.logger.exception('TVL unavailable')
+        return jsonify(success=False, error='TVL temporarily unavailable'), 503
 
 
 @app.route('/api/global/protocol-overview')

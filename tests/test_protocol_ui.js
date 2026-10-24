@@ -12,7 +12,7 @@ function node(id) {
 }
 const pending = [];
 const context = vm.createContext({
-    document: { getElementById: node, addEventListener() {} },
+    document: { getElementById: node, querySelectorAll() { return [node('window-label')]; }, addEventListener() {} },
     withChain: path => path,
     fetch: url => new Promise((resolve, reject) => pending.push({ url, resolve, reject })),
 });
@@ -27,6 +27,7 @@ async function verifySelectionIsolation() {
     const first = call('loadProtocolOverview');
     vm.runInContext('protocolDays = 90', context);
     const second = call('loadProtocolOverview');
+    assert.equal(node('window-label').textContent, '90d', 'window labels track selection immediately, including while loading');
     assert.match(pending[0].url, /days=30/);
     assert.match(pending[1].url, /days=90/);
     pending[1].resolve({ ok: true, json: async () => ({ success: true, label: '90d' }) });

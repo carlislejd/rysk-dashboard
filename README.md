@@ -22,8 +22,27 @@ Shared navigation lives in `templates/partials/`. The workspace design is in `st
 
 ## Protocol overview and portfolio refresh
 
-The overview starts with recorded strike notional, gross premiums paid upfront,
-executions, and premium/notional over 7, 30, or 90 days. It compares the previous
+The overview starts with **Open position notional**, calculated independently
+from recorded unexpired options as quantity multiplied by strike. Beside it,
+[DeFiLlama's Rysk V12 TVL](https://defillama.com/protocol/rysk-v12) provides an
+external reference with the source's UTC snapshot time. The dashboard never
+adjusts its position totals to match that reference. The network filter selects Ethereum, HyperEVM
+(called Hyperliquid L1 by DeFiLlama), or their combined total. This matches the
+V12 scope tracked by the dashboard; the broader Rysk Finance total also includes
+legacy products. TVL measures the value held in protocol contracts, while open
+strike notional measures option exposure and traded notional measures turnover.
+The same capital can be traded repeatedly within an activity window.
+
+`GET /api/global/tvl?chain_id=999` serves the TVL snapshot independently of the
+activity window. Omit the chain filter for both networks; `chain=ethereum` and
+`chain=hyperevm` are also accepted. The server shares a five-minute cache across
+network filters. Snapshots older than six hours, or cached snapshots served
+after an upstream failure, are explicitly marked stale. Snapshots older than
+24 hours are unavailable (HTTP 503). Missing data never becomes zero or falls
+back to trade notional.
+
+The activity cards show recorded strike notional, gross premiums paid upfront,
+executions, and premium/notional over 7, 30, or 90 days. They compare the previous
 window of equal length only when collection is fresh and sufficient earlier
 history exists. Strategy shares use notional; asset rankings keep each chain
 separate. Settlement coverage refers to **expired executions entered within the
