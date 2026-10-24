@@ -2221,7 +2221,6 @@ function loadGlobalDashboard() {
     return Promise.allSettled([
         loadNextExpiryPositions(),
         loadMarketPulse(),
-        loadProtocolTvl(),
         loadProtocolOverview(),
         loadExecutionTimeline(),
         loadRecent(),
@@ -2398,11 +2397,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Auto-refresh the current TVL snapshot and recorded activity every 60 seconds.
+    // Auto-refresh recorded open positions and activity every 60 seconds.
     setInterval(() => {
         if (document.hidden) return;
         loadMarketPulse();
-        loadProtocolTvl();
         loadProtocolOverview();
         loadRecent();
     }, 60000);

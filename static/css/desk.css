@@ -554,15 +554,11 @@ button.rysk-chart-control:hover, button.selection-chip:hover { border-color: var
 .protocol-kpi > strong { font-size: clamp(24px, 2.4vw, 36px); letter-spacing: -1.2px; font-weight: 500; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .protocol-kpi > span { color: var(--text-muted); font-size: 10px; }
 .protocol-kpis[aria-busy="true"] > article > strong { opacity: .45; }
-.protocol-capital { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 24px; margin-bottom: 15px; }
+.protocol-capital { margin-bottom: 15px; }
 .protocol-open-value { display: flex; flex-direction: column; gap: 9px; }
 .protocol-open-value > strong { font-size: clamp(32px, 3.2vw, 44px); font-weight: 500; letter-spacing: -1.4px; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.protocol-open-value > span, .protocol-tvl-context { font-size: 11px; color: var(--text-muted); line-height: 1.65; }
-.protocol-tvl-context { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; border-left: 1px solid var(--border-strong); padding-left: 24px; }
-.protocol-tvl-context > strong { font-size: 27px; font-weight: 500; color: var(--text-secondary); letter-spacing: -.7px; line-height: 1.3; font-variant-numeric: tabular-nums; }
-.protocol-tvl-context > a { margin-bottom: 3px; }
-.protocol-tvl-context .is-stale { color: var(--color-warning); }
-.protocol-open-value[aria-busy="true"] > strong, .protocol-tvl-context[aria-busy="true"] > strong { opacity: .45; }
+.protocol-open-value > span { font-size: 11px; color: var(--text-muted); line-height: 1.65; }
+.protocol-open-value[aria-busy="true"] > strong { opacity: .45; }
 .usage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .usage-card { min-width: 0; display: flex; flex-direction: column; }
 .usage-card h2 { margin-bottom: 12px; }
@@ -617,8 +613,6 @@ body[data-page="global"] #hero-kpis { grid-template-columns: repeat(4, minmax(0,
     .protocol-toolbar { flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
-    .protocol-capital { grid-template-columns: 1fr; gap: 16px; }
-    .protocol-tvl-context { border-left: 0; border-top: 1px solid var(--border-strong); padding: 13px 0 0; }
     .protocol-toolbar { gap: 12px; }
     .protocol-toolbar > div { width: 100%; justify-content: space-between; }
     .protocol-status { align-items: flex-start; font-size: 10px; }

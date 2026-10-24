@@ -13,7 +13,6 @@
         });
     }
     const definitions = {
-        'TVL': 'Total value locked is the current USD value of collateral reported by DeFiLlama for Rysk V12 on the selected network. It uses the source snapshot timestamp and does not change with the activity window. This scope excludes other Rysk versions.',
         'Notional': 'Strike price × option quantity. Traded notional totals executions during the selected window; turnover can reuse the same capital. Open notional includes recorded, unexpired positions without a settled outcome. These describe trading and exposure at strike, not the current market value of collateral or protocol TVL.',
         'Premium': 'The amount paid for the option. Premium alone is not net profit: assignment, changes in collateral value, fees, and other costs can affect the outcome.',
         'APR': 'The premium yield expressed as a simple annualized rate. It is not a forecast or a compounded return. Research uses notional-and-duration weighting; tables labeled Avg APR may use a simple trade average.',

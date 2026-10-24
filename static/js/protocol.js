@@ -1,55 +1,6 @@
-// Activity reads the same stored executions as Research; TVL uses DeFiLlama.
+// Overview reads the same stored executions as Research. No wallet data here.
 let protocolDays = 30;
 let protocolRequest = 0;
-let protocolTvlRequest = 0;
-
-// TVL is a current DeFiLlama collateral snapshot, independent of trade turnover.
-function renderProtocolTvl(data) {
-    const tvl = data.tvl;
-    if (!tvl || typeof tvl.usd !== 'number' || !Number.isFinite(tvl.usd) || tvl.usd < 0 ||
-        typeof tvl.as_of !== 'number' || !Number.isFinite(tvl.as_of) || tvl.as_of <= 0) {
-        throw new Error('Invalid TVL snapshot');
-    }
-    const sourceDate = new Date(tvl.as_of * 1000).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-    const stale = tvl.is_stale !== false;
-    document.getElementById('protocol-tvl').textContent = compactCurrency(tvl.usd, 1);
-    document.getElementById('protocol-tvl-as-of').textContent = `Source snapshot: ${sourceDate}`;
-    const status = document.getElementById('protocol-tvl-status');
-    status.className = stale ? 'is-stale' : '';
-    status.textContent = stale ? 'Stale snapshot · check DeFiLlama for updates.' : 'Latest available DeFiLlama snapshot.';
-    document.getElementById('protocol-tvl-retry').hidden = !stale;
-}
-
-async function loadProtocolTvl() {
-    const version = ++protocolTvlRequest;
-    const panel = document.getElementById('protocol-tvl-panel');
-    if (!panel) return;
-    panel.setAttribute('aria-busy', 'true');
-    const chainId = chainValueToId(selectedChain);
-    document.getElementById('protocol-tvl-scope').textContent = `Rysk V12 · ${chainId === null ? 'all networks' : chainLabel({ chain_id: chainId })} · USD`;
-    document.getElementById('protocol-tvl').textContent = '—';
-    document.getElementById('protocol-tvl-as-of').textContent = 'Source snapshot pending';
-    const status = document.getElementById('protocol-tvl-status');
-    status.className = '';
-    status.textContent = 'Reading current TVL…';
-    document.getElementById('protocol-tvl-retry').hidden = true;
-    try {
-        const response = await fetch(withChain('/api/global/tvl'));
-        const data = await response.json();
-        if (version !== protocolTvlRequest) return;
-        if (!response.ok || !data.success) throw new Error('TVL unavailable');
-        renderProtocolTvl(data);
-    } catch (_) {
-        if (version !== protocolTvlRequest) return;
-        document.getElementById('protocol-tvl').textContent = '—';
-        document.getElementById('protocol-tvl-as-of').textContent = 'Source snapshot unavailable';
-        status.className = 'is-stale';
-        status.textContent = 'TVL temporarily unavailable. Check DeFiLlama or retry.';
-        document.getElementById('protocol-tvl-retry').hidden = false;
-    } finally {
-        if (version === protocolTvlRequest) panel.setAttribute('aria-busy', 'false');
-    }
-}
 
 function protocolComparison(metric, days, stale) {
     if (stale) return 'Recorded activity · collection may be incomplete';
@@ -136,7 +87,6 @@ async function loadProtocolOverview() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('protocol-tvl-retry')?.addEventListener('click', loadProtocolTvl);
     document.getElementById('protocol-range-tabs')?.addEventListener('click', event => {
         const button = event.target.closest('[data-protocol-days]');
         if (!button) return;

@@ -27,14 +27,12 @@ const data = notional => ({ success: true, top_asset_24h: null, avg_dte: { avg: 
 function settle(request, notional) { request.resolve({ ok: true, json: async () => data(notional) }); }
 
 async function verifyHeadline() {
-    node('protocol-tvl').textContent = '$37690000';
     const initial = context.loadMarketPulse();
     settle(pending[0], 40760000);
     await initial;
     assert.equal(node('hero-tvl').textContent, '$40760000', 'headline is independently calculated open notional');
     assert.equal(node('hero-tvl-sub').innerHTML, '503 open positions');
     assert.match(node('protocol-open-observed').textContent, /Last observed trade: .* UTC/);
-    assert.equal(node('protocol-tvl').textContent, '$37690000', 'DeFiLlama remains a separate reference');
 
     context.setChainFilter('ethereum');
     assert.equal(node('hero-tvl').textContent, '—', 'network switch clears relocated headline immediately');
@@ -55,7 +53,6 @@ async function verifyHeadline() {
     assert.match(node('hero-tvl-sub').innerHTML, /unavailable/);
     assert.equal(node('protocol-open-observed').textContent, '');
     assert.equal(node('protocol-open-panel').attributes['aria-busy'], 'false');
-    assert.equal(node('protocol-tvl').textContent, '$37690000', 'source failure never substitutes the reference value');
 
     const old = context.loadMarketPulse();
     const latest = context.loadMarketPulse();
@@ -68,13 +65,12 @@ async function verifyHeadline() {
     const missing = context.loadMarketPulse();
     settle(pending[6], null);
     await missing;
-    assert.equal(node('hero-tvl').textContent, '—', 'missing open notional is unavailable, never zero or reference TVL');
+    assert.equal(node('hero-tvl').textContent, '—', 'missing open notional is unavailable, never zero or trade turnover');
 
     const template = fs.readFileSync('templates/global.html', 'utf8');
     assert.equal((template.match(/id="hero-tvl"/g) || []).length, 1, 'headline has one source-bound DOM value');
-    assert.ok(template.indexOf('id="hero-tvl"') < template.indexOf('id="protocol-tvl-panel"'));
     assert.match(template, /Open position notional/);
-    assert.match(template, /DeFiLlama TVL reference/);
-    console.log('Independent open headline, reference separation, network clearing, request races and failure states: ok');
+    assert.doesNotMatch(template, /DeFiLlama|protocol-tvl-panel/);
+    console.log('Independent open headline, network clearing, request races and failure states: ok');
 }
 verifyHeadline().catch(error => { console.error(error); process.exitCode = 1; });
